@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Rounds — A Chicagoland Dining Ledger</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3B1C16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="The Rounds">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --brick: #3B1C16;
+  --brick-deep: #29130F;
+  --brick-panel: #522A20;
+  --brick-panel-hi: #6B3A2A;
+  --flag-blue: #4FA8DE;
+  --flag-blue-bright: #7EC8F2;
+  --flag-blue-dim: rgba(79,168,222,0.35);
+  --cream: #F3EDE0;
+  --cream-dim: rgba(243,237,224,0.62);
+  --flag-red: #E23A50;
+  --flag-red-dim: rgba(226,58,80,0.35);
+  --river-green: #1FA463;
+  --rating-gold: #D9A441;
+  --hairline: rgba(243,237,224,0.16);
+}
+
+*{ box-sizing: border-box; }
+
+body{
+  margin:0;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 27px, rgba(0,0,0,0.16) 27px, rgba(0,0,0,0.16) 29px),
+    repeating-linear-gradient(90deg, rgba(243,237,224,0.025) 0px, rgba(243,237,224,0.025) 1px, transparent 1px, transparent 63px),
+    radial-gradient(circle at 15% 0%, rgba(79,168,222,0.07), transparent 45%),
+    radial-gradient(circle at 90% 100%, rgba(226,58,80,0.05), transparent 45%),
+    var(--brick);
+  color: var(--cream);
+  font-family: 'Manrope', sans-serif;
+  min-height: 100vh;
+  padding: 0 0 70px 0;
+}
+
+.wrap{ max-width: 1000px; margin: 0 auto; padding: 40px 20px 0; }
+
+/* ---- Header ---- */
+header{ text-align:center; margin-bottom: 20px; }
+.emblem{ width:58px; height:36px; margin: 0 auto 10px; display:block; }
+.eyebrow{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 4px;
+  color: var(--flag-blue);
+  text-transform: uppercase;
+}
+h1{
+  font-family:'Oswald', sans-serif;
+  font-weight: 700;
+  font-size: 42px;
+  margin: 8px 0 6px;
+  letter-spacing: 0.5px;
+  color: var(--cream);
+}
+.sub{ font-size:13px; color: var(--cream-dim); font-weight:500; }
+.rule{
+  width: 120px; height:1px; margin: 18px auto 0;
+  background: linear-gradient(90deg, transparent, var(--flag-blue), transparent);
+}
+
+/* ---- Stats bar ---- */
+.receipt{
+  background: linear-gradient(180deg, var(--brick-panel), var(--brick-panel-hi));
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  margin: 26px auto 30px;
+  max-width: 680px;
+  padding: 18px 10px;
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.receipt-row{
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding: 4px 8px;
+  border-right: 1px solid var(--hairline);
+}
+.receipt-row:last-child{ border-right:none; }
+.receipt-label{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 9.5px; letter-spacing: 1.2px; text-transform:uppercase;
+  color: var(--cream-dim);
+}
+.receipt-val{
+  font-family:'Oswald', sans-serif; font-weight:700; font-size: 21px; color: var(--flag-blue-bright);
+  transition: color .15s ease;
+}
+.receipt-val.muted{ color: var(--cream-dim); font-weight:500; opacity:0.6; }
+@media (max-width: 620px){
+  .receipt{ grid-template-columns: repeat(2, 1fr); }
+  .receipt-row{ border-right:none; border-bottom:1px solid var(--hairline); padding-bottom:10px; }
+}
+
+/* ---- Controls row ---- */
+.controls{
+  display:flex; gap:10px; align-items:center; justify-content:space-between;
+  flex-wrap: wrap; margin-bottom: 14px;
+  background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 10px 12px 10px 16px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.tabs{
+  display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; flex:1;
+}
+.tab{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 11px; letter-spacing: 0.8px;
+  background: var(--brick-deep);
+  border: 1px solid var(--hairline);
+  color: var(--cream-dim);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor:pointer;
+  white-space: nowrap;
+  flex-shrink:0;
+  transition: all .15s ease;
+  position: relative;
+}
+.tab:hover{ border-color: var(--flag-blue-dim); color: var(--cream); }
+.tab.active{
+  background: var(--flag-blue);
+  color: var(--brick-deep);
+  border-color: var(--flag-blue);
+  font-weight:600;
+  padding-left: 20px;
+  box-shadow: 0 4px 14px rgba(79,168,222,0.35);
+}
+.tab.active::before{
+  content:"";
+  position:absolute; left:10px; top:50%; transform:translateY(-50%);
+  width:6px; height:6px; border-radius:50%;
+  background: var(--flag-red);
+  box-shadow: 0 0 0 2px rgba(226,58,80,0.25);
+}
+.tab .cnt{ opacity:0.65; margin-left:5px; }
+
+.sub-tabs{ margin-top:-6px; margin-bottom:14px; padding-left:6px; border-left: 2px solid var(--hairline); }
+.sub-tab{
+  font-family:'Manrope', sans-serif; font-weight:600; font-size:11px;
+  background: transparent; border: 1px solid var(--hairline); color: var(--cream-dim);
+  padding: 6px 12px; border-radius: 999px; cursor:pointer; white-space:nowrap; flex-shrink:0;
+  transition: all .15s ease;
+}
+.sub-tab:hover{ border-color: var(--flag-blue-dim); color: var(--cream); }
+.sub-tab.active{ background: var(--flag-blue-dim); border-color: var(--flag-blue); color: var(--cream); font-weight:700; }
+.sub-tab .cnt{ opacity:0.7; margin-left:4px; }
+
+.btn{
+  font-family:'Manrope', sans-serif;
+  font-weight:700;
+  font-size: 12.5px;
+  border: 1px solid var(--flag-blue);
+  background: linear-gradient(180deg, var(--flag-blue-bright), var(--flag-blue));
+  color: var(--brick-deep);
+  padding: 10px 18px;
+  border-radius: 999px;
+  cursor:pointer;
+  white-space:nowrap;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.btn:hover{ transform: translateY(-1px); box-shadow: 0 6px 16px rgba(79,168,222,0.35); }
+.btn.secondary{
+  background: transparent; color: var(--cream); border-color: var(--hairline);
+}
+.btn.secondary:hover{ box-shadow:none; border-color: var(--flag-blue-dim); }
+.btn.danger{ background: var(--flag-red); border-color: var(--flag-red); color: var(--cream); }
+.btn.small{ padding:7px 13px; font-size:11px; }
+
+/* ---- Tools row: search, filters, sort, view switch ---- */
+.tools-row{
+  display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap;
+  background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 12px 16px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.search-wrap{ position:relative; flex: 1 1 200px; min-width: 170px; }
+.search-wrap svg{
+  position:absolute; left:13px; top:50%; transform:translateY(-50%);
+  width:14px; height:14px; color: var(--cream-dim); pointer-events:none;
+}
+.search-box{
+  width:100%;
+  font-family:'Manrope', sans-serif; font-size:13px;
+  padding: 9px 14px 9px 34px; border:1px solid var(--hairline); border-radius:999px;
+  background: var(--brick-deep); color: var(--cream);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.search-box::placeholder{ color: var(--cream-dim); }
+.search-box:focus{ outline:none; border-color: var(--flag-blue); box-shadow: 0 0 0 3px rgba(79,168,222,0.15); }
+.filter-chip{
+  font-family:'Manrope', sans-serif; font-weight:600; font-size:11.5px;
+  background: var(--brick-deep); border: 1px solid var(--hairline); color: var(--cream-dim);
+  padding: 8px 14px; border-radius: 999px; cursor:pointer; white-space:nowrap; transition: all .15s ease;
+  display:flex; align-items:center; gap:6px;
+}
+.filter-chip::before{
+  content:""; width:7px; height:7px; border-radius:50%; background: var(--hairline);
+  transition: background .15s ease;
+}
+.filter-chip:hover{ border-color: var(--flag-blue-dim); color: var(--cream); }
+.filter-chip.active{ background: var(--river-green); border-color: var(--river-green); color: var(--brick-deep); }
+.filter-chip.active::before{ background: var(--brick-deep); }
+
+.tools-divider{ width:1px; align-self:stretch; background: var(--hairline); margin: 0 2px; }
+
+.seg-group{ display:flex; align-items:center; gap:8px; }
+.seg-label{
+  font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:1.4px; text-transform:uppercase;
+  color: var(--cream-dim);
+}
+.segmented{
+  display:flex; gap:2px;
+  background: var(--brick-deep);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 3px;
+}
+.segmented button{
+  font-family:'Manrope', sans-serif; font-weight:600; font-size:11.5px;
+  background: transparent; border:none; color: var(--cream-dim);
+  padding: 6px 13px; border-radius: 999px; cursor:pointer; transition: all .15s ease;
+}
+.segmented button:hover{ color: var(--cream); }
+.segmented button.active{
+  background: var(--flag-blue); color: var(--brick-deep);
+  box-shadow: 0 3px 10px rgba(79,168,222,0.4);
+}
+.segmented.view-seg button.active{ background: var(--flag-red); box-shadow: 0 3px 10px rgba(200,16,46,0.4); }
+.dist-badge{ color: var(--flag-blue-bright); }
+
+@media (max-width: 720px){
+  .tools-divider{ display:none; }
+  .seg-group{ flex-wrap:wrap; }
+}
+
+/* ---- Map view (self-contained, no external tiles — plots by relative
+   coordinates so it always renders, even in sandboxed previews) ---- */
+.map-wrap{ border-radius: 12px; overflow:hidden; border: 1px solid var(--hairline); background: var(--brick-panel); }
+#leafletMapEl{ background: var(--brick-panel); }
+.leaflet-popup-content-wrapper{ background: var(--brick-panel-hi); color: var(--cream); border-radius: 10px; }
+.leaflet-popup-tip{ background: var(--brick-panel-hi); }
+.leaflet-popup-content .map-popup-link{ color: var(--flag-blue-bright); }
+.custom-map{
+  position: relative; width: 100%; height: 520px;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 39px, var(--hairline) 40px),
+    repeating-linear-gradient(90deg, transparent, transparent 39px, var(--hairline) 40px),
+    linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
+}
+.map-pin{
+  position:absolute; width:15px; height:15px; border-radius:50%;
+  transform: translate(-50%,-50%); cursor:pointer;
+  border: 2px solid var(--brick-deep); padding:0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  transition: transform .12s ease;
+}
+.map-pin:hover{ transform: translate(-50%,-50%) scale(1.35); z-index: 6; }
+.map-pin.visited{ background: var(--flag-red); }
+.map-pin.unvisited{ background: var(--flag-blue); }
+.map-legend{
+  display:flex; align-items:center; gap:6px; font-size:11px; color: var(--cream-dim);
+  margin-top:10px; flex-wrap:wrap;
+}
+.legend-dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
+.legend-dot.visited{ background: var(--flag-red); }
+.legend-dot.unvisited{ background: var(--flag-blue); margin-left:14px; }
+.map-note{ font-size:11.5px; color: var(--cream-dim); margin-top:8px; }
+.map-popup{
+  position:absolute; transform: translate(-50%,-115%);
+  background: var(--brick-panel-hi); border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 10px 30px 10px 12px; min-width: 170px; max-width: 230px; z-index: 10;
+  box-shadow: 0 14px 30px rgba(0,0,0,0.45);
+}
+.map-popup::after{
+  content:""; position:absolute; left:50%; bottom:-6px; transform:translateX(-50%);
+  border-width:6px 6px 0 6px; border-style:solid; border-color: var(--brick-panel-hi) transparent transparent transparent;
+}
+.map-popup .close-x{
+  position:absolute; top:4px; right:6px; cursor:pointer; color: var(--cream-dim);
+  background:none; border:none; font-size:14px; line-height:1;
+}
+.map-popup-name{ font-family:'Oswald', sans-serif; font-weight:700; font-size:14px; margin-bottom:2px; }
+.map-popup-cat{ font-family:'IBM Plex Mono', monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; color: var(--flag-blue-bright); }
+.map-popup-link{ display:inline-block; margin-top:6px; font-size:11px; color: var(--flag-blue-bright); text-decoration:none; margin-right:10px; }
+.map-popup-link:hover{ text-decoration:underline; }
+
+/* ---- Grid of cards ---- */
+.grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  perspective: 900px;
+}
+
+.ticket{
+  background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel) 60%);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 16px 16px 14px;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  transition: transform .12s ease, box-shadow .18s ease, border-color .18s ease;
+  will-change: transform;
+}
+.ticket::before{
+  content:"";
+  position:absolute; inset:0;
+  background: linear-gradient(115deg, transparent 40%, rgba(126,200,242,0.16) 50%, transparent 60%);
+  background-size: 220% 220%;
+  background-position: 130% 130%;
+  transition: background-position .5s ease;
+  pointer-events:none;
+}
+.ticket:hover{
+  border-color: var(--flag-blue-dim);
+  box-shadow: 0 22px 44px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.3);
+}
+.ticket:hover::before{ background-position: -30% -30%; }
+
+.ticket-tags{ display:flex; flex-wrap:wrap; gap:5px; margin-bottom:2px; }
+.card-tag{
+  display:inline-flex; align-items:center; gap:4px;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:9px; letter-spacing:1.2px; text-transform:uppercase;
+  color: var(--flag-blue-bright);
+  border: 1px solid var(--flag-blue-dim);
+  background: rgba(79,168,222,0.08);
+  padding: 2.5px 8px;
+  border-radius: 999px;
+  line-height:1.4;
+}
+.ticket-name{
+  font-family:'Oswald', sans-serif;
+  font-weight:700; font-size:18px; margin:5px 0 6px; line-height:1.25;
+  color: var(--cream);
+}
+.name-link{ color: inherit; text-decoration:none; border-bottom: 1px solid transparent; transition: color .15s ease, border-color .15s ease; }
+.name-link:hover{ color: var(--flag-blue-bright); border-bottom-color: var(--flag-blue-bright); }
+.ticket-addr{ font-size:11px; color: var(--cream-dim); margin-bottom:10px; }
+.ticket-addr a.addr-link{ color: var(--cream-dim); text-decoration:none; border-bottom: 1px dotted var(--hairline); }
+.ticket-addr a.addr-link:hover{ color: var(--flag-blue-bright); border-bottom-color: var(--flag-blue-bright); }
+.ticket-meta{
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:11.5px; color: var(--cream-dim);
+  border-top: 1px solid var(--hairline); padding-top:9px;
+}
+.stars{ color: var(--rating-gold); letter-spacing:1px; }
+
+.stamp{
+  position:absolute; top:10px; right:8px;
+  display:flex; align-items:center; gap:4px;
+  transform: rotate(9deg) scale(1);
+  color: var(--cream);
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 8.5px; letter-spacing: 1.8px; font-weight:600;
+  padding: 3px 9px 3px 6px;
+  border-radius: 999px;
+  border: 1.5px solid var(--cream);
+  background: rgba(41,19,15,0.55);
+  animation: stampPop .5s cubic-bezier(.2,1.4,.4,1);
+  pointer-events:none;
+}
+.stamp svg path{ fill: var(--flag-red); }
+.stamp svg{ width:11px; height:11px; flex-shrink:0; }
+@keyframes stampPop{
+  0%{ transform: rotate(9deg) scale(0); opacity:0; }
+  60%{ transform: rotate(9deg) scale(1.15); opacity:1; }
+  100%{ transform: rotate(9deg) scale(1); opacity:1; }
+}
+
+.empty{
+  text-align:center; padding: 60px 20px; color: var(--cream-dim);
+  border: 1px dashed var(--hairline); border-radius: 12px;
+  font-size: 13px;
+}
+.empty b{ display:block; font-family:'Oswald', sans-serif; font-size:19px; color:var(--cream); margin-bottom:6px; }
+
+/* ---- Modal ---- */
+.overlay{
+  position:fixed; inset:0; background: rgba(6,16,13,0.72);
+  display:flex; align-items:flex-start; justify-content:center;
+  padding: 40px 16px; overflow-y:auto; z-index: 50;
+  animation: fadeIn .15s ease;
+}
+@keyframes fadeIn{ from{ opacity:0; } to{ opacity:1; } }
+.modal{
+  background: linear-gradient(170deg, var(--brick-panel-hi), var(--brick-panel));
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  max-width: 520px; width:100%;
+  padding: 24px 24px 26px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(79,168,222,0.08);
+  animation: riseIn .18s cubic-bezier(.2,.9,.3,1.1);
+}
+@keyframes riseIn{ from{ opacity:0; transform: translateY(10px) scale(0.98); } to{ opacity:1; transform:none; } }
+.modal h2{
+  font-family:'Oswald', sans-serif; font-weight:700; font-size:22px; margin:0 0 2px; color: var(--cream);
+}
+.modal .close{
+  float:right; cursor:pointer; font-size:20px; color: var(--cream-dim);
+  background:none; border:none; font-family:inherit;
+}
+.modal .close:hover{ color: var(--flag-blue-bright); }
+.field{ margin-top:15px; }
+.field label{
+  display:block; font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
+  color: var(--flag-blue); margin-bottom:6px; font-family:'IBM Plex Mono', monospace;
+}
+.field input, .field select, .field textarea{
+  width:100%; font-family:'Manrope', sans-serif; font-size:13.5px;
+  padding: 10px 12px; border:1px solid var(--hairline); border-radius:8px;
+  background: var(--brick-deep); color: var(--cream);
+}
+.field input:focus, .field textarea:focus{
+  outline:none; border-color: var(--flag-blue); box-shadow: 0 0 0 3px rgba(79,168,222,0.15);
+}
+.field textarea{ resize:vertical; min-height:50px; }
+.row2{ display:flex; gap:10px; }
+.row2 > div{ flex:1; }
+
+/* ---- Mini calendar date picker ---- */
+.date-display{
+  width:100%; text-align:left; cursor:pointer;
+  font-family:'Manrope', sans-serif; font-weight:600; font-size:13.5px;
+  padding: 10px 12px; border:1px solid var(--hairline); border-radius:8px;
+  background: var(--brick-deep); color: var(--cream);
+  display:flex; align-items:center; gap:8px;
+}
+.date-display::before{ content:"📅"; font-size:13px; }
+.date-display:hover{ border-color: var(--flag-blue-dim); }
+.mini-cal{
+  display:none; margin-top:8px;
+  background: var(--brick-panel-hi); border:1px solid var(--hairline); border-radius:10px;
+  padding: 10px 12px 12px;
+  box-shadow: 0 14px 30px rgba(0,0,0,0.4);
+}
+.mini-cal.open{ display:block; }
+.mini-cal-head{
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+}
+.mini-cal-head span{
+  font-family:'Oswald', sans-serif; font-weight:600; font-size:13px; color: var(--cream);
+}
+.mini-cal-head button{
+  background: var(--brick-deep); border:1px solid var(--hairline); color: var(--cream);
+  width:24px; height:24px; border-radius:6px; cursor:pointer; font-size:13px; line-height:1;
+}
+.mini-cal-head button:hover{ border-color: var(--flag-blue-dim); }
+.mini-cal-grid{
+  display:grid; grid-template-columns: repeat(7, 1fr); gap:3px;
+}
+.cal-dow{
+  font-family:'IBM Plex Mono', monospace; font-size:9.5px; color: var(--cream-dim);
+  text-align:center; padding-bottom:4px; letter-spacing:0.5px;
+}
+.cal-cell{
+  aspect-ratio: 1; display:flex; align-items:center; justify-content:center;
+  background: transparent; border:1px solid transparent; border-radius:6px;
+  color: var(--cream); font-family:'Manrope', sans-serif; font-size:12px;
+  cursor:pointer; transition: all .12s ease;
+}
+.cal-cell.empty{ cursor:default; }
+.cal-cell:not(.empty):hover{ background: var(--brick-deep); border-color: var(--flag-blue-dim); }
+.cal-cell.today{ border-color: var(--flag-blue-dim); color: var(--flag-blue-bright); }
+.cal-cell.selected{ background: var(--flag-blue); color: var(--brick-deep); font-weight:700; }
+
+.star-pick{ display:flex; gap:6px; font-size:26px; }
+.star-pick span{ cursor:pointer; color: var(--hairline); transition: transform .1s ease, color .1s ease; display:inline-block; }
+.star-pick span.on{ color: var(--rating-gold); text-shadow: 0 0 10px rgba(217,164,65,0.5); }
+.star-pick span:hover{ transform: scale(1.15); }
+
+.toggle-pair{ display:flex; gap:8px; }
+.toggle-pair button{
+  flex:1; padding:9px; border:1px solid var(--hairline); background: var(--brick-deep); color: var(--cream-dim);
+  border-radius:8px; cursor:pointer; font-family:'Manrope', sans-serif; font-weight:600; font-size:12.5px;
+  transition: all .12s ease;
+}
+.toggle-pair button.yes.on{ background: var(--river-green); border-color: var(--river-green); color: var(--brick-deep); }
+.toggle-pair button.no.on{ background: var(--flag-red); border-color: var(--flag-red); color: var(--cream); }
+
+.modal-actions{ display:flex; gap:8px; margin-top:22px; justify-content:flex-end; }
+
+/* ---- Detail / visit log ---- */
+.detail-head{ display:flex; justify-content:space-between; align-items:flex-start; }
+.detail-cat{ font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--flag-blue); }
+.tag-row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px; }
+.tag-pill{
+  display:inline-flex; align-items:center; gap:5px;
+  font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:1.2px; text-transform:uppercase;
+  color: var(--brick-deep); background: var(--flag-blue-bright);
+  border-radius: 999px; padding: 4px 6px 4px 10px;
+}
+.tag-x{
+  background:none; border:none; cursor:pointer; color: var(--brick-deep);
+  font-size:12px; line-height:1; opacity:0.6; padding:0 2px;
+}
+.tag-x:hover{ opacity:1; }
+.tag-add{
+  font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.8px;
+  background: transparent; border: 1px dashed var(--hairline); color: var(--cream-dim);
+  border-radius: 999px; padding: 5px 10px; width: 110px;
+}
+.tag-add:focus{ outline:none; border-color: var(--flag-blue); color: var(--cream); }
+.detail-name{ font-family:'Oswald', sans-serif; font-weight:700; font-size:24px; margin:4px 0; color: var(--cream); }
+.detail-addr{ font-size:12px; color:var(--cream-dim); }
+.detail-links{ display:flex; gap:8px; flex-wrap:wrap; margin-top:9px; }
+.link-pill{
+  font-family:'IBM Plex Mono', monospace; font-size:11px;
+  color: var(--flag-blue-bright); text-decoration:none;
+  border: 1px solid var(--hairline); border-radius: 999px;
+  padding: 5px 11px; transition: all .12s ease;
+}
+.link-pill:hover{ border-color: var(--flag-blue); background: rgba(79,168,222,0.1); }
+
+.visit-list{ margin-top:18px; }
+.visit-list h3{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:1.5px; margin-bottom:6px; text-transform:uppercase; color:var(--flag-blue); }
+.visit-item{
+  border-top: 1px solid var(--hairline); padding: 11px 0;
+  display:flex; justify-content:space-between; gap:10px; font-size:12.5px;
+}
+.visit-item:first-child{ border-top:none; }
+.visit-left b{ display:block; font-size:13.5px; font-family:'Manrope', sans-serif; }
+.visit-left .stars{ font-size:12px; }
+.visit-meta-small{ color: var(--cream-dim); font-size:11px; margin-top:2px;}
+.trash{ background:none; border:none; color: var(--cream-dim); cursor:pointer; font-size:11.5px; }
+.trash:hover{ color: var(--flag-red); }
+
+.no-visits{ font-size:12.5px; color:var(--cream-dim); padding: 10px 0; }
+
+.loading{ text-align:center; padding:70px 20px; color:var(--cream-dim); font-size:13px; font-family:'IBM Plex Mono', monospace; }
+
+/* ---- Confetti ---- */
+.confetti-piece{
+  position:fixed; top:0; left:0; width:7px; height:7px; border-radius:1px;
+  pointer-events:none; z-index: 200;
+  animation: confettiFall .9s ease-out forwards;
+}
+@keyframes confettiFall{
+  0%{ transform: translate(0,0) rotate(0deg); opacity:1; }
+  100%{ transform: var(--fall); opacity:0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg class="emblem" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="64" height="40" rx="3" fill="#F3EDE0"/>
+      <rect x="0" y="9" width="64" height="5" fill="#4FA8DE"/>
+      <rect x="0" y="26" width="64" height="5" fill="#4FA8DE"/>
+      <g fill="#C8102E">
+        <path transform="translate(16,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+        <path transform="translate(27,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+        <path transform="translate(38,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+        <path transform="translate(49,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+      </g>
+    </svg>
+    <div class="eyebrow">A Chicagoland Dining Ledger</div>
+    <h1>The Rounds</h1>
+    <div class="sub">Every guide, every neighborhood, every plate across Chicagoland.</div>
+    <div class="rule"></div>
+  </header>
+
+  <div class="receipt" id="statsReceipt"></div>
+
+  <div class="controls">
+    <div class="tabs" id="tabs"></div>
+    <button class="btn" id="addRestaurantBtn">+ New Listing</button>
+  </div>
+  <div class="tabs sub-tabs" id="subTabs" style="display:none;"></div>
+
+  <div class="tools-row">
+    <div class="search-wrap">
+      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M18 18L13.8 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input type="text" id="searchBox" class="search-box" placeholder="Search your listings…">
+    </div>
+    <button class="filter-chip" id="unvisitedToggle">Haven't been yet</button>
+    <div class="tools-divider"></div>
+    <div class="seg-group">
+      <span class="seg-label">Sort</span>
+      <div class="segmented" id="sortOpts">
+        <button class="active" data-sort="name">Name</button>
+        <button data-sort="date">Date Added</button>
+        <button data-sort="rating">Rating</button>
+        <button data-sort="distance">Distance</button>
+      </div>
+    </div>
+    <div class="tools-divider"></div>
+    <div class="seg-group" style="margin-left:auto;">
+      <span class="seg-label">View</span>
+      <div class="segmented view-seg" id="viewOpts">
+        <button class="active" data-view="grid">Grid</button>
+        <button data-view="map">Map</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="content" class="loading">Pulling up your listings…</div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+let restaurants = [];
+let visits = [];
+let activeCategory = 'All';
+let activeSubTag = null;
+let dataLoaded = false;
+let sortBy = 'name';
+let userLocation = null;
+let locationRequested = false;
+let searchQuery = '';
+let unvisitedOnly = false;
+let viewMode = 'grid';
+let leafletMap = null;
+let mapRenderToken = 0;
+
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function distanceMiles(lat1, lng1, lat2, lng2){
+  const R = 3958.8;
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLng = (lng2-lng1) * Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function requestUserLocation(){
+  if(locationRequested) return;
+  locationRequested = true;
+  if(!navigator.geolocation){ return; }
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{
+      userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      renderContent();
+    },
+    ()=>{ /* denied or unavailable — falls back to unsorted-by-distance */ },
+    { timeout: 8000 }
+  );
+}
+
+function sortRestaurants(list){
+  const arr = [...list];
+  if(sortBy === 'name'){
+    arr.sort((a,b)=> a.name.localeCompare(b.name));
+  } else if(sortBy === 'date'){
+    arr.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
+  } else if(sortBy === 'rating'){
+    arr.sort((a,b)=>{
+      const ra = avgRating(visitsFor(a.id));
+      const rb = avgRating(visitsFor(b.id));
+      if(ra==null && rb==null) return 0;
+      if(ra==null) return 1;
+      if(rb==null) return -1;
+      return rb - ra;
+    });
+  } else if(sortBy === 'distance' && userLocation){
+    arr.sort((a,b)=>{
+      const da = (a.lat!=null && a.lng!=null) ? distanceMiles(userLocation.lat, userLocation.lng, a.lat, a.lng) : Infinity;
+      const db = (b.lat!=null && b.lng!=null) ? distanceMiles(userLocation.lat, userLocation.lng, b.lat, b.lng) : Infinity;
+      return da - db;
+    });
+  }
+  return arr;
+}
+
+/* Storage abstraction: window.storage only exists inside Claude's own
+   preview sandbox. Once this file is hosted standalone (GitHub Pages,
+   installed as a PWA, opened as a local file), that API doesn't exist —
+   so we fall back to localStorage, which every real browser supports. */
+const store = {
+  async get(key){
+    if(window.storage){
+      return await window.storage.get(key);
+    }
+    const raw = localStorage.getItem('rounds:' + key);
+    return raw != null ? { key, value: raw } : null;
+  },
+  async set(key, value){
+    if(window.storage){
+      return await window.storage.set(key, value);
+    }
+    localStorage.setItem('rounds:' + key, value);
+    return { key, value };
+  }
+};
+
+async function loadData(){
+  try{
+    const r = await store.get('restaurants');
+    restaurants = r && r.value ? JSON.parse(r.value) : [];
+  }catch(e){ restaurants = []; }
+  try{
+    const v = await store.get('visits');
+    visits = v && v.value ? JSON.parse(v.value) : [];
+  }catch(e){ visits = []; }
+  dataLoaded = true;
+}
+
+/* One-time migration: older entries had a single `category` string.
+   Convert those to a `categories` array so a place can live in
+   multiple guides. Safe to re-run — no-op once migrated. */
+async function migrateCategories(){
+  let changed = false;
+  restaurants.forEach(r=>{
+    if(!Array.isArray(r.categories)){
+      r.categories = r.category ? [r.category] : [];
+      delete r.category;
+      changed = true;
+    }
+  });
+  if(changed) await saveRestaurants();
+}
+
+async function saveRestaurants(){
+  try{ await store.set('restaurants', JSON.stringify(restaurants)); }
+  catch(e){ console.error('Could not save restaurants', e); }
+}
+async function saveVisits(){
+  try{ await store.set('visits', JSON.stringify(visits)); }
+  catch(e){ console.error('Could not save visits', e); }
+}
+
+function visitsFor(restaurantId){
+  return visits.filter(v => v.restaurantId === restaurantId).sort((a,b)=> b.date.localeCompare(a.date));
+}
+function avgRating(list){
+  if(!list.length) return null;
+  return list.reduce((s,v)=>s+v.rating,0) / list.length;
+}
+function starString(n){
+  const full = Math.round(n);
+  return '★'.repeat(full) + '☆'.repeat(5-full);
+}
+function fmtDate(d){
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
+function categories(){
+  const set = new Set();
+  restaurants.forEach(r => (r.categories||[]).forEach(c => set.add(c)));
+  return Array.from(set).sort();
+}
+
+/* Two-level tabs, two ways a tag can nest under a parent umbrella:
+   1) Pattern match — anything containing "bar" (but not "Bars" itself)
+      auto-nests under "Bars", no config needed, scales as you tag more.
+   2) Explicit map — cuisine-style groupings that can't be guessed from
+      the tag text (e.g. "Burgers" isn't detectably "American"). Extend
+      this list any time you want another umbrella; just tell me the
+      grouping and I'll add it here. */
+const PARENT_GROUPS = {
+  'American Cuisine': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Hot Dogs', 'Pizza'],
+  'Asian Cuisine': ['Japanese', 'Chinese', 'Korean', 'Ramen', 'Sushi', 'Asian Fusion'],
+  'Sandwiches': ['Hoagie', 'Sandwich', 'Cheesesteak', 'Bagel', 'Wrap'],
+  'Desserts': ['Ice Cream', 'Bakery', 'Frozen Yogurt'],
+};
+function groupForTag(tag){
+  const lower = tag.toLowerCase();
+  if(Object.values(PARENT_GROUPS).some(children => children.some(c=>c.toLowerCase()===lower))){
+    for(const parent in PARENT_GROUPS){
+      if(PARENT_GROUPS[parent].some(c=>c.toLowerCase()===lower)) return parent;
+    }
+  }
+  if(Object.keys(PARENT_GROUPS).some(p=>p.toLowerCase()===lower)) return null;
+  if(lower === 'bars') return null;
+  if(/bar/i.test(tag)) return 'Bars';
+  return null;
+}
+function topLevelLabels(){
+  const cats = categories();
+  const labels = new Set();
+  cats.forEach(c=>{
+    const g = groupForTag(c);
+    labels.add(g || c);
+  });
+  return Array.from(labels).sort();
+}
+function isGroupLabel(label){
+  return categories().some(c => groupForTag(c) === label);
+}
+function childTagsOf(group){
+  return categories().filter(c => groupForTag(c) === group).sort();
+}
+function restaurantMatchesLabel(r, label, subTag){
+  const tags = r.categories || [];
+  if(isGroupLabel(label)){
+    if(subTag) return tags.includes(subTag);
+    return tags.some(t => groupForTag(t) === label || t === label);
+  }
+  return tags.includes(label);
+}
+
+function addTagToRestaurant(id, tag){
+  const r = restaurants.find(x=>x.id===id);
+  if(!r) return false;
+  const clean = tag.trim();
+  if(!clean) return false;
+  if(!r.categories) r.categories = [];
+  const exists = r.categories.some(c => c.toLowerCase() === clean.toLowerCase());
+  if(exists) return false;
+  r.categories.push(clean);
+  return true;
+}
+function removeTagFromRestaurant(id, tag){
+  const r = restaurants.find(x=>x.id===id);
+  if(!r) return;
+  r.categories = (r.categories||[]).filter(c => c !== tag);
+}
+
+/* ---------- Confetti (fun + interactive delight) ---------- */
+function spawnConfetti(x, y){
+  const colors = ['#4FA8DE', '#E23A50', '#F3EDE0', '#1FA463', '#7EC8F2'];
+  for(let i=0; i<22; i++){
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 60 + Math.random() * 90;
+    const fx = Math.cos(angle) * dist;
+    const fy = Math.sin(angle) * dist + 40;
+    p.style.left = x + 'px';
+    p.style.top = y + 'px';
+    p.style.background = colors[Math.floor(Math.random()*colors.length)];
+    p.style.setProperty('--fall', `translate(${fx}px, ${fy}px) rotate(${Math.random()*360}deg)`);
+    p.style.animationDelay = (Math.random()*0.08) + 's';
+    document.body.appendChild(p);
+    setTimeout(()=> p.remove(), 1000);
+  }
+}
+
+/* ---------- Card tilt (fun + interactive) ---------- */
+function attachTilt(card){
+  card.addEventListener('mousemove', (e)=>{
+    const rect = card.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width - 0.5;
+    const py = (e.clientY - rect.top) / rect.height - 0.5;
+    card.style.transform = `perspective(900px) rotateY(${px*7}deg) rotateX(${-py*7}deg) translateY(-6px) scale(1.015)`;
+  });
+  card.addEventListener('mouseleave', ()=>{
+    card.style.transform = '';
+  });
+}
+
+function renderStats(){
+  const total = restaurants.length;
+  const visitedCount = restaurants.filter(r => visitsFor(r.id).length > 0).length;
+  const totalVisits = visits.length;
+  const allAvg = avgRating(visits);
+  const el = $('#statsReceipt');
+  el.innerHTML = `
+    <div class="receipt-row"><span class="receipt-label">Listings on File</span><span class="receipt-val">${total}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Spots Visited</span><span class="receipt-val">${visitedCount}/${total}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Visits Logged</span><span class="receipt-val">${totalVisits}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Average Rating</span><span class="receipt-val${allAvg ? '' : ' muted'}">${allAvg ? allAvg.toFixed(1) + ' ★' : '—'}</span></div>
+  `;
+}
+
+function renderTabs(){
+  const labels = topLevelLabels();
+  const tabsEl = $('#tabs');
+  const allCount = restaurants.length;
+  let html = `<button class="tab ${activeCategory==='All'?'active':''}" data-cat="All">All <span class="cnt">${allCount}</span></button>`;
+  labels.forEach(label=>{
+    const count = restaurants.filter(r => restaurantMatchesLabel(r, label, null)).length;
+    const isGroup = isGroupLabel(label);
+    html += `<button class="tab ${activeCategory===label?'active':''}" data-cat="${escapeHtml(label)}">${escapeHtml(label)}${isGroup ? ' ▾' : ''} <span class="cnt">${count}</span></button>`;
+  });
+  tabsEl.innerHTML = html;
+  $$('.tab', tabsEl).forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      activeCategory = btn.dataset.cat;
+      activeSubTag = null;
+      renderTabs();
+      renderContent();
+    });
+  });
+
+  const subEl = $('#subTabs');
+  if(isGroupLabel(activeCategory)){
+    const children = childTagsOf(activeCategory);
+    subEl.style.display = 'flex';
+    subEl.innerHTML = `<button class="sub-tab ${!activeSubTag?'active':''}" data-sub="">All ${escapeHtml(activeCategory)}</button>` +
+      children.map(c=>{
+        const count = restaurants.filter(r=>(r.categories||[]).includes(c)).length;
+        return `<button class="sub-tab ${activeSubTag===c?'active':''}" data-sub="${escapeHtml(c)}">${escapeHtml(c)} <span class="cnt">${count}</span></button>`;
+      }).join('');
+    $$('.sub-tab', subEl).forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        activeSubTag = btn.dataset.sub || null;
+        renderTabs();
+        renderContent();
+      });
+    });
+  } else {
+    subEl.style.display = 'none';
+    subEl.innerHTML = '';
+  }
+}
+
+/* Display-only singular form for venue-type tags on cards — a single
+   restaurant is "a Steakhouse", not "Steakhouses". Cuisine/food tags
+   (Ramen, Sushi, Chicken, BBQ, etc.) read fine as-is, so only the
+   venue-type plurals need a mapped singular. Underlying tag data and
+   tab filtering/counts are untouched — this only affects card text. */
+const TAG_SINGULAR = {
+  'bars': 'Bar',
+  'sports bars': 'Sports Bar',
+  'tiki bars': 'Tiki Bar',
+  'cocktail bars': 'Cocktail Bar',
+  'steakhouses': 'Steakhouse',
+  'burgers': 'Burger',
+  'desserts': 'Dessert',
+  'hot dogs': 'Hot Dog',
+};
+function singularizeTag(tag){
+  return TAG_SINGULAR[tag.toLowerCase()] || tag;
+}
+
+/* A small icon per tag adds personality to the card chips without
+   needing custom art for every possible guide category. Falls back
+   to a plain fork & knife for anything not explicitly mapped. */
+const TAG_ICON = {
+  'bars': '🍸', 'sports bars': '🏈', 'tiki bars': '🌺', 'cocktail bars': '🍹',
+  'steakhouses': '🥩', 'burgers': '🍔', 'chicken': '🍗', 'bbq': '🍖',
+  'ramen': '🍜', 'sushi': '🍣', 'chinese': '🥡', 'japanese': '🍱',
+  'korean': '🍲', 'asian fusion': '🥢', 'desserts': '🍰',
+  'indian cuisine': '🍛', 'dinner dates': '💕',
+  'hoagie': '🥪', 'sandwich': '🥪', 'cheesesteak': '🧀', 'bagel': '🥯', 'wrap': '🌯',
+  'hot dogs': '🌭', 'pizza': '🍕', 'halal': '🕌', 'catering': '🍽️',
+  'mexican': '🌮', 'peruvian': '🍤', 'fondue': '🫕', 'seafood': '🦐', 'tapas': '🍢',
+  'breakfast & brunch': '🥞', 'rooftop': '🏙️',
+  'ice cream': '🍦', 'bakery': '🥐', 'frozen yogurt': '🍧',
+  'happy hour': '🍻', 'late night': '🌙', 'jamaican': '🇯🇲', 'soul food': '🍲', 'italian': '🍝',
+};
+function tagIcon(tag){
+  return TAG_ICON[tag.toLowerCase()] || '🍴';
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function getFilteredSortedList(){
+  let list = restaurants.filter(r => activeCategory==='All' || restaurantMatchesLabel(r, activeCategory, activeSubTag));
+  if(searchQuery.trim()){
+    const q = searchQuery.trim().toLowerCase();
+    list = list.filter(r => r.name.toLowerCase().includes(q));
+  }
+  if(unvisitedOnly){
+    list = list.filter(r => visitsFor(r.id).length === 0);
+  }
+  return sortRestaurants(list);
+}
+
+function renderContent(){
+  const el = $('#content');
+  const list = getFilteredSortedList();
+  if(list.length === 0){
+    el.className = '';
+    el.innerHTML = restaurants.length === 0
+      ? `<div class="empty"><b>No listings in this book yet</b>Add your first stop to start tracking it.</div>`
+      : `<div class="empty"><b>No listings match</b>Try a different search, filter, or tab.</div>`;
+    if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
+    return;
+  }
+  if(viewMode === 'map'){
+    renderMapView(el, list);
+    return;
+  }
+  if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
+  el.className = 'grid';
+  el.innerHTML = list.map(r=>{
+    const vs = visitsFor(r.id);
+    const avg = avgRating(vs);
+    const visited = vs.length > 0;
+    const tags = r.categories || [];
+    const showDist = sortBy === 'distance' && userLocation && r.lat!=null && r.lng!=null;
+    const distTxt = showDist ? distanceMiles(userLocation.lat, userLocation.lng, r.lat, r.lng).toFixed(1) + ' mi' : null;
+    return `
+      <div class="ticket" data-id="${r.id}">
+        ${visited ? `<div class="stamp"><svg viewBox="-4 -4 8 8" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/></svg>VISITED</div>` : ''}
+        <div class="ticket-tags">${tags.map(t=>`<span class="card-tag">${tagIcon(t)} ${escapeHtml(singularizeTag(t))}</span>`).join('')}</div>
+        <div class="ticket-name"><a href="${r.website || ('https://www.google.com/search?q=' + encodeURIComponent(r.name + ' ' + (r.address||'') + ' official website'))}" target="_blank" rel="noopener" class="name-link" onclick="event.stopPropagation()">${escapeHtml(r.name)}</a></div>
+        ${r.address ? `<div class="ticket-addr"><a href="${r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + r.address))}" target="_blank" rel="noopener" class="addr-link" onclick="event.stopPropagation()">${escapeHtml(r.address)}</a></div>` : ''}
+        <div class="ticket-meta">
+          <span>${vs.length} visit${vs.length===1?'':'s'}${distTxt ? ` &nbsp;·&nbsp; <span class="dist-badge">${distTxt}</span>` : ''}</span>
+          <span class="stars">${avg ? starString(avg) : '—'}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  $$('.ticket', el).forEach(card=>{
+    card.addEventListener('click', ()=> openDetail(card.dataset.id));
+    attachTilt(card);
+  });
+}
+
+/* Map view: tries a real interactive street map first (Leaflet + OpenStreetMap
+   tiles). Some sandboxed preview environments block cross-origin tile images,
+   so if tiles haven't loaded within ~2.5s, it automatically swaps to a
+   self-contained relative-position map that needs no network access at all.
+   Opening the downloaded file in a normal browser will always show the real map. */
+function renderMapView(el, list){
+  const myToken = ++mapRenderToken;
+  const withCoords = list.filter(r => r.lat != null && r.lng != null);
+  const withoutCoords = list.length - withCoords.length;
+  el.className = '';
+
+  if(withCoords.length === 0){
+    el.innerHTML = `<div class="empty"><b>No locations to plot</b>None of the places in this view have coordinates on file yet.</div>`;
+    return;
+  }
+
+  const noteHtml = withoutCoords > 0
+    ? `<div class="map-note">${withoutCoords} listing${withoutCoords===1?'':'s'} in this view ${withoutCoords===1?"doesn't":"don't"} have a location yet, so ${withoutCoords===1?"it isn't":"they aren't"} plotted.</div>`
+    : '';
+
+  if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
+
+  if(typeof L === 'undefined'){
+    renderRelativeMap(el, withCoords, noteHtml);
+    return;
+  }
+
+  el.innerHTML = `<div class="map-wrap"><div id="leafletMapEl" style="height:520px;"></div></div>${noteHtml}`;
+
+  const bounds = withCoords.map(r=>[r.lat, r.lng]);
+  const center = bounds[0];
+  leafletMap = L.map('leafletMapEl', { scrollWheelZoom: true }).setView(center, 11);
+  const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxZoom: 19
+  });
+  let tilesOk = false;
+  tileLayer.on('load', ()=>{ tilesOk = true; });
+  tileLayer.addTo(leafletMap);
+
+  withCoords.forEach(r=>{
+    const vs = visitsFor(r.id);
+    const visited = vs.length > 0;
+    const color = visited ? '#E23A50' : '#4FA8DE';
+    const marker = L.circleMarker([r.lat, r.lng], {
+      radius: 8, color: '#12302799', weight: 2, fillColor: color, fillOpacity: 0.95
+    }).addTo(leafletMap);
+    const avg = avgRating(vs);
+    const mapsHref = r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + (r.address||'')));
+    marker.bindPopup(`
+      <div class="map-popup-cat">${(r.categories||[]).map(t=>tagIcon(t)+' '+escapeHtml(singularizeTag(t))).join(' · ')}</div>
+      <div class="map-popup-name">${escapeHtml(r.name)}</div>
+      <div style="font-size:11px;">${vs.length} visit${vs.length===1?'':'s'}${avg ? ' · ' + starString(avg) : ''}</div>
+      <a class="map-popup-link" href="${mapsHref}" target="_blank" rel="noopener">📍 Maps</a>
+      <a class="map-popup-link" href="javascript:void(0)" onclick="openDetail('${r.id}')">View details</a>
+    `);
+    marker.on('mouseover', ()=> marker.openPopup());
+  });
+  if(bounds.length > 1){
+    leafletMap.fitBounds(bounds, { padding: [30,30] });
+  }
+
+  setTimeout(()=>{
+    if(myToken !== mapRenderToken) return; // a newer render happened, ignore
+    if(!tilesOk){
+      if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
+      renderRelativeMap(el, withCoords, noteHtml, true);
+    }
+  }, 2500);
+}
+
+/* Self-contained fallback: plots pins by relative position within the
+   list's coordinate bounds. No external network access needed. */
+function renderRelativeMap(el, withCoords, noteHtml, wasFallback){
+  let minLat = Math.min(...withCoords.map(r=>r.lat));
+  let maxLat = Math.max(...withCoords.map(r=>r.lat));
+  let minLng = Math.min(...withCoords.map(r=>r.lng));
+  let maxLng = Math.max(...withCoords.map(r=>r.lng));
+  const latPad = Math.max((maxLat - minLat) * 0.15, 0.01);
+  const lngPad = Math.max((maxLng - minLng) * 0.15, 0.01);
+  minLat -= latPad; maxLat += latPad; minLng -= lngPad; maxLng += lngPad;
+
+  const pins = withCoords.map(r=>{
+    const xPct = ((r.lng - minLng) / (maxLng - minLng)) * 100;
+    const yPct = (1 - (r.lat - minLat) / (maxLat - minLat)) * 100;
+    const visited = visitsFor(r.id).length > 0;
+    return `<button class="map-pin ${visited?'visited':'unvisited'}" style="left:${xPct}%; top:${yPct}%;" data-id="${r.id}" data-x="${xPct}" data-y="${yPct}" title="${escapeHtml(r.name)}"></button>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="map-wrap"><div class="custom-map" id="customMap">${pins}</div></div>
+    <div class="map-legend"><span class="legend-dot visited"></span> Visited <span class="legend-dot unvisited"></span> Not yet</div>
+    ${wasFallback ? `<div class="map-note">Live map tiles aren't reachable in this preview, so this shows relative positions instead. Download the file and open it in your browser for the full street map.</div>` : ''}
+    ${noteHtml}
+  `;
+
+  const mapEl = $('#customMap');
+  $$('.map-pin', mapEl).forEach(pin=>{
+    pin.addEventListener('mouseenter', ()=> showMapPopup(mapEl, pin));
+    pin.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      showMapPopup(mapEl, pin);
+    });
+  });
+  mapEl.addEventListener('click', ()=>{
+    const existing = mapEl.querySelector('.map-popup');
+    if(existing) existing.remove();
+  });
+}
+
+function showMapPopup(mapEl, pinEl){
+  const existing = mapEl.querySelector('.map-popup');
+  if(existing) existing.remove();
+  const id = pinEl.dataset.id;
+  const r = restaurants.find(x=>x.id===id);
+  if(!r) return;
+  const vs = visitsFor(id);
+  const avg = avgRating(vs);
+  const mapsHref = r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + (r.address||'')));
+  const popup = document.createElement('div');
+  popup.className = 'map-popup';
+  popup.style.left = pinEl.dataset.x + '%';
+  popup.style.top = pinEl.dataset.y + '%';
+  popup.innerHTML = `
+    <button class="close-x">×</button>
+    <div class="map-popup-cat">${(r.categories||[]).map(t=>tagIcon(t)+' '+escapeHtml(singularizeTag(t))).join(' · ')}</div>
+    <div class="map-popup-name">${escapeHtml(r.name)}</div>
+    <div style="font-size:11px;color:var(--cream-dim);">${vs.length} visit${vs.length===1?'':'s'}${avg ? ' · ' + starString(avg) : ''}</div>
+    <a class="map-popup-link" href="${mapsHref}" target="_blank" rel="noopener">📍 Maps</a>
+    <a class="map-popup-link" href="javascript:void(0)" data-detail="${id}">View details</a>
+  `;
+  mapEl.appendChild(popup);
+  popup.addEventListener('click', (e)=> e.stopPropagation());
+  popup.querySelector('.close-x').addEventListener('click', ()=> popup.remove());
+  popup.querySelector('[data-detail]').addEventListener('click', ()=>{ popup.remove(); openDetail(id); });
+}
+
+
+function renderAll(){
+  renderStats();
+  renderTabs();
+  renderContent();
+}
+
+/* ---------- Modals ---------- */
+function closeModal(){ $('#modalRoot').innerHTML = ''; }
+
+function openAddRestaurant(){
+  const cats = categories();
+  const datalist = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+  $('#modalRoot').innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <button class="close" id="closeAdd">×</button>
+        <h2>New Listing</h2>
+        <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Add a place from one of your guides.</div>
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="rName" placeholder="e.g. The Anchor Room" autofocus>
+        </div>
+        <div class="field">
+          <label>Guides / Categories <span style="text-transform:none;">(comma-separated)</span></label>
+          <input type="text" id="rCat" list="catList" placeholder="e.g. Sports Bars, American Cuisine">
+          <datalist id="catList">${datalist}</datalist>
+        </div>
+        <div class="field">
+          <label>Address <span style="text-transform:none;">(optional)</span></label>
+          <input type="text" id="rAddr" placeholder="e.g. 123 Main St">
+        </div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancelAdd">Cancel</button>
+          <button class="btn" id="saveAdd">Add Listing</button>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#closeAdd').addEventListener('click', closeModal);
+  $('#cancelAdd').addEventListener('click', closeModal);
+  $('#ov').addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
+  $('#saveAdd').addEventListener('click', async (e)=>{
+    const name = $('#rName').value.trim();
+    const catRaw = $('#rCat').value.trim();
+    const address = $('#rAddr').value.trim();
+    const categoriesList = catRaw.split(',').map(c=>c.trim()).filter(Boolean);
+    if(!name || categoriesList.length === 0){
+      alert('Name and at least one category are required.');
+      return;
+    }
+    restaurants.push({ id: uid(), name, categories: categoriesList, address, createdAt: Date.now() });
+    await saveRestaurants();
+    const rect = e.target.getBoundingClientRect();
+    spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2);
+    closeModal();
+    renderAll();
+  });
+}
+
+function openDetail(id){
+  const r = restaurants.find(x=>x.id===id);
+  if(!r) return;
+  const vs = visitsFor(id);
+  const cats = categories();
+  const datalist = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+  $('#modalRoot').innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <button class="close" id="closeDet">×</button>
+        <div class="detail-head">
+          <div>
+            <div class="tag-row" id="tagRow">
+              ${(r.categories||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}<button class="tag-x" data-tag="${escapeHtml(t)}">×</button></span>`).join('')}
+              <input type="text" id="newTag" class="tag-add" list="tagList" placeholder="+ add guide">
+              <datalist id="tagList">${datalist}</datalist>
+            </div>
+            <div class="detail-name"><a href="${r.website || ('https://www.google.com/search?q=' + encodeURIComponent(r.name + ' ' + (r.address||'') + ' official website'))}" target="_blank" rel="noopener" class="name-link">${escapeHtml(r.name)}</a></div>
+            ${r.address ? `<div class="detail-addr">${escapeHtml(r.address)}</div>` : ''}
+            <div class="detail-links">
+              ${r.mapsUrl ? `<a href="${r.mapsUrl}" target="_blank" rel="noopener" class="link-pill">📍 Open in Google Maps</a>` : (r.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + r.address)}" target="_blank" rel="noopener" class="link-pill">📍 Open in Google Maps</a>` : '')}
+              ${r.phone ? `<a href="tel:${r.phone.replace(/[^+\d]/g,'')}" class="link-pill">📞 ${escapeHtml(r.phone)}</a>` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:16px; display:flex; gap:8px;">
+          <button class="btn small" id="logVisitBtn">+ Log a Visit</button>
+          <button class="btn small danger" id="deleteRestBtn">Delete Listing</button>
+        </div>
+        <div class="visit-list">
+          <h3>Visit Ledger</h3>
+          <div id="visitItems">
+            ${vs.length ? vs.map(v=>`
+              <div class="visit-item" data-vid="${v.id}">
+                <div class="visit-left">
+                  <b>${fmtDate(v.date)}</b>
+                  <span class="stars">${starString(v.rating)}</span>
+                  ${v.ate ? `<div class="visit-meta-small">Ate: ${escapeHtml(v.ate)}</div>` : ''}
+                  <div class="visit-meta-small">Would return: ${v.wouldReturn ? 'Yes' : 'No'}</div>
+                  ${v.notes ? `<div class="visit-meta-small">Notes: ${escapeHtml(v.notes)}</div>` : ''}
+                </div>
+                <button class="trash" data-vid="${v.id}">remove</button>
+              </div>
+            `).join('') : '<div class="no-visits">No visits logged yet.</div>'}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#closeDet').addEventListener('click', closeModal);
+  $('#ov').addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
+  $('#logVisitBtn').addEventListener('click', ()=> openLogVisit(id));
+  $('#deleteRestBtn').addEventListener('click', async ()=>{
+    if(!confirm(`Delete "${r.name}" and all its logged visits? This can't be undone.`)) return;
+    restaurants = restaurants.filter(x=>x.id!==id);
+    visits = visits.filter(v=>v.restaurantId!==id);
+    await saveRestaurants();
+    await saveVisits();
+    closeModal();
+    renderAll();
+  });
+  $$('.tag-x', $('#modalRoot')).forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      removeTagFromRestaurant(id, btn.dataset.tag);
+      await saveRestaurants();
+      openDetail(id);
+      renderAll();
+    });
+  });
+  const newTagInput = $('#newTag');
+  const commitTag = async ()=>{
+    const val = newTagInput.value.trim();
+    if(!val) return;
+    if(addTagToRestaurant(id, val)){
+      await saveRestaurants();
+      openDetail(id);
+      renderAll();
+    } else {
+      newTagInput.value = '';
+    }
+  };
+  newTagInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); commitTag(); }
+  });
+  newTagInput.addEventListener('blur', commitTag);
+  $$('.trash', $('#modalRoot')).forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const vid = e.target.dataset.vid;
+      visits = visits.filter(v=>v.id!==vid);
+      await saveVisits();
+      openDetail(id);
+      renderAll();
+    });
+  });
+}
+
+function openLogVisit(restaurantId){
+  let rating = 0;
+  let wouldReturn = null;
+  const today = new Date().toISOString().slice(0,10);
+  let selectedDate = today;
+  let calViewYear = parseInt(today.slice(0,4));
+  let calViewMonth = parseInt(today.slice(5,7)) - 1;
+
+  const pastDishes = Array.from(new Set(
+    visits.filter(v => v.restaurantId === restaurantId && v.ate).map(v => v.ate)
+  ));
+  const dishOptions = pastDishes.map(d=>`<option value="${escapeHtml(d)}">`).join('');
+
+  $('#modalRoot').innerHTML = `
+    <div class="overlay" id="ov2">
+      <div class="modal">
+        <button class="close" id="closeLog">×</button>
+        <h2>Log a Visit</h2>
+        <div class="field">
+          <label>Date</label>
+          <button type="button" class="date-display" id="dateDisplay">${fmtDate(selectedDate)}</button>
+          <div class="mini-cal" id="miniCal">
+            <div class="mini-cal-head">
+              <button type="button" id="calPrev">‹</button>
+              <span id="calMonthLabel"></span>
+              <button type="button" id="calNext">›</button>
+            </div>
+            <div class="mini-cal-grid" id="calGrid"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>What did you eat? ${pastDishes.length ? '<span style="text-transform:none;">(pick from your past orders, or type new)</span>' : ''}</label>
+          <input type="text" id="vAte" list="dishList" placeholder="e.g. Buffalo wings + fries">
+          <datalist id="dishList">${dishOptions}</datalist>
+        </div>
+        <div class="field">
+          <label>Rating</label>
+          <div class="star-pick" id="starPick">
+            ${[1,2,3,4,5].map(n=>`<span data-n="${n}">★</span>`).join('')}
+          </div>
+        </div>
+        <div class="field">
+          <label>Would you go back?</label>
+          <div class="toggle-pair">
+            <button class="yes" id="wrYes">Yes</button>
+            <button class="no" id="wrNo">No</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Notes <span style="text-transform:none;">(optional)</span></label>
+          <textarea id="vNotes" placeholder="e.g. Great patio, ask for Jesse, loud on weekends"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancelLog">Cancel</button>
+          <button class="btn" id="saveLog">Save Visit</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  function renderCalendar(){
+    const grid = $('#calGrid');
+    const label = $('#calMonthLabel');
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    label.textContent = monthNames[calViewMonth] + ' ' + calViewYear;
+    const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
+    const daysInMonth = new Date(calViewYear, calViewMonth+1, 0).getDate();
+    let html = ['S','M','T','W','T','F','S'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+    for(let i=0;i<firstDay;i++) html += `<div class="cal-cell empty"></div>`;
+    for(let day=1; day<=daysInMonth; day++){
+      const dStr = `${calViewYear}-${String(calViewMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const isSel = dStr === selectedDate;
+      const isToday = dStr === today;
+      html += `<button type="button" class="cal-cell${isSel?' selected':''}${isToday?' today':''}" data-date="${dStr}">${day}</button>`;
+    }
+    grid.innerHTML = html;
+    $$('.cal-cell:not(.empty)', grid).forEach(cell=>{
+      cell.addEventListener('click', ()=>{
+        selectedDate = cell.dataset.date;
+        $('#dateDisplay').textContent = fmtDate(selectedDate);
+        $('#miniCal').classList.remove('open');
+        renderCalendar();
+      });
+    });
+  }
+  renderCalendar();
+
+  $('#dateDisplay').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    $('#miniCal').classList.toggle('open');
+  });
+  $('#calPrev').addEventListener('click', ()=>{
+    calViewMonth--; if(calViewMonth<0){ calViewMonth=11; calViewYear--; }
+    renderCalendar();
+  });
+  $('#calNext').addEventListener('click', ()=>{
+    calViewMonth++; if(calViewMonth>11){ calViewMonth=0; calViewYear++; }
+    renderCalendar();
+  });
+  $('.modal', $('#modalRoot')).addEventListener('click', (e)=>{
+    if(!e.target.closest('#miniCal') && !e.target.closest('#dateDisplay')){
+      $('#miniCal').classList.remove('open');
+    }
+  });
+
+  const starEls = $$('#starPick span');
+  starEls.forEach(s=>{
+    s.addEventListener('mouseenter', ()=>{
+      const n = parseInt(s.dataset.n);
+      starEls.forEach(x=> x.classList.toggle('on', parseInt(x.dataset.n) <= n));
+    });
+    s.addEventListener('click', ()=>{
+      rating = parseInt(s.dataset.n);
+    });
+  });
+  $('#starPick').addEventListener('mouseleave', ()=>{
+    starEls.forEach(x=> x.classList.toggle('on', parseInt(x.dataset.n) <= rating));
+  });
+  $('#wrYes').addEventListener('click', ()=>{
+    wouldReturn = true;
+    $('#wrYes').classList.add('on'); $('#wrNo').classList.remove('on');
+  });
+  $('#wrNo').addEventListener('click', ()=>{
+    wouldReturn = false;
+    $('#wrNo').classList.add('on'); $('#wrYes').classList.remove('on');
+  });
+  $('#closeLog').addEventListener('click', ()=> openDetail(restaurantId));
+  $('#cancelLog').addEventListener('click', ()=> openDetail(restaurantId));
+  $('#ov2').addEventListener('click', (e)=>{ if(e.target.id==='ov2') openDetail(restaurantId); });
+  $('#saveLog').addEventListener('click', async (e)=>{
+    if(!rating){ alert('Pick a rating.'); return; }
+    if(wouldReturn === null){ alert('Let us know if you\'d go back.'); return; }
+    const date = selectedDate || today;
+    const ate = $('#vAte').value.trim();
+    const notes = $('#vNotes').value.trim();
+    visits.push({ id: uid(), restaurantId, date, ate, rating, wouldReturn, notes, createdAt: Date.now() });
+    await saveVisits();
+    const rect = e.target.getBoundingClientRect();
+    spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2);
+    openDetail(restaurantId);
+    renderAll();
+  });
+}
+
+$('#addRestaurantBtn').addEventListener('click', openAddRestaurant);
+
+$$('#sortOpts button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    sortBy = btn.dataset.sort;
+    $$('#sortOpts button').forEach(b=> b.classList.toggle('active', b===btn));
+    if(sortBy === 'distance') requestUserLocation();
+    renderContent();
+  });
+});
+
+$('#searchBox').addEventListener('input', (e)=>{
+  searchQuery = e.target.value;
+  renderContent();
+});
+
+$('#unvisitedToggle').addEventListener('click', ()=>{
+  unvisitedOnly = !unvisitedOnly;
+  $('#unvisitedToggle').classList.toggle('active', unvisitedOnly);
+  renderContent();
+});
+
+$$('#viewOpts button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    viewMode = btn.dataset.view;
+    $$('#viewOpts button').forEach(b=> b.classList.toggle('active', b===btn));
+    renderContent();
+  });
+});
+
+/* Places pulled in from Apple Maps guide screenshots.
+   Safe to re-run: only adds entries that aren't already on file,
+   so it never overwrites visits you've already logged. */
+const SEED_RESTAURANTS = [
+  // Sports Bars (8)
+  {name:"Parlay River North", category:"Sports Bars", address:"Chicago, IL"},
+  {name:"Output Lounge & Sports Bar", category:"Sports Bars", address:"1758 W Grand Ave, Chicago, IL"},
+  {name:"Williams Inn Pizza & Sports Bar", category:"Sports Bars", address:"Chicago, IL"},
+  {name:"Scoreboard Sports Bar & Grill", category:"Sports Bars", address:"Berwyn, IL"},
+  {name:"Zoe's Patio", category:"Sports Bars", address:"Chicago, IL"},
+  {name:"The Whistle Sports Bar & Grill", category:"Sports Bars", address:"Oak Lawn, IL"},
+  {name:"Birdies Sports Bar & Grill", category:"Sports Bars", address:"Oak Lawn, IL"},
+  {name:"Lassen's Tap", category:"Sports Bars", address:"Homewood, IL"},
+  // Steakhouses (10)
+  {name:"El Che Steakhouse & Bar", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Morton's The Steakhouse", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"BLVD Steakhouse", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Wildfire", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Perry's Steakhouse & Grille", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Prime & Provisions", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Mastro's Restaurant", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Gibsons Bar & Steakhouse", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Bavette's Bar & Boeuf", category:"Steakhouses", address:"Chicago, IL"},
+  {name:"Maple & Ash", category:"Steakhouses", address:"Chicago, IL"},
+  // Burgers (8)
+  {name:"Craft Burger", category:"Burgers", address:"Chicago, IL"},
+  {name:"Busy Burger", category:"Burgers", address:"Chicago, IL"},
+  {name:"NADC Burger", category:"Burgers", address:"Chicago, IL"},
+  {name:"The Drop In", category:"Burgers", address:"Chicago, IL"},
+  {name:"The Region", category:"Burgers", address:"Chicago, IL"},
+  {name:"Redhot Ranch", category:"Burgers", address:"Chicago, IL"},
+  {name:"SALT burgers + fries", category:"Burgers", address:"Chicago, IL"},
+  {name:"Au Cheval", category:"Burgers", address:"Chicago, IL"},
+  // Chicken (7)
+  {name:"Wings and Rings", category:"Chicken", address:"Chicago, IL"},
+  {name:"Hangry Cluck", category:"Chicken", address:"Chicago, IL"},
+  {name:"Rickette's", category:"Chicken", address:"Chicago, IL"},
+  {name:"House of Wings", category:"Chicken", address:"Chicago, IL"},
+  {name:"BadaBing Wings", category:"Chicken", address:"Chicago, IL"},
+  {name:"Jake Melnick's Corner Tap", category:"Chicken", address:"Chicago, IL"},
+  {name:"Buffalo Joe's", category:"Chicken", address:"Chicago, IL"},
+  // Indian Cuisine (2)
+  {name:"Mild 2 Spicy", category:"Indian Cuisine", address:"Chicago, IL"},
+  {name:"Black Salt Indian Bar & Restaurant", category:"Indian Cuisine", address:"Sauk Village, IL"},
+  // Dinner Dates (9)
+  {name:"LUXBAR", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"Kayao", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"Double Fun", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"Clandestino", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"The Bellevue Chicago", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"Gus' Sip & Dip", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"Akiro", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"Chicago Brewhouse", category:"Dinner Dates", address:"Chicago, IL"},
+  {name:"Geja's Cafe", category:"Dinner Dates", address:"Chicago, IL"},
+  // Desserts (9)
+  {name:"Nitro Nostalgia", category:"Desserts", address:"Chicago, IL"},
+  {name:"Classic Cobbler Cafe", category:"Desserts", address:"Chicago, IL"},
+  {name:"Pan Artesanal", category:"Desserts", address:"Chicago, IL"},
+  {name:"Panaderia La Central", category:"Desserts", address:"Chicago, IL"},
+  {name:"La Central Bakery", category:"Desserts", address:"Chicago, IL"},
+  {name:"Forever Yogurt", category:"Desserts", address:"Chicago, IL"},
+  {name:"Shawn Michelle's Homemade Ice Cream", category:"Desserts", address:"Chicago, IL"},
+  {name:"Legend Tasty House", category:"Desserts", address:"Chicago, IL"},
+  {name:"Molly's Cupcakes", category:"Desserts", address:"Chicago, IL"},
+  // BBQ (5)
+  {name:"Sanders BBQ Supply Co.", category:"BBQ", address:"Chicago, IL"},
+  {name:"LEM'S Bar-B-Q", category:"BBQ", address:"Chicago, IL"},
+  {name:"Wayne's Bar-B-Que and Cajun", category:"BBQ", address:"Chicago, IL"},
+  {name:"Jay's Backyard BBQ", category:"BBQ", address:"Chicago, IL"},
+  {name:"Medley Grill & BBQ", category:"BBQ", address:"Chicago, IL"},
+  // Chicago Asian (18) — tagged by sub-cuisine, nests under Asian Cuisine
+  {name:"Akiro", category:"Japanese", address:"Chicago, IL"},
+  {name:"MCCB", category:"Chinese", address:"Chicago, IL"},
+  {name:"Oiistar", category:"Ramen", address:"Chicago, IL"},
+  {name:"Ukai Sushi", category:"Sushi", address:"Chicago, IL"},
+  {name:"Monster Ramen", category:"Ramen", address:"Chicago, IL"},
+  {name:"Chi Cafe", category:"Chinese", address:"Chicago, IL"},
+  {name:"Shinya Ramen House", category:"Ramen", address:"Chicago, IL"},
+  {name:"Koi Sushi", category:"Japanese", address:"Chicago, IL"},
+  {name:"Gyuro Ramen", category:"Ramen", address:"Chicago, IL"},
+  {name:"Tanuki Sushi Restaurant", category:"Sushi", address:"Chicago, IL"},
+  {name:"Tsukiji", category:"Japanese", address:"Chicago, IL"},
+  {name:"Koto Hibachi", category:"Japanese", address:"Chicago, IL"},
+  {name:"Chop Suey City", category:"Chinese", address:"Chicago, IL"},
+  {name:"Strings Ramen", category:"Ramen", address:"Chicago, IL"},
+  {name:"DaiFuku Ramen", category:"Ramen", address:"Chicago, IL"},
+  {name:"Iron Age Korean Steak House", category:"Korean", address:"Chicago, IL"},
+  {name:"JiangNiu BBQ House", category:"Korean", address:"Chicago, IL"},
+  {name:"A. Fusion", category:"Asian Fusion", address:"Chicago, IL"},
+  // Chicago Bars (18) — sub-tagged so they nest under the Bars umbrella
+  {name:"LUXBAR", category:"Bars", address:"Chicago, IL"},
+  {name:"Double Fun", category:"Cocktail Bars", address:"Chicago, IL"},
+  {name:"Clandestino", category:"Cocktail Bars", address:"Chicago, IL"},
+  {name:"Deadbolt", category:"Bars", address:"Chicago, IL"},
+  {name:"The River Kitchen and Bar", category:"Bars", address:"Chicago, IL"},
+  {name:"Three Dots and a Dash", category:"Tiki Bars", address:"Chicago, IL"},
+  {name:"Kindling Chicago", category:"Cocktail Bars", address:"Chicago, IL"},
+  {name:"SLR Bar & Grill", category:"Bars", address:"Chicago, IL"},
+  {name:"Emporium Fulton Market", category:"Bars", address:"Chicago, IL"},
+  {name:"Moneygun", category:"Cocktail Bars", address:"Chicago, IL"},
+  {name:"Headquarters Beercade", category:"Bars", address:"Chicago, IL"},
+  {name:"Cava", category:"Cocktail Bars", address:"Chicago, IL"},
+  {name:"Love Street", category:"Cocktail Bars", address:"Chicago, IL"},
+  {name:"Turtle's Bar & Grill", category:"Bars", address:"Chicago, IL"},
+  {name:"DSTRKT Bar & Grill", category:"Bars", address:"Chicago, IL"},
+  {name:"The Dopest Bar & Grill", category:"Bars", address:"Chicago, IL"},
+  {name:"Federales", category:"Bars", address:"Chicago, IL"},
+  {name:"The Bureau Bar and Restaurant", category:"Bars", address:"Chicago, IL"},
+  // Dinner Dates — additional real tags (multi-tag)
+  {name:"Kayao", category:"Peruvian", address:"Chicago, IL"},
+  {name:"The Bellevue Chicago", category:"American Cuisine", address:"Chicago, IL"},
+  {name:"Gus' Sip & Dip", category:"Bars", address:"Chicago, IL"},
+  {name:"Chicago Brewhouse", category:"Bars", address:"Chicago, IL"},
+  {name:"Geja's Cafe", category:"Fondue", address:"Chicago, IL"},
+  // Desserts — re-tag by specific type (see DESSERT_RETAG migration below)
+  {name:"Nitro Nostalgia", category:"Ice Cream", address:"Chicago, IL"},
+  {name:"Classic Cobbler Cafe", category:"Bakery", address:"Chicago, IL"},
+  {name:"Pan Artesanal", category:"Bakery", address:"Chicago, IL"},
+  {name:"Panaderia La Central", category:"Bakery", address:"Chicago, IL"},
+  {name:"La Central Bakery", category:"Bakery", address:"Chicago, IL"},
+  {name:"Forever Yogurt", category:"Frozen Yogurt", address:"Chicago, IL"},
+  {name:"Shawn Michelle's Homemade Ice Cream", category:"Ice Cream", address:"Chicago, IL"},
+  {name:"Legend Tasty House", category:"Ice Cream", address:"Chicago, IL"},
+  {name:"Molly's Cupcakes", category:"Bakery", address:"Chicago, IL"},
+  // Sandwiches (15)
+  {name:"The Hoagie Place #2", category:"Hoagie", address:"Dolton, IL"},
+  {name:"Chicago Hoagie House", category:"Hoagie", address:"Chicago, IL"},
+  {name:"Bronzeville Hoagie & Panini", category:"Hoagie", address:"Chicago, IL"},
+  {name:"Corey's NYC Bagel Deli", category:"Bagel", address:"Chicago, IL"},
+  {name:"Simply Soups Salads and Sandwiches", category:"Sandwich", address:"Chicago, IL"},
+  {name:"D'Amato's Bakery", category:"Bakery", address:"Chicago, IL"},
+  {name:"NYC Halal Eats", category:"Halal", address:"Burbank, IL"},
+  {name:"Philly's Best", category:"Pizza", address:"Chicago, IL"},
+  {name:"Philly's Original Steak & Lemonade", category:"Cheesesteak", address:"Chicago, IL"},
+  {name:"Devil Dawgs", category:"Hot Dogs", address:"Chicago, IL"},
+  {name:"Portillo's", category:"Hot Dogs", address:"Chicago, IL"},
+  {name:"Home of the Hoagy", category:"Hoagie", address:"Chicago, IL"},
+  {name:"Burp Catering", category:"Catering", address:"Chicago, IL"},
+  {name:"Wrap & Roll Cafe", category:"Wrap", address:"Chicago, IL"},
+  {name:"Lemme get umm", category:"Sandwich", address:"Chicago, IL"},
+  // Breakfast (7)
+  {name:"Migos Fine Food", category:"Mexican", address:"Chicago, IL"},
+  {name:"Griddle 24", category:"Breakfast & Brunch", address:"Chicago, IL"},
+  {name:"Egg Harbor Cafe", category:"Breakfast & Brunch", address:"Chicago, IL"},
+  {name:"Roscoe's", category:"Bars", address:"Chicago, IL"},
+  {name:"The Original Pancake House", category:"Breakfast & Brunch", address:"Chicago, IL"},
+  {name:"Peach's Restaurant", category:"Breakfast & Brunch", address:"Chicago, IL"},
+  {name:"Goddess and the Baker", category:"Breakfast & Brunch", address:"Chicago, IL"},
+  {name:"Goddess and the Baker", category:"Bakery", address:"Chicago, IL"},
+  // Rooftops (6)
+  {name:"TNT Rooftop Restaurant", category:"Rooftop", address:"Chicago, IL"},
+  {name:"TNT Rooftop Restaurant", category:"Seafood", address:"Chicago, IL"},
+  {name:"Utopian Tailgate", category:"Rooftop", address:"Chicago, IL"},
+  {name:"Utopian Tailgate", category:"Bars", address:"Chicago, IL"},
+  {name:"Kennedy Rooftop", category:"Rooftop", address:"Chicago, IL"},
+  {name:"Kennedy Rooftop", category:"Cocktail Bars", address:"Chicago, IL"},
+  {name:"RH Rooftop Restaurant - Oak Brook", category:"Rooftop", address:"Oak Brook, IL"},
+  {name:"Raised an Urban Rooftop", category:"Rooftop", address:"Chicago, IL"},
+  {name:"Raised an Urban Rooftop", category:"Bars", address:"Chicago, IL"},
+  {name:"VU Rooftop", category:"Rooftop", address:"Chicago, IL"},
+  {name:"VU Rooftop", category:"Tapas", address:"Chicago, IL"},
+  // Happy Hour (4)
+  {name:"Wilma's Famous BBQ", category:"Happy Hour", address:"Chicago, IL"},
+  {name:"Wilma's Famous BBQ", category:"BBQ", address:"Chicago, IL"},
+  {name:"Soul Vibez", category:"Happy Hour", address:"Chicago, IL"},
+  {name:"Soul Vibez", category:"Soul Food", address:"Chicago, IL"},
+  {name:"Prime 57 Restaurant & Lounge", category:"Happy Hour", address:"Chicago, IL"},
+  {name:"Punch Bowl Social", category:"Happy Hour", address:"Chicago, IL"},
+  {name:"Punch Bowl Social", category:"American Cuisine", address:"Chicago, IL"},
+  // Late Night Spots (4) — Chi Cafe already on file, just gains a tag
+  {name:"Halal Smash Burger & Phillies", category:"Late Night", address:"Chicago, IL"},
+  {name:"Halal Smash Burger & Phillies", category:"Halal", address:"Chicago, IL"},
+  {name:"Halal Smash Burger & Phillies", category:"Burgers", address:"Chicago, IL"},
+  {name:"Chi Cafe", category:"Late Night", address:"Chicago, IL"},
+  {name:"Big Wig", category:"Late Night", address:"Chicago, IL"},
+  {name:"Big Wig", category:"Mexican", address:"Chicago, IL"},
+  {name:"Maxwell Street Depot", category:"Late Night", address:"Chicago, IL"},
+  {name:"Maxwell Street Depot", category:"Hot Dogs", address:"Chicago, IL"},
+  // Jamaican (3)
+  {name:"Jamaican Gates Restaurant", category:"Jamaican", address:"Chicago, IL"},
+  {name:"Exclusive Jerk Caribbean Restaurant", category:"Jamaican", address:"Chicago Heights, IL"},
+  {name:"Soul Shack Express", category:"Jamaican", address:"Chicago, IL"},
+  {name:"Soul Shack Express", category:"Soul Food", address:"Chicago, IL"},
+  // Pizza (16, Williams Inn already on file)
+  {name:"LaCoco's Pizza and Sports Club", category:"Pizza", address:"Chicago, IL"},
+  {name:"LaCoco's Pizza and Sports Club", category:"Sports Bars", address:"Chicago, IL"},
+  {name:"Frasca Pizzeria + Wine Bar", category:"Pizza", address:"Chicago, IL"},
+  {name:"Robert's Pizza and Dough Co", category:"Pizza", address:"Chicago, IL"},
+  {name:"Old Chicago Pizza", category:"Pizza", address:"Chicago, IL"},
+  {name:"Paradise Park", category:"Pizza", address:"Chicago, IL"},
+  {name:"Paradise Park", category:"Bars", address:"Chicago, IL"},
+  {name:"Labriola", category:"Pizza", address:"Chicago, IL"},
+  {name:"Anto Pizza & Pasta Chicago", category:"Pizza", address:"Chicago, IL"},
+  {name:"Art of Pizza on State Street", category:"Pizza", address:"Chicago, IL"},
+  {name:"Punky's Pizza & Pasta", category:"Pizza", address:"Chicago, IL"},
+  {name:"Lou Malnati's Pizzeria", category:"Pizza", address:"Chicago, IL"},
+  {name:"Pequod's Pizza", category:"Pizza", address:"Chicago, IL"},
+  {name:"Pequod's Pizza", category:"Bars", address:"Chicago, IL"},
+  {name:"Piece Pizzeria & Brewery", category:"Pizza", address:"Chicago, IL"},
+  {name:"Piece Pizzeria & Brewery", category:"Bars", address:"Chicago, IL"},
+  {name:"Fontano's Pizza and Subs", category:"Pizza", address:"Chicago, IL"},
+  {name:"Fontano's Pizza and Subs", category:"Sandwich", address:"Chicago, IL"},
+  {name:"Williams Inn Pizza & Sports Bar", category:"Pizza", address:"Chicago, IL"},
+  {name:"De Arco's Pizza & Restaurant", category:"Pizza", address:"Chicago, IL"},
+  {name:"Gigios Pizza", category:"Pizza", address:"Chicago, IL"},
+  // Italian (11)
+  {name:"Eataly", category:"Italian", address:"Chicago, IL"},
+  {name:"RPM Italian", category:"Italian", address:"Chicago, IL"},
+  {name:"Il Porcellino", category:"Italian", address:"Chicago, IL"},
+  {name:"The Pasta Bowl", category:"Italian", address:"Chicago, IL"},
+  {name:"Maggiano's Little Italy", category:"Italian", address:"Chicago, IL"},
+  {name:"The Rosebud", category:"Italian", address:"Chicago, IL"},
+  {name:"Trivoli Tavern", category:"Italian", address:"Chicago, IL"},
+  {name:"Trivoli Tavern", category:"Bars", address:"Chicago, IL"},
+  {name:"Ricobene's", category:"Italian", address:"Chicago, IL"},
+  {name:"Ricobene's", category:"Pizza", address:"Chicago, IL"},
+  {name:"Canal Street Eatery & Market", category:"Italian", address:"Chicago, IL"},
+  {name:"Canal Street Eatery & Market", category:"Pizza", address:"Chicago, IL"},
+  {name:"Litehouse Whole Food Grill", category:"Italian", address:"Chicago, IL"},
+  {name:"Tre Dita", category:"Italian", address:"Chicago, IL"},
+];
+
+async function seedIfNeeded(){
+  let added = false;
+  SEED_RESTAURANTS.forEach(s=>{
+    const existing = restaurants.find(r => r.name.toLowerCase() === s.name.toLowerCase());
+    if(existing){
+      if(addTagToRestaurant(existing.id, s.category)) added = true;
+      if(!existing.address && s.address){ existing.address = s.address; added = true; }
+    } else {
+      restaurants.push({ id: uid(), name: s.name, categories: [s.category], address: s.address || '', createdAt: Date.now() });
+      added = true;
+    }
+  });
+  if(added) await saveRestaurants();
+}
+
+/* Real addresses, phone numbers, and Google Maps links looked up from
+   Google Places. Safe to re-run: matches by name+category and fills in
+   / refreshes these fields only — never touches your logged visits. */
+const ADDRESS_LOOKUP = [
+  {name:"Parlay River North", category:"Sports Bars", address:"112 W Hubbard St, Chicago, IL 60654", phone:"+1 708-726-5294", placeId:"ChIJ0ZI92SwtDogRTzlRtsJTI70", lat:41.8902353, lng:-87.6317849},
+  {name:"Output Lounge & Sports Bar", category:"Sports Bars", address:"1758 W Grand Ave, Chicago, IL 60622", phone:"+1 312-929-2515", placeId:"ChIJjz-R9XQtDogRNjDajOXeR-c", lat:41.8910682, lng:-87.6718301},
+  {name:"Williams Inn Pizza & Sports Bar", category:"Sports Bars", address:"2210 S Michigan Ave, Chicago, IL 60616", phone:"+1 312-753-3108", placeId:"ChIJe4_8fd0tDogRGasgf14N3PY", lat:41.8525276, lng:-87.6240463},
+  {name:"Scoreboard Sports Bar & Grill", category:"Sports Bars", address:"7109 Roosevelt Rd, Berwyn, IL 60402", phone:"+1 708-317-4200", placeId:"ChIJQ777efw1DogR5o27-iiTP1Q", lat:41.8646623, lng:-87.8020779},
+  {name:"Zoe's Patio", category:"Sports Bars", address:"5518 S Archer Ave, Chicago, IL 60638", phone:"+1 773-284-0400", placeId:"ChIJUdE3KTExDogR63UpR96bfus", lat:41.7983781, lng:-87.7473221},
+  {name:"The Whistle Sports Bar & Grill", category:"Sports Bars", address:"4911 95th St, Oak Lawn, IL 60453", phone:"+1 708-794-6300", placeId:"ChIJYTmdcmc6DogRFO32Xghm_-E", lat:41.7198147, lng:-87.7438265},
+  {name:"Birdies Sports Bar & Grill", category:"Sports Bars", address:"4036 W 111th St, Oak Lawn, IL 60453", phone:"+1 708-931-9550", placeId:"ChIJHdCx6QU7DogRuiYg1YO-Ly8", lat:41.6921344, lng:-87.7215975},
+  {name:"Lassen's Tap", category:"Sports Bars", address:"2131 183rd St, Homewood, IL 60430", phone:"+1 708-957-2220", placeId:"ChIJD4dFo0IYDogR9uGS3hf0-XM", lat:41.5570691, lng:-87.6689423},
+  {name:"El Che Steakhouse & Bar", category:"Steakhouses", address:"845 W Washington Blvd, Chicago, IL 60607", phone:"+1 312-265-1130", placeId:"ChIJ5aitJtssDogRc6ePtUnkPZk", lat:41.8828921, lng:-87.6491814},
+  {name:"Morton's The Steakhouse", category:"Steakhouses", address:"65 E Wacker Pl, Chicago, IL 60601", phone:"+1 312-201-0410", placeId:"ChIJA70xDK8sDogRcOpTuObZ-kY", lat:41.8865242, lng:-87.6255417},
+  {name:"BLVD Steakhouse", category:"Steakhouses", address:"817 W Lake St, Chicago, IL 60607", phone:"+1 312-526-3116", placeId:"ChIJE6lVU8UsDogRG9Wyf-QM6xY", lat:41.8855339, lng:-87.6483127},
+  {name:"Wildfire", category:"Steakhouses", address:"159 W Erie St, Chicago, IL 60654", phone:"+1 312-787-9000", placeId:"ChIJbUZRYLMsDogRmaVlU28JtqY", lat:41.893786, lng:-87.6334978},
+  {name:"Perry's Steakhouse & Grille", category:"Steakhouses", address:"5 Oakbrook Center, Oak Brook, IL 60523", phone:"+1 630-571-1808", placeId:"ChIJ0aeDJ2pMDogRIss1eUdkglw", lat:41.8488391, lng:-87.9505634},
+  {name:"Prime & Provisions", category:"Steakhouses", address:"222 N LaSalle St, Chicago, IL 60601", phone:"+1 312-726-7777", placeId:"ChIJyw8Mx7AsDogRFvhuNG25jWw", lat:41.8866919, lng:-87.6329701},
+  {name:"Mastro's Restaurant", category:"Steakhouses", address:"520 N Dearborn St, Chicago, IL 60654", phone:"+1 312-521-5100", placeId:"ChIJ4SBuP7IsDogRpq8Knvl6S7M", lat:41.8915228, lng:-87.6298226},
+  {name:"Gibsons Bar & Steakhouse", category:"Steakhouses", address:"1028 N Rush St, Chicago, IL 60611", phone:"+1 312-266-8999", placeId:"ChIJIWnn51HTD4gR1Ie6zt2J2dE", lat:41.9013961, lng:-87.6280861},
+  {name:"Bavette's Bar & Boeuf", category:"Steakhouses", address:"218 W Kinzie St, Chicago, IL 60654", phone:"+1 312-624-8154", placeId:"ChIJyauRlLYsDogRE_Hnbxx7V8E", lat:41.8892908, lng:-87.6348887},
+  {name:"Maple & Ash", category:"Steakhouses", address:"8 W Maple St, Chicago, IL 60610", phone:"+1 312-944-8888", placeId:"ChIJE8GjKE7TD4gR9CouUZM2Gis", lat:41.9020389, lng:-87.6287472},
+  {name:"Craft Burger", category:"Burgers", address:"1311 W 18th St, Chicago, IL 60608", phone:"+1 312-579-4992", placeId:"ChIJaaYfVXYtDogRR3McH84iE_4", lat:41.8577862, lng:-87.659344},
+  {name:"Busy Burger", category:"Burgers", address:"1120 W Taylor St, Chicago, IL 60607", phone:"+1 312-226-7760", placeId:"ChIJ9Uqwt-MsDogRRigrKEAscow", lat:41.869581, lng:-87.6551533},
+  {name:"NADC Burger", category:"Burgers", address:"415 N Milwaukee Ave, Chicago, IL 60654", phone:"+1 855-328-6232", placeId:"ChIJ-VB8WpQtDogRXE7vUoxH1-w", lat:41.8896361, lng:-87.6448404},
+  {name:"The Drop In", category:"Burgers", address:"415 N Milwaukee Ave, Chicago, IL 60654", phone:"+1 512-777-1156", placeId:"ChIJ6SNmVRUtDogRnrHrOczUckA", lat:41.8896361, lng:-87.6448404},
+  {name:"The Region", category:"Burgers", address:"2057 W Roscoe St, Chicago, IL 60618", phone:"+1 773-857-2874", placeId:"ChIJDfOi-2bSD4gROAjptBXIJqc", lat:41.9429889, lng:-87.6807169},
+  {name:"Redhot Ranch", category:"Burgers", address:"2449 W Armitage Ave, Chicago, IL 60647", phone:"+1 773-772-6020", placeId:"ChIJd-oCeZfSD4gR7G-XHOEEb-0", lat:41.9174653, lng:-87.6892593},
+  {name:"SALT burgers + fries", category:"Burgers", address:"60 E Jackson Blvd, Chicago, IL 60604", phone:"+1 318-308-0786", placeId:"ChIJaybey60tDogR2dN-k0yX0Nw", lat:41.878406, lng:-87.6256612},
+  {name:"Au Cheval", category:"Burgers", address:"800 W Randolph St, Chicago, IL 60607", phone:"+1 312-929-4580", placeId:"ChIJ78NyRsUsDogR6AqyYoPrts4", lat:41.8846303, lng:-87.6475872},
+  {name:"Wings and Rings", category:"Chicken", address:"3434 S Halsted St, Chicago, IL 60608", phone:"+1 773-579-9464", placeId:"ChIJqXBBmzksDogR8pDe_sK-74Q", lat:41.8316161, lng:-87.6462546},
+  {name:"Hangry Cluck", category:"Chicken", address:"7759 S Cicero Ave, Chicago, IL 60652", phone:"+1 773-498-2221", placeId:"ChIJ3drYhdQxDogRCGErVG9r_5c", lat:41.7511002, lng:-87.7409322},
+  {name:"Rickette's", category:"Chicken", address:"1514 W Taylor St Ste 1, Chicago, IL 60607", phone:"+1 312-265-1369", placeId:"ChIJMw2fG8AtDogRwqcJhD09X0A", lat:41.869511, lng:-87.6647705},
+  {name:"House of Wings", category:"Chicken", address:"2447 N Clark St, Chicago, IL 60614", phone:"+1 773-929-9421", placeId:"ChIJSzARpA3TD4gRFHkgyIZGDss", lat:41.9267594, lng:-87.6409967},
+  {name:"BadaBing Wings", category:"Chicken", address:"4754 N Clark St, Chicago, IL 60640", phone:"+1 773-654-3912", placeId:"ChIJfwXYcZrTD4gR_54Gp7WIckE", lat:41.9686735, lng:-87.667594},
+  {name:"Jake Melnick's Corner Tap", category:"Chicken", address:"41 E Superior St, Chicago, IL 60611", phone:"+1 312-266-0400", placeId:"ChIJP8DQ0FLTD4gRLj3jMoqUHXI", lat:41.895538, lng:-87.6265138},
+  {name:"Buffalo Joe's", category:"Chicken", address:"1841 W Howard St, Chicago, IL 60626", phone:"+1 773-764-7300", placeId:"ChIJmZg9F0rQD4gRm7KF7Oc_NXE", lat:42.0192331, lng:-87.6774128},
+  {name:"Mild 2 Spicy", category:"Indian Cuisine", address:"714 W Diversey Pkwy, Chicago, IL 60614", phone:"+1 773-661-6778", placeId:"ChIJkXbHYQjTD4gR_b4Zhb-MQXM", lat:41.9329043, lng:-87.6472047},
+  {name:"Black Salt Indian Bar & Restaurant", category:"Indian Cuisine", address:"1699 E Sauk Trail, Sauk Village, IL 60411", phone:"+1 708-996-4664", placeId:"ChIJqX944iAdDogR9De9HC0SmCw", lat:41.4878946, lng:-87.5760792, permanentlyClosed:true},
+  {name:"LUXBAR", category:"Dinner Dates", address:"18 E Bellevue Pl, Chicago, IL 60611", phone:"+1 312-642-3400", placeId:"ChIJrTfew1HTD4gRX-yR9FosV9E", lat:41.9017752, lng:-87.627623},
+  {name:"Kayao", category:"Dinner Dates", address:"1252 N Wells St, Chicago, IL 60610", phone:"+1 872-342-2246", placeId:"ChIJXzLuIEbTD4gRtehH2kGdcbU", lat:41.9054016, lng:-87.6348743},
+  {name:"Double Fun", category:"Dinner Dates", address:"2 W Elm St, Chicago, IL 60610", phone:null, placeId:"ChIJZWslerrTD4gRjmENdE-yE6U", lat:41.9033228, lng:-87.628878},
+  {name:"Clandestino", category:"Dinner Dates", address:"535 N Wells St Lower Level, Chicago, IL 60654", phone:null, placeId:"ChIJtTIT8tctDogRsk3lReC-wOg", lat:41.891888, lng:-87.6338054},
+  {name:"The Bellevue Chicago", category:"Dinner Dates", address:"1031 N Rush St, Chicago, IL 60611", phone:"+1 312-888-8900", placeId:"ChIJJZgXgFHTD4gRs9AI_hRJzJs", lat:41.9016969, lng:-87.6277682},
+  {name:"Gus' Sip & Dip", category:"Dinner Dates", address:"51 W Hubbard St Ste 100, Chicago, IL 60654", phone:"+1 312-736-0163", placeId:"ChIJafbdjLEsDogRbvlpF3IWJqM", lat:41.8899298, lng:-87.6299476},
+  {name:"Akiro", category:"Dinner Dates", address:"546 N Wells St, Chicago, IL 60654", phone:"+1 312-754-0076", placeId:"ChIJA_Fn5z4tDogRmRUM6VwZaZI", lat:41.892145, lng:-87.6342808},
+  {name:"Chicago Brewhouse", category:"Dinner Dates", address:"33 E Riverwalk, Chicago, IL 60601", phone:"+1 312-877-5766", placeId:"ChIJhXoAwj4tDogR1RPu8wuWlkQ", lat:41.8873791, lng:-87.6267685},
+  {name:"Geja's Cafe", category:"Dinner Dates", address:"340 W Armitage Ave, Chicago, IL 60614", phone:"+1 773-281-9101", placeId:"ChIJ0x_SL2vTD4gRXzX_O-a8P1c", lat:41.9184806, lng:-87.6379154},
+  {name:"Nitro Nostalgia", category:"Desserts", address:"4252 S Cottage Grove Ave, Chicago, IL 60653", phone:"+1 773-690-8041", placeId:"ChIJBYRK4tsrDogRZbZE1CRk4ak", lat:41.8170736, lng:-87.6069609},
+  {name:"Classic Cobbler Cafe", category:"Desserts", address:"3453 S Prairie Ave, Chicago, IL 60616", phone:"+1 312-763-3100", placeId:"ChIJbR2IDuMpDogR5Y0boFt4S0I", lat:41.8313776, lng:-87.6203128},
+  {name:"Pan Artesanal", category:"Desserts", address:"3724 W Fullerton Ave, Chicago, IL 60647", phone:"+1 312-286-5265", placeId:"ChIJL78qhcrND4gRXeOczxsh3bA", lat:41.9247302, lng:-87.7205152},
+  {name:"Panaderia La Central", category:"Desserts", address:"4348 W Armitage Ave, Chicago, IL 60639", phone:"+1 773-252-7302", placeId:"ChIJnY-KYB_ND4gRLaK9sDx24c8", lat:41.9172246, lng:-87.7358206},
+  {name:"La Central Bakery", category:"Desserts", address:"2702 W Cermak Rd, Chicago, IL 60608", phone:"+1 773-254-9363", placeId:"ChIJEbuATYEtDogRJhEKBnIE44s", lat:41.852046, lng:-87.6932611},
+  {name:"Forever Yogurt", category:"Desserts", address:"2741 N Elston Ave, Chicago, IL 60647", phone:"+1 872-206-5576", placeId:"ChIJSRaEyojSD4gROELFY-7C07o", lat:41.9315939, lng:-87.6862546},
+  {name:"Shawn Michelle's Homemade Ice Cream", category:"Desserts", address:"46 E 47th St, Chicago, IL 60653", phone:"+1 773-675-4032", placeId:"ChIJLRIzT-gvDogRRpoqqy4OQgI", lat:41.8093747, lng:-87.6241491},
+  {name:"Legend Tasty House", category:"Desserts", address:"2242 S Wentworth Ave, Chicago, IL 60616", phone:"+1 312-225-8869", placeId:"ChIJqe9b62MsDogRhZMfEWztRFQ", lat:41.8516069, lng:-87.6322662},
+  {name:"Molly's Cupcakes", category:"Desserts", address:"419 E Illinois St Ste 120, Chicago, IL 60611", phone:"+1 312-600-6323", placeId:"ChIJr2kez1UrDogRCRBJBCrUJzA", lat:41.8909252, lng:-87.6166577},
+  {name:"Sanders BBQ Supply Co.", category:"BBQ", address:"1742 W 99th St, Chicago, IL 60643", phone:"+1 773-366-3241", placeId:"ChIJxSwDR-clDogRUt9Bfg2oU38", lat:41.7140233, lng:-87.6671463},
+  {name:"LEM'S Bar-B-Q", category:"BBQ", address:"311 E 75th St, Chicago, IL 60619", phone:"+1 773-994-2428", placeId:"ChIJBzoz38ooDogR9gceSQSa-ms", lat:41.758206, lng:-87.617627},
+  {name:"Wayne's Bar-B-Que and Cajun", category:"BBQ", address:"5401 S Wentworth Ave, Chicago, IL 60609", phone:"+1 773-536-2282", placeId:"ChIJR8Za5ccuDogR0-U8VqX0ZYs", lat:41.7959951, lng:-87.6302147},
+  {name:"Jay's Backyard BBQ", category:"BBQ", address:"5604 W Division St, Chicago, IL 60651", phone:"+1 773-417-3830", placeId:"ChIJE6i_BhTND4gRM26q-rizljY", lat:41.9023047, lng:-87.7660058},
+  {name:"Medley Grill & BBQ", category:"BBQ", address:"8340 S Stony Island Ave, Chicago, IL 60617", phone:"+1 312-253-7313", placeId:"ChIJ52cvnv8pDogRyhfXk7Ww-VE", lat:41.7430049, lng:-87.585953},
+  {name:"MCCB", category:"Chinese", address:"2138 S Archer Ave, Chicago, IL 60616", phone:"+1 312-881-0168", placeId:"ChIJ-_3liGEsDogR5zjWpg2fFAc", lat:41.8538733, lng:-87.6336365},
+  {name:"Oiistar", category:"Ramen", address:"1385 N Milwaukee Ave, Chicago, IL 60622", phone:"+1 773-360-8791", placeId:"ChIJrYBs6cXSD4gRLfnvYfRMcOs", lat:41.9070765, lng:-87.6721011},
+  {name:"Ukai Sushi", category:"Sushi", address:"1059 W Belmont Ave, Chicago, IL 60657", phone:"+1 773-868-9900", placeId:"ChIJz_qRb6vTD4gRr6iqv1ZZzmg", lat:41.9396968, lng:-87.65637},
+  {name:"Monster Ramen", category:"Ramen", address:"3435 W Fullerton Ave, Chicago, IL 60647", phone:"+1 773-770-9049", placeId:"ChIJh_X96FXND4gRdTQN8D7WrHU", lat:41.9244376, lng:-87.7135253},
+  {name:"Chi Cafe", category:"Chinese", address:"2160 S Archer Ave, Chicago, IL 60616", phone:"+1 312-842-9993", placeId:"ChIJWQcymWEsDogRKMRtP1XzEfU", lat:41.8534879, lng:-87.6345473},
+  {name:"Shinya Ramen House", category:"Ramen", address:"3240 S Halsted St, Chicago, IL 60608", phone:"+1 312-877-6008", placeId:"ChIJ5c-7gUQtDogRm4QGK4rDm_E", lat:41.8351917, lng:-87.6464513},
+  {name:"Koi Sushi", category:"Japanese", address:"2156 N Clybourn Ave, Chicago, IL 60614", phone:"+1 773-904-8144", placeId:"ChIJzTV8o1rTD4gRlRwypjCllm0", lat:41.9204283, lng:-87.6629233},
+  {name:"Gyuro Ramen", category:"Ramen", address:"171 N Aberdeen St, Chicago, IL 60607", phone:"+1 312-624-9414", placeId:"ChIJnc5EgFMtDogR7E7BgP2Emd8", lat:41.8850715, lng:-87.6542602},
+  {name:"Tanuki Sushi Restaurant", category:"Sushi", address:"3006 N Sheffield Ave, Chicago, IL 60657", phone:"+1 773-360-1950", placeId:"ChIJ22do2qnTD4gRuZ0lT7yDtjE", lat:41.9365556, lng:-87.654218},
+  {name:"Tsukiji", category:"Japanese", address:"1156 W Grand Ave, Chicago, IL 60642", phone:"+1 312-243-1112", placeId:"ChIJ9zXq3dUsDogR7YKh6-UzM_w", lat:41.8912985, lng:-87.6568201},
+  {name:"Koto Hibachi", category:"Japanese", address:"258 W 31st St, Chicago, IL 60616", phone:"+1 312-291-9629", placeId:"ChIJffQYZQAtDogR5x6JO7b3Biw", lat:41.8383447, lng:-87.6339569},
+  {name:"Chop Suey City", category:"Chinese", address:"3825 S Archer Ave, Chicago, IL 60632", phone:"+1 773-523-3951", placeId:"ChIJIUjvLfstDogRtovgSM-83ZM", lat:41.8238624, lng:-87.6879006},
+  {name:"Strings Ramen", category:"Ramen", address:"2141 S Archer Ave, Chicago, IL 60616", phone:"+1 312-374-3450", placeId:"ChIJ-fzbK2IsDogROuPS0iBesh0", lat:41.8533986, lng:-87.6332089},
+  {name:"DaiFuku Ramen", category:"Ramen", address:"2155 S China Pl # A, Chicago, IL 60616", phone:"+1 312-285-2422", placeId:"ChIJZ_2ePhwtDogRNS0ykoAYcJ0", lat:41.8538434, lng:-87.6346455},
+  {name:"Iron Age Korean Steak House", category:"Korean", address:"1265 N Milwaukee Ave, Chicago, IL 60622", phone:"+1 773-697-7622", placeId:"ChIJ8UQk783TD4gRjzkE7MVtNYk", lat:41.9048797, lng:-87.668651},
+  {name:"JiangNiu BBQ House", category:"Korean", address:"2300 S Archer Ave, Chicago, IL 60616", phone:"+1 312-846-1225", placeId:"ChIJFxKHPSotDogRTLh1I2C4E5c", lat:41.8510753, lng:-87.6388411},
+  {name:"A. Fusion", category:"Asian Fusion", address:"4601 Lincoln Hwy, Matteson, IL 60443", phone:"+1 708-748-9893", placeId:"ChIJ46kxFS4XDogR1CQjgz9oD4c", lat:41.505105, lng:-87.728135},
+  {name:"Deadbolt", category:"Bars", address:"2412 N Milwaukee Ave, Chicago, IL 60647", phone:"+1 773-698-6101", placeId:"ChIJ7UlUFGPND4gRHD4zTvXPMto", lat:41.9250313, lng:-87.7010701},
+  {name:"The River Kitchen and Bar", category:"Bars", address:"2909 N Sheffield Ave, Chicago, IL 60657", phone:"+1 773-935-7500", placeId:"ChIJj3oyDrbTD4gRqXqFBt06BFw", lat:41.9348535, lng:-87.6537068},
+  {name:"Three Dots and a Dash", category:"Tiki Bars", address:"435 N Clark St, Chicago, IL 60654", phone:"+1 312-610-4220", placeId:"ChIJiX4KgLEsDogR8gugSnSptzY", lat:41.8903119, lng:-87.6307668},
+  {name:"Kindling Chicago", category:"Cocktail Bars", address:"202 S Franklin St, Chicago, IL 60606", phone:"+1 312-789-5992", placeId:"ChIJIbAP574sDogR0YxYM4vAkLE", lat:41.8791527, lng:-87.6354812},
+  {name:"SLR Bar & Grill", category:"Bars", address:"16409 S Halsted St, Harvey, IL 60426", phone:"+1 708-825-9654", placeId:"ChIJf9b7eBMiDogRXeskumEcQdU", lat:41.5914435, lng:-87.6360535},
+  {name:"Emporium Fulton Market", category:"Bars", address:"839 W Fulton Market, Chicago, IL 60607", phone:"+1 312-373-0118", placeId:"ChIJs3TzE9AsDogRBxcP9xfz7h8", lat:41.8866497, lng:-87.6491947},
+  {name:"Moneygun", category:"Cocktail Bars", address:"660 W Lake St, Chicago, IL 60661", phone:"+1 312-600-0600", placeId:"ChIJl4qjZM8sDogR2QZVDh9Cgfo", lat:41.8858416, lng:-87.6451703},
+  {name:"Headquarters Beercade", category:"Bars", address:"213 W Institute Pl, Chicago, IL 60610", phone:"+1 312-291-8735", placeId:"ChIJfds8EEvTD4gR4NHirhe7O3c", lat:41.8973196, lng:-87.6351354},
+  {name:"Cava", category:"Cocktail Bars", address:"155 W Kinzie St #4514, Chicago, IL 60654", phone:"+1 773-348-8899", placeId:"ChIJdw4JNLEsDogRXVWudy_sKZc", lat:41.888848, lng:-87.6331924},
+  {name:"Love Street", category:"Cocktail Bars", address:"1325 W Wrightwood Ave, Chicago, IL 60614", phone:null, placeId:"ChIJY9U4ggXTD4gRoNkLUouQx8Q", lat:41.9286588, lng:-87.6620558},
+  {name:"Turtle's Bar & Grill", category:"Bars", address:"238 W 33rd St, Chicago, IL 60616", phone:"+1 312-225-7333", placeId:"ChIJqYYJXhMsDogRWuCPkY0NxKk", lat:41.8346954, lng:-87.6330665},
+  {name:"DSTRKT Bar & Grill", category:"Bars", address:"1540 N Milwaukee Ave, Chicago, IL 60622", phone:"+1 833-566-7156", placeId:"ChIJoYIsyD7TD4gRBMd-Kn6vA6w", lat:41.9093324, lng:-87.6762451},
+  {name:"The Dopest Bar & Grill", category:"Bars", address:"2343 W Roosevelt Rd, Chicago, IL 60608", phone:null, placeId:"ChIJV-yv1o4tDogRETpSoBTGLaI", lat:41.8664339, lng:-87.6852057},
+  {name:"Federales", category:"Bars", address:"180 N Morgan St, Chicago, IL 60607", phone:"+1 773-831-9696", placeId:"ChIJc4CaDdosDogRD-B2RcMW5yE", lat:41.8852162, lng:-87.6523893},
+  {name:"The Bureau Bar and Restaurant", category:"Bars", address:"2115 S State St, Chicago, IL 60616", phone:"+1 312-444-1638", placeId:"ChIJreaOqhMtDogREsyrRF4y8YY", lat:41.8537198, lng:-87.6268692},
+  {name:"The Hoagie Place #2", category:"Hoagie", address:"1117 Sibley Blvd, Dolton, IL 60419", phone:"+1 708-880-0307", placeId:"ChIJ-Y9LcgghDogRrct61JReAuI", lat:41.6222608, lng:-87.5897424},
+  {name:"Chicago Hoagie House", category:"Hoagie", address:"7358 S Stony Island Ave, Chicago, IL 60649", phone:"+1 773-414-7029", placeId:"ChIJ6X257RIpDogRN4YIc6V7HMk", lat:41.7606891, lng:-87.5866247},
+  {name:"Bronzeville Hoagie & Panini", category:"Hoagie", address:"238 E 35th St, Chicago, IL 60616", phone:"+1 872-258-9940", placeId:"ChIJf1E_SgAtDogRxyg4qgPOEmw", lat:41.8312242, lng:-87.6202361},
+  {name:"Corey's NYC Bagel Deli", category:"Bagel", address:"515 N Dearborn St, Chicago, IL 60654", phone:"+1 312-923-9999", placeId:"ChIJS366FbIsDogRpjhueVRi2GA", lat:41.8913441, lng:-87.6294604},
+  {name:"Simply Soups Salads and Sandwiches", category:"Sandwich", address:"635 E 47th St, Chicago, IL 60653", phone:"+1 773-373-3810", placeId:"ChIJZxsJv1ApDogRD-4jzVbxCfs", lat:41.8093196, lng:-87.609953},
+  {name:"D'Amato's Bakery", category:"Bakery", address:"1124 W Grand Ave, Chicago, IL 60642", phone:"+1 312-733-5456", placeId:"ChIJlXMCgNYsDogRqUYBlMRWJAM", lat:41.8912922, lng:-87.6556771},
+  {name:"NYC Halal Eats", category:"Halal", address:"8409 S Harlem Ave, Burbank, IL 60459", phone:"+1 708-741-7092", placeId:"ChIJm4yPRAA5DogRhDVm-2L5Ifc", lat:41.7385407, lng:-87.7989297},
+  {name:"Philly's Best", category:"Pizza", address:"769 W Jackson Blvd Unit 103, Chicago, IL 60661", phone:"+1 312-715-9800", placeId:"ChIJO3Jf5sIsDogR1qCb1zxAewc", lat:41.8778166, lng:-87.6468623},
+  {name:"Philly's Original Steak & Lemonade", category:"Cheesesteak", address:"2472 E State St, Burnham, IL 60633", phone:"+1 708-832-4846", placeId:"ChIJnaJyoOwgDogRp26OASbe6ZE", lat:41.630295, lng:-87.5608305},
+  {name:"Devil Dawgs", category:"Hot Dogs", address:"767 S State St, Chicago, IL 60605", phone:"+1 312-583-9100", placeId:"ChIJeTMAuJksDogR18rhH0XFMjc", lat:41.8721787, lng:-87.627288},
+  {name:"Portillo's", category:"Hot Dogs", address:"100 W Ontario St, Chicago, IL 60610", phone:"+1 312-587-8910", placeId:"ChIJf_CED7MsDogR72PLB04AlFA", lat:41.893511, lng:-87.6315393},
+  {name:"Home of the Hoagy", category:"Hoagie", address:"1316 W 111th St, Chicago, IL 60643", phone:"+1 773-238-7171", placeId:"ChIJY4TVKFQkDogR4mjVqRDBbLU", lat:41.6924046, lng:-87.6553609},
+  {name:"Burp Catering", category:"Catering", address:"154 W 95th St, Chicago, IL 60628", phone:"+1 773-840-3226", placeId:"ChIJTUREnJklDogRs7x5BAXi_yc", lat:41.7219012, lng:-87.6283815},
+  {name:"Wrap & Roll Cafe", category:"Wrap", address:"1141 S Western Ave, Chicago, IL 60612", phone:"+1 312-995-9027", placeId:"ChIJ_elO1SAtDogRsibFMADQ2NY", lat:41.867214, lng:-87.6857217},
+  {name:"Lemme get umm", category:"Sandwich", address:"109 E 51st St, Chicago, IL 60615", phone:"+1 773-413-7573", placeId:"ChIJ7wbdARsvDogRGlR2xGQqjiw", lat:41.8016876, lng:-87.6221266},
+  {name:"Migos Fine Food", category:"Mexican", address:"5044 W Montrose Ave, Chicago, IL 60641", phone:"+1 872-946-7015", placeId:"ChIJI9VAd0nND4gRo_ixebU0ac0", lat:41.9608017, lng:-87.7541722},
+  {name:"Griddle 24", category:"Breakfast & Brunch", address:"334 W Chicago Ave, Chicago, IL 60654", phone:"+1 872-259-9602", placeId:"ChIJc96d6krTD4gRgX9JTfI-cO4", lat:41.896781, lng:-87.6369655},
+  {name:"Egg Harbor Cafe", category:"Breakfast & Brunch", address:"220 E Illinois St, Chicago, IL 60611", phone:"+1 312-392-2570", placeId:"ChIJz30bIkwtDogRGFIWlkyfoW4", lat:41.8912318, lng:-87.6216051},
+  {name:"Roscoe's", category:"Bars", address:"3356 N Halsted St, Chicago, IL 60657", phone:"+1 773-281-3355", placeId:"ChIJbV-noq_TD4gRJKdDjRzXsVk", lat:41.9434929, lng:-87.6495816},
+  {name:"The Original Pancake House", category:"Breakfast & Brunch", address:"22 E Bellevue Pl, Chicago, IL 60611", phone:"+1 312-642-7917", placeId:"ChIJERfUwFHTD4gRTr5OE34ncp8", lat:41.901791, lng:-87.6274495},
+  {name:"Peach's Restaurant", category:"Breakfast & Brunch", address:"4652 S King Dr, Chicago, IL 60653", phone:"+1 773-966-5801", placeId:"ChIJp-j2bFMpDogRpW93KbXdD90", lat:41.8094714, lng:-87.6169868},
+  {name:"Goddess and the Baker", category:"Breakfast & Brunch", address:"33 S Wabash Ave, Chicago, IL 60603", phone:"+1 312-877-5176", placeId:"ChIJy4c5YqQsDogROocKBfZJmos", lat:41.8812892, lng:-87.6259101},
+  {name:"TNT Rooftop Restaurant", category:"Rooftop", address:"5405 W Madison St, Chicago, IL 60644", phone:"+1 773-417-4529", placeId:"ChIJfzTVJRIzDogRBERwWoDFFaA", lat:41.8801334, lng:-87.7604959},
+  {name:"Utopian Tailgate", category:"Rooftop", address:"1608 N Wells St, Chicago, IL 60614", phone:"+1 312-210-7799", placeId:"ChIJsRWHz9rTD4gROTiwF_24NW0", lat:41.9114253, lng:-87.6349291},
+  {name:"Kennedy Rooftop", category:"Rooftop", address:"1551 W North Ave Ashland, Chicago, IL 60622", phone:"+1 773-270-6770", placeId:"ChIJEzuSqbTTD4gRkFimj49ptuM", lat:41.9103888, lng:-87.6672841},
+  {name:"RH Rooftop Restaurant - Oak Brook", category:"Rooftop", address:"1300 W 22nd St, Oak Brook, IL 60523", phone:"+1 630-572-0074", placeId:"ChIJTypcN6dNDogRh4hJvFWXFz4", lat:41.8473819, lng:-87.9505662},
+  {name:"Raised an Urban Rooftop", category:"Rooftop", address:"1 W Wacker Dr, Chicago, IL 60601", phone:"+1 312-795-3444", placeId:"ChIJXx374a8sDogR2ZjAxYv_Qn8", lat:41.8862369, lng:-87.6283636},
+  {name:"VU Rooftop", category:"Rooftop", address:"133 E Cermak Rd, Chicago, IL 60616", phone:"+1 312-256-2991", placeId:"ChIJHe76nSItDogR2XY6olDGPeI", lat:41.8526719, lng:-87.6227639},
+  {name:"Wilma's Famous BBQ", category:"BBQ", address:"17 N Wabash Ave Fl 2, Chicago, IL 60602", phone:"+1 312-269-5580", placeId:"ChIJmd458xYtDogR4nBhDfrou80", lat:41.8826709, lng:-87.6258493},
+  {name:"Soul Vibez", category:"Soul Food", address:"226 W Chicago Ave, Chicago, IL 60654", phone:"+1 872-342-2026", placeId:"ChIJVWe2u3TTD4gRShjDHqtvhNI", lat:41.8967914, lng:-87.6353086},
+  {name:"Prime 57 Restaurant & Lounge", category:"Happy Hour", address:"717 W Maxwell St, Chicago, IL 60607", phone:"+1 773-900-2272", placeId:"ChIJY4xxnKotDogRWl3Tsrw3Jg4", lat:41.8645752, lng:-87.6457957},
+  {name:"Punch Bowl Social", category:"American Cuisine", address:"310 N Green St, Chicago, IL 60607", phone:"+1 312-809-9551", placeId:"ChIJ1SgOPdAsDogRSDKlM1oEOnY", lat:41.8872128, lng:-87.6488301},
+  {name:"Halal Smash Burger & Phillies", category:"Halal", address:"6404 N California Ave, Chicago, IL 60659", phone:"+1 773-856-0236", placeId:"ChIJFwKxsvTRD4gRX2hokn0CChY", lat:41.9978813, lng:-87.6998977},
+  {name:"Big Wig", category:"Mexican", address:"2490 N Milwaukee Ave, Chicago, IL 60647", phone:null, placeId:"ChIJP-m0Og3ND4gRZePpsOdg4E0", lat:41.9265107, lng:-87.7034414},
+  {name:"Maxwell Street Depot", category:"Hot Dogs", address:"411 W 31st St, Chicago, IL 60616", phone:"+1 312-326-3514", placeId:"ChIJaWSr9GosDogR-_DHSJxx71w", lat:41.8380363, lng:-87.6371464},
+  {name:"Jamaican Gates Restaurant", category:"Jamaican", address:"10226 S Halsted St, Chicago, IL 60628", phone:"+1 773-779-1708", placeId:"ChIJs80S9bklDogR4mTfbmcb9gs", lat:41.707895, lng:-87.643081},
+  {name:"Exclusive Jerk Caribbean Restaurant", category:"Jamaican", address:"419 W Lincoln Hwy, Chicago Heights, IL 60411", phone:"+1 708-300-2994", placeId:"ChIJA7NG9BsZDogRK4ow2Y5KonQ", lat:41.5061752, lng:-87.6597135},
+  {name:"Soul Shack Express", category:"Jamaican", address:"8711 S Ashland Ave, Chicago, IL 60620", phone:"+1 773-941-6311", placeId:"ChIJ5RKouSIlDogRHsZpCHesE6E", lat:41.7353032, lng:-87.6626019},
+  {name:"LaCoco's Pizza and Sports Club", category:"Pizza", address:"3350 W 47th St, Chicago, IL 60632", phone:"+1 773-523-2205", placeId:"ChIJe4ftFvAxDogRvY_kKbzVm_I", lat:41.8083827, lng:-87.7083239},
+  {name:"Frasca Pizzeria + Wine Bar", category:"Pizza", address:"3358 N Paulina St, Chicago, IL 60657", phone:"+1 773-248-5222", placeId:"ChIJIe-xoFvSD4gRqWL1soAaCoM", lat:41.943144, lng:-87.6714003},
+  {name:"Robert's Pizza and Dough Co", category:"Pizza", address:"465 N McClurg Ct, Chicago, IL 60611", phone:"+1 312-265-1328", placeId:"ChIJvViVgVUrDogRfBAuR7QDzjU", lat:41.8906144, lng:-87.6168589},
+  {name:"Old Chicago Pizza", category:"Pizza", address:"742 E 79th St, Chicago, IL 60619", phone:"+1 773-873-7428", placeId:"ChIJowHsebkoDogRSSygCPNGKoA", lat:41.7514348, lng:-87.6060913},
+  {name:"Paradise Park", category:"Pizza", address:"1913 W North Ave, Chicago, IL 60622", phone:"+1 773-687-9117", placeId:"ChIJAeD_ayzTD4gRahiVg8OYv1Y", lat:41.9101936, lng:-87.6756345},
+  {name:"Labriola", category:"Pizza", address:"535 N Michigan Ave, Chicago, IL 60611", phone:"+1 312-955-3100", placeId:"ChIJy1Iud6wsDogRDJKE6TnDaJE", lat:41.8918768, lng:-87.6236118},
+  {name:"Anto Pizza & Pasta Chicago", category:"Pizza", address:"1547 W Jarvis Ave, Chicago, IL 60626", phone:"+1 773-942-6964", placeId:"ChIJuT_Xi7PRD4gRjtx3odzSQCE", lat:42.0158483, lng:-87.6699121},
+  {name:"Art of Pizza on State Street", category:"Pizza", address:"727 S State St, Chicago, IL 60605", phone:"+1 312-877-5335", placeId:"ChIJrbHdt5ksDogRfkdy5KYP-VI", lat:41.8723678, lng:-87.6272431},
+  {name:"Punky's Pizza & Pasta", category:"Pizza", address:"2600 S Wallace St, Chicago, IL 60616", phone:"+1 312-842-2100", placeId:"ChIJreIJOkMsDogRCsSLXDu2hnw", lat:41.8452688, lng:-87.6418384},
+  {name:"Lou Malnati's Pizzeria", category:"Pizza", address:"439 N Wells St, Chicago, IL 60654", phone:"+1 312-828-9800", placeId:"ChIJNUoDqLYsDogRG8jygr_J23U", lat:41.8903514, lng:-87.6337231},
+  {name:"Pequod's Pizza", category:"Pizza", address:"2207 N Clybourn Ave, Chicago, IL 60614", phone:"+1 773-327-1512", placeId:"ChIJQ6vcPuTSD4gRTbyKKQufF_o", lat:41.921934, lng:-87.6643512},
+  {name:"Piece Pizzeria & Brewery", category:"Pizza", address:"1927 W North Ave, Chicago, IL 60622", phone:"+1 773-772-4422", placeId:"ChIJfWmJOsfSD4gRVMPC4R4Q10w", lat:41.9103042, lng:-87.6761289},
+  {name:"Fontano's Pizza and Subs", category:"Pizza", address:"332 S Michigan Ave, Chicago, IL 60604", phone:"+1 312-663-3061", placeId:"ChIJtVc3Y-QtDogRUuc-XoS3eUY", lat:41.8772942, lng:-87.624614},
+  {name:"De Arco's Pizza & Restaurant", category:"Pizza", address:"2832 E 87th St, Chicago, IL 60617", phone:"+1 773-731-0300", placeId:"ChIJZytI0gsoDogRO0DiutXbSng", lat:41.7375538, lng:-87.5549064},
+  {name:"Gigios Pizza", category:"Pizza", address:"4643 N Broadway, Chicago, IL 60640", phone:"+1 773-271-2273", placeId:"ChIJyYjDytLTD4gRegmiSrvqeQ4", lat:41.9666212, lng:-87.6580248},
+  {name:"Eataly", category:"Italian", address:"43 E Ohio St, Chicago, IL 60611", phone:"+1 312-521-8700", placeId:"ChIJe_Fq2lctDogRTpK221p4Fmg", lat:41.8923302, lng:-87.6262663},
+  {name:"RPM Italian", category:"Italian", address:"52 W Illinois St, Chicago, IL 60654", phone:"+1 312-222-1888", placeId:"ChIJgfrOPLIsDogRvM0_GwLBpyI", lat:41.8910545, lng:-87.6299888},
+  {name:"Il Porcellino", category:"Italian", address:"59 W Hubbard St #2, Chicago, IL 60654", phone:"+1 312-595-0800", placeId:"ChIJJ3QOj7EsDogRnP9Ty8gAjlU", lat:41.8899515, lng:-87.6302966},
+  {name:"The Pasta Bowl", category:"Italian", address:"2434 N Clark St, Chicago, IL 60614", phone:"+1 773-525-2695", placeId:"ChIJOSYpmA3TD4gR7FeUKvZJ-Gc", lat:41.9264445, lng:-87.6411894},
+  {name:"Maggiano's Little Italy", category:"Italian", address:"516 N Clark St, Chicago, IL 60654", phone:"+1 312-644-7700", placeId:"ChIJVzr2yrMsDogRNWrUba0n1AY", lat:41.8914553, lng:-87.6313295},
+  {name:"The Rosebud", category:"Italian", address:"720 N Rush St, Chicago, IL 60611", phone:"+1 312-266-6444", placeId:"ChIJs-YDMlPTD4gRdEtlWNGqV4k", lat:41.895537, lng:-87.6257223},
+  {name:"Trivoli Tavern", category:"Italian", address:"114 N Green St, Chicago, IL 60607", phone:"+1 312-366-2646", placeId:"ChIJSwROLIEtDogRw4rWhgp9Ehs", lat:41.8838272, lng:-87.6492538},
+  {name:"Ricobene's", category:"Italian", address:"252 W 26th St, Chicago, IL 60616", phone:"+1 312-225-5555", placeId:"ChIJici8qWgsDogRuoxl5U7xq7g", lat:41.8457437, lng:-87.6339284},
+  {name:"Canal Street Eatery & Market", category:"Italian", address:"314 S Canal St, Chicago, IL 60606", phone:"+1 312-967-6060", placeId:"ChIJ16YJsywtDogRnFIYuZ4DqRk", lat:41.877212, lng:-87.6400529},
+  {name:"Litehouse Whole Food Grill", category:"Italian", address:"1368 E 53rd St, Chicago, IL 60615", phone:"+1 773-633-2587", placeId:"ChIJjbP4OmwpDogR0oe0J_y_Fag", lat:41.7996654, lng:-87.5924207},
+  {name:"Tre Dita", category:"Italian", address:"401 E Wacker Dr, Chicago, IL 60601", phone:"+1 312-725-1724", placeId:"ChIJpTZfhUUrDogRsMadd7b4mek", lat:41.8873909, lng:-87.61733},
+];
+
+async function enrichAddresses(){
+  let changed = false;
+  ADDRESS_LOOKUP.forEach(entry=>{
+    const r = restaurants.find(x => x.name.toLowerCase() === entry.name.toLowerCase());
+    if(r){
+      const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${entry.placeId}`;
+      const closedFlag = !!entry.permanentlyClosed;
+      const website = entry.website || null;
+      if(r.address !== entry.address || r.phone !== entry.phone || r.mapsUrl !== mapsUrl || r.lat !== entry.lat || r.lng !== entry.lng || r.permanentlyClosed !== closedFlag || (website && r.website !== website)){
+        r.address = entry.address;
+        r.phone = entry.phone;
+        r.mapsUrl = mapsUrl;
+        r.lat = entry.lat;
+        r.lng = entry.lng;
+        r.permanentlyClosed = closedFlag;
+        if(website) r.website = website;
+        changed = true;
+      }
+    }
+  });
+  if(changed) await saveRestaurants();
+}
+
+/* Places flagged permanentlyClosed (from Apple Maps guide data or manual
+   tagging) are removed automatically, along with any visits logged there.
+   Safe to re-run — no-op once a place is already gone. */
+async function removeClosedPlaces(){
+  const closed = restaurants.filter(r => r.permanentlyClosed);
+  if(closed.length === 0) return;
+  const closedIds = new Set(closed.map(r => r.id));
+  restaurants = restaurants.filter(r => !closedIds.has(r.id));
+  visits = visits.filter(v => !closedIds.has(v.restaurantId));
+  await saveRestaurants();
+  await saveVisits();
+}
+
+/* Desserts places used to carry one flat "Desserts" tag; now that they
+   have specific subtypes (Ice Cream / Bakery / Frozen Yogurt), drop the
+   old generic tag so it doesn't sit alongside the new one. Safe to
+   re-run — no-op once already migrated. */
+const DESSERT_RETAG_NAMES = [
+  "Nitro Nostalgia", "Classic Cobbler Cafe", "Pan Artesanal", "Panaderia La Central",
+  "La Central Bakery", "Forever Yogurt", "Shawn Michelle's Homemade Ice Cream",
+  "Legend Tasty House", "Molly's Cupcakes",
+];
+async function retagDesserts(){
+  let changed = false;
+  DESSERT_RETAG_NAMES.forEach(name=>{
+    const r = restaurants.find(x => x.name.toLowerCase() === name.toLowerCase());
+    if(r && r.categories && r.categories.includes('Desserts')){
+      r.categories = r.categories.filter(c => c !== 'Desserts');
+      changed = true;
+    }
+  });
+  if(changed) await saveRestaurants();
+}
+
+(async function init(){
+  await loadData();
+  await migrateCategories();
+  await seedIfNeeded();
+  await enrichAddresses();
+  await removeClosedPlaces();
+  await retagDesserts();
+  renderAll();
+})();
+</script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{ /* offline support unavailable, app still works online */ });
+  });
+}
+</script>
+</body>
+</html>

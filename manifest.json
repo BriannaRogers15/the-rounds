@@ -1,0 +1,14 @@
+{
+  "name": "The Rounds — A Chicagoland Dining Ledger",
+  "short_name": "The Rounds",
+  "description": "Personal Chicagoland restaurant guide tracker — log visits, ratings, and notes across every guide.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#3B1C16",
+  "theme_color": "#3B1C16",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
