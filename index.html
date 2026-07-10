@@ -405,35 +405,42 @@ h1{
 .areas-title{ font-family:'Oswald', sans-serif; font-weight:700; font-size:22px; color: var(--cream); }
 .areas-sub{ font-size:12px; color: var(--cream-dim); margin-top:3px; }
 .areas-head-actions{ display:flex; gap:8px; }
-.area-map-wrap{
-  border-radius: 16px; overflow:hidden;
-  border: 1px solid var(--hairline);
-  height: 62vh; min-height: 420px;
-  background: var(--brick-panel);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.22);
-}
-#hoodMapEl{ height:100%; background: var(--brick-panel); }
-.leaflet-tooltip.hood-tip{
-  background: var(--brick-panel-hi); color: var(--cream);
-  border: 1px solid var(--hairline); border-radius: 8px;
-  font-family:'Manrope', sans-serif; font-weight:700; font-size:12px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.45);
-}
-.area-groups{ margin-top: 20px; }
+.area-groups{ margin-top: 4px; }
 .area-group-label{
   font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:2px;
-  text-transform:uppercase; color: var(--flag-blue); margin-bottom:8px;
+  text-transform:uppercase; color: var(--flag-blue); margin-bottom:10px;
 }
-.area-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; }
-.area-chip{
-  font-family:'Manrope', sans-serif; font-weight:600; font-size:12px;
-  background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
-  border: 1px solid var(--hairline); color: var(--cream);
-  padding: 9px 15px; border-radius: 999px; cursor:pointer;
-  transition: all .15s ease;
+.area-blocks{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin-bottom: 26px;
 }
-.area-chip:hover{ border-color: var(--flag-blue); color: var(--flag-blue-bright); transform: translateY(-1px); }
-.area-chip .cnt{ color: var(--flag-blue-bright); opacity:0.85; margin-left:5px; font-family:'IBM Plex Mono', monospace; font-size:10.5px; }
+.area-block{
+  position:relative; overflow:hidden; border:none; cursor:pointer;
+  border-radius: 14px;
+  padding: 20px 14px 14px;
+  min-height: 128px;
+  background: var(--block);
+  color: var(--ink);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+  font-family:'Manrope', sans-serif;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+.area-block:hover{ transform: translateY(-3px) scale(1.02); box-shadow: 0 14px 30px rgba(0,0,0,0.4); }
+.block-shape{ position:absolute; inset:7%; width:86%; height:86%; opacity:0.17; pointer-events:none; }
+.block-shape path{ fill: var(--ink); }
+.block-name{
+  position:relative; text-align:center;
+  font-family:'Oswald', sans-serif; font-weight:700; font-size:18px; line-height:1.15;
+}
+.block-icons{ position:relative; font-size:13.5px; letter-spacing:2px; }
+.block-meta{
+  position:relative;
+  font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:0.8px;
+  opacity:0.85;
+}
 
 /* ---- Active-area banner on the listings page ---- */
 .area-banner{
@@ -782,8 +789,7 @@ let leafletMap = null;
 let mapRenderToken = 0;
 let currentPage = 'areas';   // 'areas' = neighborhood landing, 'listings' = classic page
 let activeArea = null;       // {type:'neighborhood'|'town'|'other', name} or null = everywhere
-let hoodGeo = null;          // Chicago neighborhood boundary GeoJSON, loaded once
-let areaMap = null;          // Leaflet instance for the landing map
+let hoodGeo = null;          // Chicago neighborhood boundary GeoJSON, loaded once (block silhouettes + assigning new listings)
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -1561,98 +1567,114 @@ function areaCounts(){
   return { hoods, townByRegion, unassigned };
 }
 
+/* Every area keeps one color forever — hashed from its name, not its render
+   order — so the landing reads like a map legend you can memorize. */
+const BLOCK_PALETTE = [
+  ['#9DC3F0', '#152A45'], // blue
+  ['#C9A6E8', '#2E1B45'], // purple
+  ['#A9D8A4', '#1C3418'], // green
+  ['#F2B8D4', '#421B30'], // pink
+  ['#E8C983', '#3D2D0F'], // gold
+  ['#DE8F84', '#401713'], // coral
+  ['#8FD8CE', '#113531'], // teal
+  ['#EFB08C', '#3E2311'], // peach
+];
+function blockColor(name){
+  let h = 0;
+  for(const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return BLOCK_PALETTE[h % BLOCK_PALETTE.length];
+}
+
+/* The neighborhood's true outline from the boundary file, fitted into a
+   100x100 viewBox. Longitude is compressed by cos(latitude) first so the
+   shape keeps its real-world proportions at Chicago's latitude. */
+function hoodShapePath(name){
+  if(!hoodGeo) return null;
+  const f = (hoodGeo.features || []).find(f => displayHoodName(f.properties.pri_neigh) === name);
+  if(!f) return null;
+  const g = f.geometry;
+  const polys = g.type === 'MultiPolygon' ? g.coordinates : (g.type === 'Polygon' ? [g.coordinates] : []);
+  if(!polys.length) return null;
+  const LNG_SCALE = Math.cos(41.85 * Math.PI / 180);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  polys.forEach(p => p[0].forEach(([lng, lat])=>{
+    const x = lng * LNG_SCALE;
+    if(x < minX) minX = x; if(x > maxX) maxX = x;
+    if(lat < minY) minY = lat; if(lat > maxY) maxY = lat;
+  }));
+  const scale = 100 / Math.max(maxX - minX, maxY - minY);
+  const ox = (100 - (maxX - minX) * scale) / 2;
+  const oy = (100 - (maxY - minY) * scale) / 2;
+  return polys.map(p =>
+    p[0].map(([lng, lat], i)=>{
+      const x = ((lng * LNG_SCALE - minX) * scale + ox).toFixed(1);
+      const y = ((maxY - lat) * scale + oy).toFixed(1);
+      return `${i ? 'L' : 'M'}${x} ${y}`;
+    }).join('') + 'Z'
+  ).join('');
+}
+
+function areaStats(area){
+  const list = restaurants.filter(r => restaurantInArea(r, area));
+  const visited = list.filter(r => visitsFor(r.id).length > 0).length;
+  const iconCounts = {};
+  list.forEach(r => (r.categories || []).forEach(t=>{
+    const icon = tagIcon(t);
+    iconCounts[icon] = (iconCounts[icon] || 0) + 1;
+  }));
+  const icons = Object.entries(iconCounts).sort((a,b)=> b[1] - a[1]).slice(0, 3).map(e => e[0]);
+  return { count: list.length, visited, icons };
+}
+
+function areaBlockHTML(area){
+  const stats = areaStats(area);
+  const [bg, ink] = blockColor(area.name);
+  const shape = area.type === 'neighborhood' ? hoodShapePath(area.name) : null;
+  return `
+    <button class="area-block" data-type="${area.type}" data-name="${escapeHtml(area.name)}" style="--block:${bg};--ink:${ink};">
+      ${shape ? `<svg class="block-shape" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${shape}"/></svg>` : ''}
+      <span class="block-name">${escapeHtml(area.name)}</span>
+      ${stats.icons.length ? `<span class="block-icons">${stats.icons.join(' ')}</span>` : ''}
+      <span class="block-meta">${stats.count} spot${stats.count===1?'':'s'}${stats.visited ? ` · ${stats.visited}/${stats.count} visited` : ''}</span>
+    </button>`;
+}
+
 function renderAreasPage(){
   const el = $('#areasPage');
   const { hoods, townByRegion, unassigned } = areaCounts();
-  const hoodChips = Object.entries(hoods).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]))
-    .map(([name,count])=>`<button class="area-chip" data-type="neighborhood" data-name="${escapeHtml(name)}">${escapeHtml(name)} <span class="cnt">${count}</span></button>`).join('');
+
+  const byCountDesc = (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]);
+  const chicagoBlocks = Object.entries(hoods).sort(byCountDesc)
+    .map(([name]) => areaBlockHTML({ type:'neighborhood', name })).join('')
+    + (unassigned ? areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' }) : '');
   const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
-    const chips = Object.entries(townByRegion[region]).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]))
-      .map(([town,count])=>`<button class="area-chip" data-type="town" data-name="${escapeHtml(town)}">${escapeHtml(town)} <span class="cnt">${count}</span></button>`).join('');
-    return `<div class="area-group-label">${escapeHtml(region)}</div><div class="area-chips">${chips}</div>`;
+    const blocks = Object.entries(townByRegion[region]).sort(byCountDesc)
+      .map(([town]) => areaBlockHTML({ type:'town', name: town })).join('');
+    return `<div class="area-group-label">${escapeHtml(region)}</div><div class="area-blocks">${blocks}</div>`;
   }).join('');
 
   el.innerHTML = `
     <div class="areas-head">
       <div>
         <div class="areas-title">Pick your territory</div>
-        <div class="areas-sub">Tap a neighborhood on the map — or a chip below — and its spots and cuisines pop up.</div>
+        <div class="areas-sub">Tap a block and that area's spots and cuisines pop up.</div>
       </div>
       <div class="areas-head-actions">
         <button class="btn secondary" id="addFromAreas">+ New Listing</button>
         <button class="btn" id="browseAllBtn">Browse all listings →</button>
       </div>
     </div>
-    <div class="area-map-wrap" id="areaMapWrap"><div id="hoodMapEl"></div></div>
     <div class="area-groups">
-      ${hoodChips ? `<div class="area-group-label">Chicago</div><div class="area-chips">${hoodChips}
-        ${unassigned ? `<button class="area-chip" data-type="other" data-name="Elsewhere in Chicago">Elsewhere in Chicago <span class="cnt">${unassigned}</span></button>` : ''}</div>`
-      : (unassigned ? `<div class="area-group-label">Chicago</div><div class="area-chips"><button class="area-chip" data-type="other" data-name="Elsewhere in Chicago">Elsewhere in Chicago <span class="cnt">${unassigned}</span></button></div>` : '')}
+      ${chicagoBlocks ? `<div class="area-group-label">Chicago</div><div class="area-blocks">${chicagoBlocks}</div>` : ''}
       ${suburbGroups}
     </div>
   `;
 
   $('#browseAllBtn').addEventListener('click', ()=>{ activeArea = null; currentPage = 'listings'; renderAll(); });
   $('#addFromAreas').addEventListener('click', openAddRestaurant);
-  $$('.area-chip', el).forEach(chip=>{
-    chip.addEventListener('click', ()=> openArea({ type: chip.dataset.type, name: chip.dataset.name }));
+  $$('.area-block', el).forEach(block=>{
+    block.addEventListener('click', ()=> openArea({ type: block.dataset.type, name: block.dataset.name }));
   });
-
-  initAreaMap(hoods, townByRegion);
-}
-
-function initAreaMap(hoods, townByRegion){
-  if(areaMap){ try{ areaMap.remove(); }catch(e){} areaMap = null; }
-  const wrap = $('#areaMapWrap');
-  if(typeof L === 'undefined' || !hoodGeo){
-    // Boundaries or Leaflet unavailable — the chip groups below still cover everything.
-    wrap.style.display = 'none';
-    return;
-  }
-  wrap.style.display = '';
-  areaMap = L.map('hoodMapEl', { scrollWheelZoom: true }).setView([41.85, -87.68], 10);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors', maxZoom: 19
-  }).addTo(areaMap);
-
-  const layer = L.geoJSON(hoodGeo, {
-    style: f => {
-      const name = displayHoodName(f.properties.pri_neigh);
-      const count = hoods[name] || 0;
-      return count > 0
-        ? { color:'#7EC8F2', weight:1.4, fillColor:'#4FA8DE', fillOpacity: Math.min(0.3 + count*0.05, 0.68) }
-        : { color:'rgba(243,237,224,0.4)', weight:0.7, fillColor:'#F3EDE0', fillOpacity:0.05, dashArray:'3' };
-    },
-    onEachFeature: (f, lyr) => {
-      const name = displayHoodName(f.properties.pri_neigh);
-      const count = hoods[name] || 0;
-      lyr.bindTooltip(`${name}${count ? ' · ' + count + ' spot' + (count===1?'':'s') : ''}`, { sticky:true, className:'hood-tip' });
-      if(count > 0){
-        lyr.on('mouseover', ()=> lyr.setStyle({ weight: 2.5, color: '#E23A50' }));
-        lyr.on('mouseout', ()=> layer.resetStyle(lyr));
-        lyr.on('click', ()=> openArea({ type:'neighborhood', name }));
-      }
-    }
-  }).addTo(areaMap);
-
-  // Suburb towns get a clickable marker at the centroid of their listings.
-  const bounds = layer.getBounds();
-  Object.values(townByRegion).forEach(towns=>{
-    Object.entries(towns).forEach(([town, count])=>{
-      const pts = restaurants.filter(r => r.town === town && r.lat != null && r.lng != null);
-      if(!pts.length) return;
-      const lat = pts.reduce((s,r)=>s+r.lat,0) / pts.length;
-      const lng = pts.reduce((s,r)=>s+r.lng,0) / pts.length;
-      const m = L.circleMarker([lat, lng], {
-        radius: 9 + Math.min(count * 1.5, 8),
-        color: '#E23A50', weight: 2, fillColor: '#E23A50', fillOpacity: 0.5
-      }).addTo(areaMap);
-      m.bindTooltip(`${town} · ${count} spot${count===1?'':'s'}`, { sticky:true, className:'hood-tip' });
-      m.on('click', ()=> openArea({ type:'town', name: town }));
-      bounds.extend([lat, lng]);
-    });
-  });
-  try{ areaMap.fitBounds(bounds.pad(0.04)); }catch(e){}
 }
 
 function renderAreaBanner(){
