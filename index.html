@@ -558,7 +558,49 @@ h1{
 .link-pill:hover{ border-color: var(--flag-blue); background: rgba(79,168,222,0.1); }
 
 .visit-list{ margin-top:18px; }
-.visit-list h3{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:1.5px; margin-bottom:6px; text-transform:uppercase; color:var(--flag-blue); }
+.visit-list h3, .menu-section h3{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:1.5px; margin-bottom:6px; text-transform:uppercase; color:var(--flag-blue); }
+
+/* ---- Per-restaurant menu ---- */
+.menu-section{ margin-top:18px; border-top: 1px solid var(--hairline); padding-top:14px; }
+.menu-chips{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.menu-chip{
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:12px; font-weight:600;
+  color: var(--cream); background: var(--brick-deep);
+  border: 1px solid var(--hairline);
+  border-radius: 999px; padding: 4px 6px 4px 11px;
+}
+.menu-chip .tag-x{ color: var(--cream-dim); }
+.menu-chip .tag-x:hover{ color: var(--flag-red); opacity:1; }
+.menu-add-row{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+.paste-menu-wrap{ margin-top:8px; }
+.paste-menu-wrap textarea{
+  width:100%; min-height:90px; resize:vertical;
+  font-family:'Manrope', sans-serif; font-size:13px;
+  padding: 10px 12px; border:1px solid var(--hairline); border-radius:8px;
+  background: var(--brick-deep); color: var(--cream);
+}
+.paste-menu-wrap textarea:focus{ outline:none; border-color: var(--flag-blue); box-shadow: 0 0 0 3px rgba(79,168,222,0.15); }
+.paste-menu-actions{ display:flex; gap:8px; margin-top:8px; justify-content:flex-end; }
+.no-menu{ font-size:12px; color: var(--cream-dim); }
+
+/* ---- Dish checklist in Log a Visit ---- */
+.dish-checklist{
+  max-height: 190px; overflow-y:auto;
+  border: 1px solid var(--hairline); border-radius: 8px;
+  background: var(--brick-deep);
+  padding: 5px; margin-bottom: 8px;
+  display:flex; flex-direction:column; gap:2px;
+}
+.dish-check{
+  display:flex; align-items:center; gap:9px;
+  padding: 7px 9px; border-radius: 6px; cursor:pointer;
+  font-size: 13px; color: var(--cream);
+  transition: background .12s ease;
+}
+.dish-check:hover{ background: rgba(243,237,224,0.05); }
+.dish-check:has(input:checked){ background: rgba(79,168,222,0.14); }
+.dish-check input{ accent-color: var(--flag-blue); width:15px; height:15px; margin:0; flex-shrink:0; }
 .visit-item{
   border-top: 1px solid var(--hairline); padding: 11px 0;
   display:flex; justify-content:space-between; gap:10px; font-size:12.5px;
@@ -875,6 +917,32 @@ function removeTagFromRestaurant(id, tag){
   const r = restaurants.find(x=>x.id===id);
   if(!r) return;
   r.categories = (r.categories||[]).filter(c => c !== tag);
+}
+
+/* ---------- Per-restaurant menus ---------- */
+/* Older visits stored `ate` as one free-typed string; newer ones store an
+   array of dishes picked off the restaurant's menu. Read through this
+   helper so both render the same. */
+function ateList(v){
+  if(Array.isArray(v.ate)) return v.ate;
+  return v.ate ? [v.ate] : [];
+}
+function menuOf(r){ return r.menu || []; }
+function addDishToMenu(restaurantId, dish){
+  const r = restaurants.find(x=>x.id===restaurantId);
+  if(!r) return false;
+  const clean = dish.trim();
+  if(!clean) return false;
+  if(!r.menu) r.menu = [];
+  if(r.menu.some(d => d.toLowerCase() === clean.toLowerCase())) return false;
+  r.menu.push(clean);
+  r.menu.sort((a,b)=> a.localeCompare(b));
+  return true;
+}
+function removeDishFromMenu(restaurantId, dish){
+  const r = restaurants.find(x=>x.id===restaurantId);
+  if(!r) return;
+  r.menu = (r.menu||[]).filter(d => d !== dish);
 }
 
 /* ---------- Confetti (fun + interactive delight) ---------- */
@@ -1383,6 +1451,24 @@ function openDetail(id){
           <button class="btn small" id="logVisitBtn">+ Log a Visit</button>
           <button class="btn small danger" id="deleteRestBtn">Delete Listing</button>
         </div>
+        <div class="menu-section">
+          <h3>Menu</h3>
+          <div class="menu-chips" id="menuChips">
+            ${menuOf(r).map((d,i)=>`<span class="menu-chip">${escapeHtml(d)}<button class="tag-x" data-dish-i="${i}">×</button></span>`).join('')
+              || '<span class="no-menu">No dishes on file yet — add them here, or they\'ll collect as you log visits.</span>'}
+          </div>
+          <div class="menu-add-row">
+            <input type="text" id="newDish" class="tag-add" style="width:150px;" placeholder="+ add dish">
+            <button class="btn small secondary" id="pasteMenuToggle">Paste a menu</button>
+          </div>
+          <div class="paste-menu-wrap" id="pasteMenuWrap" style="display:none;">
+            <textarea id="pasteMenuText" placeholder="Paste dishes from their menu — one per line"></textarea>
+            <div class="paste-menu-actions">
+              <button class="btn small secondary" id="pasteMenuCancel">Cancel</button>
+              <button class="btn small" id="pasteMenuSave">Add dishes</button>
+            </div>
+          </div>
+        </div>
         <div class="visit-list">
           <h3>Visit Ledger</h3>
           <div id="visitItems">
@@ -1391,7 +1477,7 @@ function openDetail(id){
                 <div class="visit-left">
                   <b>${fmtDate(v.date)}</b>
                   <span class="stars">${starString(v.rating)}</span>
-                  ${v.ate ? `<div class="visit-meta-small">Ate: ${escapeHtml(v.ate)}</div>` : ''}
+                  ${ateList(v).length ? `<div class="visit-meta-small">Ate: ${escapeHtml(ateList(v).join(', '))}</div>` : ''}
                   <div class="visit-meta-small">Would return: ${v.wouldReturn ? 'Yes' : 'No'}</div>
                   ${v.notes ? `<div class="visit-meta-small">Notes: ${escapeHtml(v.notes)}</div>` : ''}
                 </div>
@@ -1440,6 +1526,45 @@ function openDetail(id){
     if(e.key === 'Enter'){ e.preventDefault(); commitTag(); }
   });
   newTagInput.addEventListener('blur', commitTag);
+  $$('#menuChips .tag-x').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      removeDishFromMenu(id, menuOf(r)[parseInt(btn.dataset.dishI)]);
+      await saveRestaurants();
+      openDetail(id);
+    });
+  });
+  const newDishInput = $('#newDish');
+  const commitDish = async ()=>{
+    const val = newDishInput.value.trim();
+    if(!val) return;
+    if(addDishToMenu(id, val)){
+      await saveRestaurants();
+      openDetail(id);
+      $('#newDish').focus();
+    } else {
+      newDishInput.value = '';
+    }
+  };
+  newDishInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); commitDish(); }
+  });
+  newDishInput.addEventListener('blur', commitDish);
+  $('#pasteMenuToggle').addEventListener('click', ()=>{
+    $('#pasteMenuWrap').style.display = '';
+    $('#pasteMenuToggle').style.display = 'none';
+    $('#pasteMenuText').focus();
+  });
+  $('#pasteMenuCancel').addEventListener('click', ()=>{
+    $('#pasteMenuWrap').style.display = 'none';
+    $('#pasteMenuToggle').style.display = '';
+  });
+  $('#pasteMenuSave').addEventListener('click', async ()=>{
+    const lines = $('#pasteMenuText').value.split('\n').map(l=>l.trim()).filter(Boolean);
+    let added = 0;
+    lines.forEach(l=>{ if(addDishToMenu(id, l)) added++; });
+    if(added) await saveRestaurants();
+    openDetail(id);
+  });
   $$('.trash', $('#modalRoot')).forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
       const vid = e.target.dataset.vid;
@@ -1459,10 +1584,8 @@ function openLogVisit(restaurantId){
   let calViewYear = parseInt(today.slice(0,4));
   let calViewMonth = parseInt(today.slice(5,7)) - 1;
 
-  const pastDishes = Array.from(new Set(
-    visits.filter(v => v.restaurantId === restaurantId && v.ate).map(v => v.ate)
-  ));
-  const dishOptions = pastDishes.map(d=>`<option value="${escapeHtml(d)}">`).join('');
+  const rest = restaurants.find(x=>x.id===restaurantId);
+  const menu = rest ? menuOf(rest) : [];
 
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov2">
@@ -1482,9 +1605,10 @@ function openLogVisit(restaurantId){
           </div>
         </div>
         <div class="field">
-          <label>What did you eat? ${pastDishes.length ? '<span style="text-transform:none;">(pick from your past orders, or type new)</span>' : ''}</label>
-          <input type="text" id="vAte" list="dishList" placeholder="e.g. Buffalo wings + fries">
-          <datalist id="dishList">${dishOptions}</datalist>
+          <label>What did you eat?${menu.length ? ' <span style="text-transform:none;">(check everything you had)</span>' : ''}</label>
+          ${menu.length ? `<div class="dish-checklist">${menu.map((d,i)=>`
+            <label class="dish-check"><input type="checkbox" data-i="${i}"><span>${escapeHtml(d)}</span></label>`).join('')}</div>` : ''}
+          <input type="text" id="vAte" placeholder="${menu.length ? '+ something not on the menu list yet' : 'e.g. Buffalo wings + fries'}">
         </div>
         <div class="field">
           <label>Rating</label>
@@ -1584,9 +1708,13 @@ function openLogVisit(restaurantId){
     if(!rating){ alert('Pick a rating.'); return; }
     if(wouldReturn === null){ alert('Let us know if you\'d go back.'); return; }
     const date = selectedDate || today;
-    const ate = $('#vAte').value.trim();
+    const checkedDishes = $$('.dish-check input:checked', $('#modalRoot')).map(cb => menu[parseInt(cb.dataset.i)]);
+    const typedDish = $('#vAte').value.trim();
+    const ate = [...checkedDishes];
+    if(typedDish && !ate.some(d => d.toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
     const notes = $('#vNotes').value.trim();
     visits.push({ id: uid(), restaurantId, date, ate, rating, wouldReturn, notes, createdAt: Date.now() });
+    if(typedDish && addDishToMenu(restaurantId, typedDish)) await saveRestaurants();
     await saveVisits();
     const rect = e.target.getBoundingClientRect();
     spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2);
@@ -2128,6 +2256,19 @@ async function removeStrayTags(){
   if(changed) await saveRestaurants();
 }
 
+/* Seed each restaurant's menu from dishes already logged in past visits,
+   so the new checkbox picker starts with everything you've eaten there.
+   Safe to re-run — addDishToMenu dedupes, so it's a no-op once seeded. */
+async function seedMenusFromVisits(){
+  let changed = false;
+  visits.forEach(v=>{
+    ateList(v).forEach(d=>{
+      if(addDishToMenu(v.restaurantId, d)) changed = true;
+    });
+  });
+  if(changed) await saveRestaurants();
+}
+
 /* One-time removal of listings that no longer belong (e.g. not an actual
    restaurant). Safe to re-run — no-op once already removed. */
 const REMOVED_LISTING_NAMES = ["Burp Catering"];
@@ -2152,6 +2293,7 @@ async function removeRemovedListings(){
   await renameCuisineTags();
   await removeStrayTags();
   await removeRemovedListings();
+  await seedMenusFromVisits();
   renderAll();
 })();
 </script>
