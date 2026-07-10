@@ -790,6 +790,7 @@ let mapRenderToken = 0;
 let currentPage = 'areas';   // 'areas' = neighborhood landing, 'listings' = classic page
 let activeArea = null;       // {type:'neighborhood'|'town'|'other', name} or null = everywhere
 let hoodGeo = null;          // Chicago neighborhood boundary GeoJSON, loaded once (block silhouettes + assigning new listings)
+let townGeo = null;          // suburb municipal boundary GeoJSON (Census TIGERweb), for suburb block silhouettes
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -1100,6 +1101,10 @@ const HOOD_RENAME = {
   'Lower West Side': 'Pilsen',
   'Near South Side': 'South Loop',
   'Millenium Park': 'Millennium Park',
+  // Douglas + Grand Boulevard are both halves of what everyone calls
+  // Bronzeville — renaming both merges them into one area.
+  'Douglas': 'Bronzeville',
+  'Grand Boulevard': 'Bronzeville',
 };
 function displayHoodName(name){ return HOOD_RENAME[name] || name; }
 
@@ -1132,6 +1137,43 @@ async function loadHoodGeo(){
     console.warn('Neighborhood boundaries unavailable — landing falls back to chips only.', e);
   }
   return hoodGeo;
+}
+
+/* Suburb town boundaries come from the U.S. Census TIGERweb Incorporated
+   Places layer (the Chicago city file has no suburbs). Fetched only for
+   the towns actually on file; the URL encodes that list, so adding a
+   listing in a brand-new town naturally triggers one fresh fetch. */
+const TOWN_GEO_BASE = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer/4/query';
+function suburbTownsOnFile(){
+  return Array.from(new Set(
+    restaurants.filter(r => r.region && r.region !== 'Chicago' && r.town).map(r => r.town)
+  )).sort();
+}
+async function loadTownGeo(){
+  if(townGeo) return townGeo;
+  const towns = suburbTownsOnFile();
+  if(!towns.length) return null;
+  const where = `STATE='17' AND BASENAME IN (${towns.map(t => `'${t.replace(/'/g, "''")}'`).join(',')})`;
+  const url = TOWN_GEO_BASE + '?' + new URLSearchParams({
+    where, outFields: 'BASENAME', returnGeometry: 'true', geometryPrecision: '4', f: 'geojson'
+  });
+  try{
+    let resp = null;
+    if('caches' in window){
+      const cache = await caches.open('rounds-geo-v1');
+      resp = await cache.match(url);
+      if(!resp){
+        resp = await fetch(url);
+        if(resp.ok) await cache.put(url, resp.clone());
+      }
+    } else {
+      resp = await fetch(url);
+    }
+    if(resp && resp.ok) townGeo = await resp.json();
+  }catch(e){
+    console.warn('Suburb boundaries unavailable — town blocks render without silhouettes.', e);
+  }
+  return townGeo;
 }
 
 /* Ray-casting point-in-polygon (outer rings only — the neighborhood file
@@ -1170,13 +1212,14 @@ async function assignAreas(){
 }
 /* Migration: stamp Chicago listings with their neighborhood once boundary
    data is in hand. Persisted, so the landing page works offline afterward.
-   Safe to re-run — skips anything already stamped. */
+   Safe to re-run — it also self-heals when a rename is added to
+   HOOD_RENAME (e.g. Douglas -> Bronzeville) by re-stamping stale names. */
 async function assignNeighborhoods(geo){
   let changed = false;
   restaurants.forEach(r=>{
-    if(r.region === 'Chicago' && r.lat != null && r.lng != null && !r.neighborhood){
+    if(r.region === 'Chicago' && r.lat != null && r.lng != null){
       const hood = neighborhoodAt(r.lat, r.lng, geo);
-      if(hood){ r.neighborhood = hood; changed = true; }
+      if(hood && r.neighborhood !== hood){ r.neighborhood = hood; changed = true; }
     }
   });
   if(changed) await saveRestaurants();
@@ -1585,15 +1628,28 @@ function blockColor(name){
   return BLOCK_PALETTE[h % BLOCK_PALETTE.length];
 }
 
-/* The neighborhood's true outline from the boundary file, fitted into a
-   100x100 viewBox. Longitude is compressed by cos(latitude) first so the
-   shape keeps its real-world proportions at Chicago's latitude. */
-function hoodShapePath(name){
-  if(!hoodGeo) return null;
-  const f = (hoodGeo.features || []).find(f => displayHoodName(f.properties.pri_neigh) === name);
-  if(!f) return null;
+/* Boundary features backing an area's block. A renamed pair like
+   Douglas + Grand Boulevard -> Bronzeville returns both features, so the
+   merged area draws (and centers) as one combined shape. */
+function areaFeatures(area){
+  if(area.type === 'neighborhood' && hoodGeo){
+    return (hoodGeo.features || []).filter(f => displayHoodName(f.properties.pri_neigh) === area.name);
+  }
+  if(area.type === 'town' && townGeo){
+    return (townGeo.features || []).filter(f => f.properties.BASENAME === area.name);
+  }
+  return [];
+}
+function featurePolys(f){
   const g = f.geometry;
-  const polys = g.type === 'MultiPolygon' ? g.coordinates : (g.type === 'Polygon' ? [g.coordinates] : []);
+  return g.type === 'MultiPolygon' ? g.coordinates : (g.type === 'Polygon' ? [g.coordinates] : []);
+}
+
+/* The area's true outline, fitted into a 100x100 viewBox. Longitude is
+   compressed by cos(latitude) first so the shape keeps its real-world
+   proportions at Chicago's latitude. */
+function areaShapePath(area){
+  const polys = areaFeatures(area).flatMap(featurePolys);
   if(!polys.length) return null;
   const LNG_SCALE = Math.cos(41.85 * Math.PI / 180);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1614,6 +1670,43 @@ function hoodShapePath(name){
   ).join('');
 }
 
+/* Center point of an area — boundary centroid when we have the shape,
+   otherwise the average of its listings' coordinates. Drives the
+   map-reading block order. */
+function areaCentroid(area){
+  const polys = areaFeatures(area).flatMap(featurePolys);
+  if(polys.length){
+    let sLat = 0, sLng = 0, n = 0;
+    polys.forEach(p => p[0].forEach(([lng, lat])=>{ sLng += lng; sLat += lat; n++; }));
+    return { lat: sLat / n, lng: sLng / n };
+  }
+  const pts = restaurants.filter(r => restaurantInArea(r, area) && r.lat != null && r.lng != null);
+  if(pts.length){
+    return {
+      lat: pts.reduce((s,r)=>s+r.lat,0) / pts.length,
+      lng: pts.reduce((s,r)=>s+r.lng,0) / pts.length,
+    };
+  }
+  return null;
+}
+
+/* Map-reading order: north-to-south in ~2-mile latitude bands, then
+   west-to-east inside a band — so Bronzeville sits left of Kenwood the
+   way it does on a map. */
+function geoSortAreas(areas){
+  const BAND = 0.03; // degrees latitude per row band
+  const band = c => Math.floor((42.6 - c.lat) / BAND);
+  return areas
+    .map(a => ({ a, c: areaCentroid(a) }))
+    .sort((x, y)=>{
+      if(!x.c && !y.c) return x.a.name.localeCompare(y.a.name);
+      if(!x.c) return 1;
+      if(!y.c) return -1;
+      return (band(x.c) - band(y.c)) || (x.c.lng - y.c.lng);
+    })
+    .map(x => x.a);
+}
+
 function areaStats(area){
   const list = restaurants.filter(r => restaurantInArea(r, area));
   const visited = list.filter(r => visitsFor(r.id).length > 0).length;
@@ -1629,7 +1722,7 @@ function areaStats(area){
 function areaBlockHTML(area){
   const stats = areaStats(area);
   const [bg, ink] = blockColor(area.name);
-  const shape = area.type === 'neighborhood' ? hoodShapePath(area.name) : null;
+  const shape = areaShapePath(area);
   return `
     <button class="area-block" data-type="${area.type}" data-name="${escapeHtml(area.name)}" style="--block:${bg};--ink:${ink};">
       ${shape ? `<svg class="block-shape" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${shape}"/></svg>` : ''}
@@ -1643,13 +1736,12 @@ function renderAreasPage(){
   const el = $('#areasPage');
   const { hoods, townByRegion, unassigned } = areaCounts();
 
-  const byCountDesc = (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]);
-  const chicagoBlocks = Object.entries(hoods).sort(byCountDesc)
-    .map(([name]) => areaBlockHTML({ type:'neighborhood', name })).join('')
+  const chicagoBlocks = geoSortAreas(Object.keys(hoods).map(name => ({ type:'neighborhood', name })))
+    .map(areaBlockHTML).join('')
     + (unassigned ? areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' }) : '');
   const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
-    const blocks = Object.entries(townByRegion[region]).sort(byCountDesc)
-      .map(([town]) => areaBlockHTML({ type:'town', name: town })).join('');
+    const blocks = geoSortAreas(Object.keys(townByRegion[region]).map(town => ({ type:'town', name: town })))
+      .map(areaBlockHTML).join('');
     return `<div class="area-group-label">${escapeHtml(region)}</div><div class="area-blocks">${blocks}</div>`;
   }).join('');
 
@@ -2831,13 +2923,12 @@ async function removeRemovedListings(){
   await seedMenusFromVisits();
   await assignAreas();
   renderAll();
-  // Boundary data loads in the background; neighborhoods persist on each
-  // record once assigned, so this is a real fetch only the first time.
-  loadHoodGeo().then(async geo=>{
-    if(geo){
-      await assignNeighborhoods(geo);
-      renderAll();
-    }
+  // Boundary data (city neighborhoods + suburb towns) loads in the
+  // background; neighborhood stamps persist on each record once assigned,
+  // so these are real fetches only the first time.
+  Promise.allSettled([loadHoodGeo(), loadTownGeo()]).then(async ()=>{
+    if(hoodGeo) await assignNeighborhoods(hoodGeo);
+    renderAll();
   });
 })();
 </script>
