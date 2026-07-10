@@ -397,6 +397,22 @@ h1{
   100%{ transform: rotate(9deg) scale(1); opacity:1; }
 }
 
+/* ---- Reviewer profiles ---- */
+.profile-row{
+  display:flex; align-items:center; gap:10px;
+  padding: 11px 4px; border-top: 1px solid var(--hairline);
+  cursor:pointer;
+}
+.profile-row:first-child{ border-top:none; }
+.profile-row .profile-name{ font-weight:700; font-size:14px; flex:1; }
+.profile-row:hover .profile-name{ color: var(--flag-blue-bright); }
+.profile-row.active .profile-name{ color: var(--flag-blue-bright); }
+.profile-active-tag{
+  font-family:'IBM Plex Mono', monospace; font-size:9px; letter-spacing:1.2px; text-transform:uppercase;
+  color: var(--brick-deep); background: var(--flag-blue);
+  border-radius: 999px; padding: 3px 9px;
+}
+
 /* ---- In-app website popup ---- */
 .overlay.site-overlay{ align-items:center; padding: 24px 16px; z-index: 60; }
 .site-modal{
@@ -652,6 +668,7 @@ h1{
 
   <div class="controls">
     <div class="tabs" id="tabs"></div>
+    <button class="btn secondary" id="profileBtn">👤</button>
     <button class="btn" id="addRestaurantBtn">+ New Listing</button>
   </div>
   <div class="tabs sub-tabs" id="subTabs" style="display:none;"></div>
@@ -691,6 +708,8 @@ h1{
 <script>
 let restaurants = [];
 let visits = [];
+let profiles = [];
+let activeProfileId = null;
 let activeCategory = 'All';
 let activeSubTag = null;
 let dataLoaded = false;
@@ -785,6 +804,16 @@ async function loadData(){
     const v = await store.get('visits');
     visits = v && v.value ? JSON.parse(v.value) : [];
   }catch(e){ visits = []; }
+  try{
+    const p = await store.get('profiles');
+    profiles = p && p.value ? JSON.parse(p.value) : [];
+  }catch(e){ profiles = []; }
+  try{
+    const ap = await store.get('activeProfile');
+    activeProfileId = ap && ap.value ? ap.value : null;
+  }catch(e){ activeProfileId = null; }
+  if(activeProfileId && !profiles.some(p => p.id === activeProfileId)) activeProfileId = null;
+  if(!activeProfileId && profiles.length) activeProfileId = profiles[0].id;
   dataLoaded = true;
 }
 
@@ -810,6 +839,15 @@ async function saveRestaurants(){
 async function saveVisits(){
   try{ await store.set('visits', JSON.stringify(visits)); }
   catch(e){ console.error('Could not save visits', e); }
+}
+async function saveProfiles(){
+  try{
+    await store.set('profiles', JSON.stringify(profiles));
+    await store.set('activeProfile', activeProfileId || '');
+  }catch(e){ console.error('Could not save profiles', e); }
+}
+function activeProfile(){
+  return profiles.find(p => p.id === activeProfileId) || null;
 }
 
 function visitsFor(restaurantId){
@@ -1282,6 +1320,7 @@ function renderAll(){
   renderStats();
   renderTabs();
   renderContent();
+  renderProfileChip();
 }
 
 /* ---------- Modals ---------- */
@@ -1315,6 +1354,79 @@ function openSitePopup(url, name){
 function openSiteById(id){
   const r = restaurants.find(x=>x.id===id);
   if(r && r.website) openSitePopup(r.website, r.name);
+}
+
+/* ---------- Reviewer profiles (device-local usernames) ---------- */
+function renderProfileChip(){
+  const p = activeProfile();
+  $('#profileBtn').textContent = p ? `👤 ${p.name}` : '👤 Set reviewer';
+}
+function openProfiles(){
+  $('#modalRoot').innerHTML = `
+    <div class="overlay" id="ovP">
+      <div class="modal">
+        <button class="close" id="closeProf">×</button>
+        <h2>Reviewers</h2>
+        <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Usernames live on this device. New visits get stamped with whoever's active — tap a name to switch.</div>
+        <div id="profileList" style="margin-top:14px;">
+          ${profiles.length ? profiles.map(p=>`
+            <div class="profile-row ${p.id===activeProfileId?'active':''}" data-pid="${p.id}">
+              <span class="profile-name">${escapeHtml(p.name)}</span>
+              ${p.id===activeProfileId ? '<span class="profile-active-tag">reviewing</span>' : ''}
+              <button class="trash" data-del="${p.id}">remove</button>
+            </div>`).join('') : '<div class="no-visits">No reviewers yet — add the first one below.</div>'}
+        </div>
+        <div class="field">
+          <label>New reviewer</label>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="newProfileName" placeholder="e.g. Brianna">
+            <button class="btn small" id="addProfileBtn">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#closeProf').addEventListener('click', closeModal);
+  $('#ovP').addEventListener('click', (e)=>{ if(e.target.id==='ovP') closeModal(); });
+  $$('.profile-row', $('#modalRoot')).forEach(row=>{
+    row.addEventListener('click', async ()=>{
+      activeProfileId = row.dataset.pid;
+      await saveProfiles();
+      renderProfileChip();
+      openProfiles();
+    });
+  });
+  $$('#profileList .trash').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const p = profiles.find(x=>x.id===btn.dataset.del);
+      if(!p) return;
+      if(!confirm(`Remove reviewer "${p.name}"? Their past visits keep the name.`)) return;
+      profiles = profiles.filter(x=>x.id!==p.id);
+      if(activeProfileId === p.id) activeProfileId = profiles.length ? profiles[0].id : null;
+      await saveProfiles();
+      renderProfileChip();
+      openProfiles();
+    });
+  });
+  const addProfile = async ()=>{
+    const name = $('#newProfileName').value.trim();
+    if(!name) return;
+    if(profiles.some(p => p.name.toLowerCase() === name.toLowerCase())){
+      alert('That username is already taken on this device.');
+      return;
+    }
+    const p = { id: uid(), name };
+    profiles.push(p);
+    activeProfileId = p.id;
+    await saveProfiles();
+    renderProfileChip();
+    openProfiles();
+  };
+  $('#addProfileBtn').addEventListener('click', addProfile);
+  $('#newProfileName').addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); addProfile(); }
+  });
 }
 
 function openAddRestaurant(){
@@ -1475,7 +1587,7 @@ function openDetail(id){
             ${vs.length ? vs.map(v=>`
               <div class="visit-item" data-vid="${v.id}">
                 <div class="visit-left">
-                  <b>${fmtDate(v.date)}</b>
+                  <b>${fmtDate(v.date)}${v.reviewer ? ` <span style="font-weight:500;color:var(--cream-dim);">· by ${escapeHtml(v.reviewer)}</span>` : ''}</b>
                   <span class="stars">${starString(v.rating)}</span>
                   ${ateList(v).length ? `<div class="visit-meta-small">Ate: ${escapeHtml(ateList(v).join(', '))}</div>` : ''}
                   <div class="visit-meta-small">Would return: ${v.wouldReturn ? 'Yes' : 'No'}</div>
@@ -1593,6 +1705,12 @@ function openLogVisit(restaurantId){
         <button class="close" id="closeLog">×</button>
         <h2>Log a Visit</h2>
         <div class="field">
+          <label>Reviewer</label>
+          ${profiles.length
+            ? `<select id="vReviewer">${profiles.map(p=>`<option value="${p.id}" ${p.id===activeProfileId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>`
+            : `<input type="text" id="vReviewerNew" placeholder="Pick a username — e.g. Brianna">`}
+        </div>
+        <div class="field">
           <label>Date</label>
           <button type="button" class="date-display" id="dateDisplay">${fmtDate(selectedDate)}</button>
           <div class="mini-cal" id="miniCal">
@@ -1707,13 +1825,32 @@ function openLogVisit(restaurantId){
   $('#saveLog').addEventListener('click', async (e)=>{
     if(!rating){ alert('Pick a rating.'); return; }
     if(wouldReturn === null){ alert('Let us know if you\'d go back.'); return; }
+    let reviewerName;
+    if(profiles.length){
+      const pid = $('#vReviewer').value;
+      const p = profiles.find(x=>x.id===pid);
+      reviewerName = p ? p.name : '';
+      if(p && pid !== activeProfileId){
+        activeProfileId = pid;
+        await saveProfiles();
+        renderProfileChip();
+      }
+    } else {
+      reviewerName = $('#vReviewerNew').value.trim();
+      if(!reviewerName){ alert('Pick a reviewer username.'); return; }
+      const p = { id: uid(), name: reviewerName };
+      profiles.push(p);
+      activeProfileId = p.id;
+      await saveProfiles();
+      renderProfileChip();
+    }
     const date = selectedDate || today;
     const checkedDishes = $$('.dish-check input:checked', $('#modalRoot')).map(cb => menu[parseInt(cb.dataset.i)]);
     const typedDish = $('#vAte').value.trim();
     const ate = [...checkedDishes];
     if(typedDish && !ate.some(d => d.toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
     const notes = $('#vNotes').value.trim();
-    visits.push({ id: uid(), restaurantId, date, ate, rating, wouldReturn, notes, createdAt: Date.now() });
+    visits.push({ id: uid(), restaurantId, date, ate, rating, wouldReturn, notes, reviewer: reviewerName, createdAt: Date.now() });
     if(typedDish && addDishToMenu(restaurantId, typedDish)) await saveRestaurants();
     await saveVisits();
     const rect = e.target.getBoundingClientRect();
@@ -1724,6 +1861,7 @@ function openLogVisit(restaurantId){
 }
 
 $('#addRestaurantBtn').addEventListener('click', openAddRestaurant);
+$('#profileBtn').addEventListener('click', openProfiles);
 
 $$('#sortOpts button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
