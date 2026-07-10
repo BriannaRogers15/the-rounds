@@ -441,6 +441,21 @@ h1{
   font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:0.8px;
   opacity:0.85;
 }
+/* Neighborhoods with no listings yet: compact "ghost" blocks that keep the
+   map order intact and invite you to claim the territory. */
+.area-block.ghost{
+  background: transparent;
+  border: 1.5px dashed var(--block);
+  color: var(--cream-dim);
+  min-height: 68px;
+  padding: 10px 8px;
+  box-shadow: none;
+}
+.area-block.ghost:hover{ border-style: solid; color: var(--cream); }
+.area-block.ghost .block-name{ font-size:13.5px; font-weight:600; }
+.area-block.ghost .block-shape{ opacity:0.1; }
+.area-block.ghost .block-shape path{ fill: var(--block); }
+.area-block.ghost .block-meta{ font-size:8.5px; opacity:0.65; }
 
 /* ---- Active-area banner on the listings page ---- */
 .area-banner{
@@ -1723,12 +1738,13 @@ function areaBlockHTML(area){
   const stats = areaStats(area);
   const [bg, ink] = blockColor(area.name);
   const shape = areaShapePath(area);
+  const ghost = stats.count === 0;
   return `
-    <button class="area-block" data-type="${area.type}" data-name="${escapeHtml(area.name)}" style="--block:${bg};--ink:${ink};">
+    <button class="area-block${ghost ? ' ghost' : ''}" data-type="${area.type}" data-name="${escapeHtml(area.name)}" style="--block:${bg};--ink:${ink};">
       ${shape ? `<svg class="block-shape" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${shape}"/></svg>` : ''}
       <span class="block-name">${escapeHtml(area.name)}</span>
       ${stats.icons.length ? `<span class="block-icons">${stats.icons.join(' ')}</span>` : ''}
-      <span class="block-meta">${stats.count} spot${stats.count===1?'':'s'}${stats.visited ? ` · ${stats.visited}/${stats.count} visited` : ''}</span>
+      <span class="block-meta">${ghost ? 'no spots yet' : `${stats.count} spot${stats.count===1?'':'s'}${stats.visited ? ` · ${stats.visited}/${stats.count} visited` : ''}`}</span>
     </button>`;
 }
 
@@ -1736,7 +1752,12 @@ function renderAreasPage(){
   const el = $('#areasPage');
   const { hoods, townByRegion, unassigned } = areaCounts();
 
-  const chicagoBlocks = geoSortAreas(Object.keys(hoods).map(name => ({ type:'neighborhood', name })))
+  // Every neighborhood in the boundary file gets a block — stocked ones in
+  // full color, empty ones as compact ghosts — so the grid reads like the
+  // whole map, not just the parts with food on file yet.
+  const allHoodNames = new Set(Object.keys(hoods));
+  if(hoodGeo) (hoodGeo.features || []).forEach(f => allHoodNames.add(displayHoodName(f.properties.pri_neigh)));
+  const chicagoBlocks = geoSortAreas(Array.from(allHoodNames).map(name => ({ type:'neighborhood', name })))
     .map(areaBlockHTML).join('')
     + (unassigned ? areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' }) : '');
   const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
