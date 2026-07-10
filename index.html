@@ -397,6 +397,61 @@ h1{
   100%{ transform: rotate(9deg) scale(1); opacity:1; }
 }
 
+/* ---- Neighborhoods landing page ---- */
+.areas-head{
+  display:flex; align-items:flex-end; justify-content:space-between; gap:12px;
+  flex-wrap:wrap; margin-bottom:14px;
+}
+.areas-title{ font-family:'Oswald', sans-serif; font-weight:700; font-size:22px; color: var(--cream); }
+.areas-sub{ font-size:12px; color: var(--cream-dim); margin-top:3px; }
+.areas-head-actions{ display:flex; gap:8px; }
+.area-map-wrap{
+  border-radius: 16px; overflow:hidden;
+  border: 1px solid var(--hairline);
+  height: 62vh; min-height: 420px;
+  background: var(--brick-panel);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.22);
+}
+#hoodMapEl{ height:100%; background: var(--brick-panel); }
+.leaflet-tooltip.hood-tip{
+  background: var(--brick-panel-hi); color: var(--cream);
+  border: 1px solid var(--hairline); border-radius: 8px;
+  font-family:'Manrope', sans-serif; font-weight:700; font-size:12px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+}
+.area-groups{ margin-top: 20px; }
+.area-group-label{
+  font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:2px;
+  text-transform:uppercase; color: var(--flag-blue); margin-bottom:8px;
+}
+.area-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; }
+.area-chip{
+  font-family:'Manrope', sans-serif; font-weight:600; font-size:12px;
+  background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
+  border: 1px solid var(--hairline); color: var(--cream);
+  padding: 9px 15px; border-radius: 999px; cursor:pointer;
+  transition: all .15s ease;
+}
+.area-chip:hover{ border-color: var(--flag-blue); color: var(--flag-blue-bright); transform: translateY(-1px); }
+.area-chip .cnt{ color: var(--flag-blue-bright); opacity:0.85; margin-left:5px; font-family:'IBM Plex Mono', monospace; font-size:10.5px; }
+
+/* ---- Active-area banner on the listings page ---- */
+.area-banner{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  margin-bottom: 14px;
+}
+.area-pill{
+  display:inline-flex; align-items:center; gap:7px;
+  font-family:'Oswald', sans-serif; font-weight:600; font-size:15px;
+  background: var(--flag-blue); color: var(--brick-deep);
+  border-radius: 999px; padding: 7px 10px 7px 16px;
+}
+.area-pill .tag-x{ font-size:15px; }
+.area-all-note{
+  font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:1.5px;
+  text-transform:uppercase; color: var(--cream-dim);
+}
+
 /* ---- Reviewer profiles ---- */
 .profile-row{
   display:flex; align-items:center; gap:10px;
@@ -666,6 +721,10 @@ h1{
 
   <div class="receipt" id="statsReceipt"></div>
 
+  <div id="areasPage" style="display:none;"></div>
+
+  <div class="area-banner" id="areaBanner" style="display:none;"></div>
+
   <div class="controls">
     <div class="tabs" id="tabs"></div>
     <button class="btn secondary" id="profileBtn">👤</button>
@@ -721,6 +780,10 @@ let unvisitedOnly = false;
 let viewMode = 'grid';
 let leafletMap = null;
 let mapRenderToken = 0;
+let currentPage = 'areas';   // 'areas' = neighborhood landing, 'listings' = classic page
+let activeArea = null;       // {type:'neighborhood'|'town'|'other', name} or null = everywhere
+let hoodGeo = null;          // Chicago neighborhood boundary GeoJSON, loaded once
+let areaMap = null;          // Leaflet instance for the landing map
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -983,6 +1046,162 @@ function removeDishFromMenu(restaurantId, dish){
   r.menu = (r.menu||[]).filter(d => d !== dish);
 }
 
+/* ---------- Areas: neighborhoods + suburb regions ---------- */
+/* Suburb town -> region. Towns not listed still work — they land in an
+   "Other Suburbs" group until added here. */
+const CITY_REGION = {
+  // South
+  'Oak Lawn':'South Suburbs','Homewood':'South Suburbs','Dolton':'South Suburbs','Harvey':'South Suburbs',
+  'Matteson':'South Suburbs','Burnham':'South Suburbs','Chicago Heights':'South Suburbs','Sauk Village':'South Suburbs',
+  'Burbank':'South Suburbs','Evergreen Park':'South Suburbs','Blue Island':'South Suburbs','Calumet City':'South Suburbs',
+  'Lansing':'South Suburbs','Tinley Park':'South Suburbs','Orland Park':'South Suburbs','Oak Forest':'South Suburbs',
+  'Country Club Hills':'South Suburbs','Hazel Crest':'South Suburbs','Markham':'South Suburbs','South Holland':'South Suburbs',
+  'Riverdale':'South Suburbs','Flossmoor':'South Suburbs','Olympia Fields':'South Suburbs','Park Forest':'South Suburbs',
+  'Frankfort':'South Suburbs','Mokena':'South Suburbs','New Lenox':'South Suburbs','Joliet':'South Suburbs',
+  'Alsip':'South Suburbs','Palos Heights':'South Suburbs','Palos Hills':'South Suburbs','Hickory Hills':'South Suburbs',
+  'Worth':'South Suburbs','Midlothian':'South Suburbs','Crestwood':'South Suburbs','Bridgeview':'South Suburbs',
+  'Justice':'South Suburbs','Summit':'South Suburbs','Bedford Park':'South Suburbs','Lemont':'South Suburbs',
+  'Steger':'South Suburbs','Crete':'South Suburbs','Monee':'South Suburbs','University Park':'South Suburbs',
+  'Richton Park':'South Suburbs','Lynwood':'South Suburbs','Glenwood':'South Suburbs','Thornton':'South Suburbs',
+  'Posen':'South Suburbs','Robbins':'South Suburbs','Dixmoor':'South Suburbs','Phoenix':'South Suburbs',
+  'East Hazel Crest':'South Suburbs','Lockport':'South Suburbs','Romeoville':'South Suburbs',
+  // West
+  'Berwyn':'West Suburbs','Cicero':'West Suburbs','Oak Park':'West Suburbs','Forest Park':'West Suburbs',
+  'River Forest':'West Suburbs','Maywood':'West Suburbs','Bellwood':'West Suburbs','Melrose Park':'West Suburbs',
+  'Franklin Park':'West Suburbs','Elmwood Park':'West Suburbs','River Grove':'West Suburbs','Berkeley':'West Suburbs',
+  'Hillside':'West Suburbs','Westchester':'West Suburbs','Broadview':'West Suburbs','La Grange':'West Suburbs',
+  'La Grange Park':'West Suburbs','Western Springs':'West Suburbs','Brookfield':'West Suburbs','Riverside':'West Suburbs',
+  'North Riverside':'West Suburbs','Lyons':'West Suburbs','Stickney':'West Suburbs','Oak Brook':'West Suburbs',
+  'Oakbrook Terrace':'West Suburbs','Elmhurst':'West Suburbs','Villa Park':'West Suburbs','Lombard':'West Suburbs',
+  'Glen Ellyn':'West Suburbs','Wheaton':'West Suburbs','Downers Grove':'West Suburbs','Westmont':'West Suburbs',
+  'Clarendon Hills':'West Suburbs','Hinsdale':'West Suburbs','Burr Ridge':'West Suburbs','Willowbrook':'West Suburbs',
+  'Darien':'West Suburbs','Woodridge':'West Suburbs','Lisle':'West Suburbs','Naperville':'West Suburbs',
+  'Aurora':'West Suburbs','Addison':'West Suburbs','Bensenville':'West Suburbs','Bolingbrook':'West Suburbs',
+  // North
+  'Evanston':'North Suburbs','Skokie':'North Suburbs','Wilmette':'North Suburbs','Kenilworth':'North Suburbs',
+  'Winnetka':'North Suburbs','Glencoe':'North Suburbs','Highland Park':'North Suburbs','Highwood':'North Suburbs',
+  'Lake Forest':'North Suburbs','Northbrook':'North Suburbs','Glenview':'North Suburbs','Morton Grove':'North Suburbs',
+  'Niles':'North Suburbs','Park Ridge':'North Suburbs','Des Plaines':'North Suburbs','Mount Prospect':'North Suburbs',
+  'Arlington Heights':'North Suburbs','Rolling Meadows':'North Suburbs','Palatine':'North Suburbs','Buffalo Grove':'North Suburbs',
+  'Wheeling':'North Suburbs','Deerfield':'North Suburbs','Lincolnwood':'North Suburbs','Rosemont':'North Suburbs',
+  'Schaumburg':'North Suburbs','Elk Grove Village':'North Suburbs','Hoffman Estates':'North Suburbs',
+};
+const REGION_ORDER = ['South Suburbs', 'West Suburbs', 'North Suburbs', 'Other Suburbs'];
+
+/* The city's boundary file uses a few official names where everyone says
+   something else. Rename for display + matching. */
+const HOOD_RENAME = {
+  'Lower West Side': 'Pilsen',
+  'Near South Side': 'South Loop',
+  'Millenium Park': 'Millennium Park',
+};
+function displayHoodName(name){ return HOOD_RENAME[name] || name; }
+
+function parseTown(address){
+  if(!address) return null;
+  const m = address.match(/(?:^|,)\s*([A-Za-z .'-]+),\s*IL\b/);
+  return m ? m[1].trim() : null;
+}
+
+/* Chicago neighborhood boundaries (98 areas), simplified server-side so the
+   whole file is ~80KB. Fetched once and kept in the Cache API so repeat
+   visits (and offline PWA use) don't need the network. */
+const HOOD_GEO_URL = 'https://data.cityofchicago.org/resource/y6yq-dbs2.geojson?%24select=simplify_preserve_topology(the_geom%2C0.0004)%20as%20the_geom%2Cpri_neigh&%24limit=200';
+async function loadHoodGeo(){
+  if(hoodGeo) return hoodGeo;
+  try{
+    let resp = null;
+    if('caches' in window){
+      const cache = await caches.open('rounds-geo-v1');
+      resp = await cache.match(HOOD_GEO_URL);
+      if(!resp){
+        resp = await fetch(HOOD_GEO_URL);
+        if(resp.ok) await cache.put(HOOD_GEO_URL, resp.clone());
+      }
+    } else {
+      resp = await fetch(HOOD_GEO_URL);
+    }
+    if(resp && resp.ok) hoodGeo = await resp.json();
+  }catch(e){
+    console.warn('Neighborhood boundaries unavailable — landing falls back to chips only.', e);
+  }
+  return hoodGeo;
+}
+
+/* Ray-casting point-in-polygon (outer rings only — the neighborhood file
+   has no holes worth honoring at this zoom). */
+function pointInRing(lng, lat, ring){
+  let inside = false;
+  for(let i = 0, j = ring.length - 1; i < ring.length; j = i++){
+    const xi = ring[i][0], yi = ring[i][1];
+    const xj = ring[j][0], yj = ring[j][1];
+    if(((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)){
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+function pointInFeature(lng, lat, feature){
+  const g = feature.geometry;
+  if(!g) return false;
+  const polys = g.type === 'MultiPolygon' ? g.coordinates : (g.type === 'Polygon' ? [g.coordinates] : []);
+  return polys.some(poly => pointInRing(lng, lat, poly[0]));
+}
+function neighborhoodAt(lat, lng, geo){
+  const f = (geo.features || []).find(f => pointInFeature(lng, lat, f));
+  return f ? displayHoodName(f.properties.pri_neigh) : null;
+}
+
+/* Migration: stamp town + region from each address. Safe to re-run. */
+async function assignAreas(){
+  let changed = false;
+  restaurants.forEach(r=>{
+    const town = parseTown(r.address) || 'Chicago';
+    const region = town === 'Chicago' ? 'Chicago' : (CITY_REGION[town] || 'Other Suburbs');
+    if(r.town !== town || r.region !== region){ r.town = town; r.region = region; changed = true; }
+  });
+  if(changed) await saveRestaurants();
+}
+/* Migration: stamp Chicago listings with their neighborhood once boundary
+   data is in hand. Persisted, so the landing page works offline afterward.
+   Safe to re-run — skips anything already stamped. */
+async function assignNeighborhoods(geo){
+  let changed = false;
+  restaurants.forEach(r=>{
+    if(r.region === 'Chicago' && r.lat != null && r.lng != null && !r.neighborhood){
+      const hood = neighborhoodAt(r.lat, r.lng, geo);
+      if(hood){ r.neighborhood = hood; changed = true; }
+    }
+  });
+  if(changed) await saveRestaurants();
+}
+/* Stamp a brand-new record at add time (uses boundaries if already loaded). */
+function assignAreaFields(record){
+  record.town = parseTown(record.address) || 'Chicago';
+  record.region = record.town === 'Chicago' ? 'Chicago' : (CITY_REGION[record.town] || 'Other Suburbs');
+  if(record.region === 'Chicago' && record.lat != null && record.lng != null && hoodGeo){
+    const hood = neighborhoodAt(record.lat, record.lng, hoodGeo);
+    if(hood) record.neighborhood = hood;
+  }
+}
+
+function restaurantInArea(r, area){
+  if(!area) return true;
+  if(area.type === 'neighborhood') return r.neighborhood === area.name;
+  if(area.type === 'town') return r.town === area.name;
+  if(area.type === 'other') return r.region === 'Chicago' && !r.neighborhood;
+  return true;
+}
+
+function openArea(area){
+  activeArea = area;
+  currentPage = 'listings';
+  activeCategory = 'All';
+  activeSubTag = null;
+  renderAll();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 /* ---------- Confetti (fun + interactive delight) ---------- */
 function spawnConfetti(x, y){
   const colors = ['#4FA8DE', '#E23A50', '#F3EDE0', '#1FA463', '#7EC8F2'];
@@ -1017,10 +1236,13 @@ function attachTilt(card){
 }
 
 function renderStats(){
-  const total = restaurants.length;
-  const visitedCount = restaurants.filter(r => visitsFor(r.id).length > 0).length;
-  const totalVisits = visits.length;
-  const allAvg = avgRating(visits);
+  const scope = restaurants.filter(r => restaurantInArea(r, activeArea));
+  const ids = new Set(scope.map(r => r.id));
+  const scopedVisits = visits.filter(v => ids.has(v.restaurantId));
+  const total = scope.length;
+  const visitedCount = scope.filter(r => visitsFor(r.id).length > 0).length;
+  const totalVisits = scopedVisits.length;
+  const allAvg = avgRating(scopedVisits);
   const el = $('#statsReceipt');
   el.innerHTML = `
     <div class="receipt-row"><span class="receipt-label">Listings on File</span><span class="receipt-val">${total}</span></div>
@@ -1033,10 +1255,12 @@ function renderStats(){
 function renderTabs(){
   const labels = topLevelLabels();
   const tabsEl = $('#tabs');
-  const allCount = restaurants.length;
+  const inArea = restaurants.filter(r => restaurantInArea(r, activeArea));
+  const allCount = inArea.length;
   let html = `<button class="tab ${activeCategory==='All'?'active':''}" data-cat="All">All <span class="cnt">${allCount}</span></button>`;
   labels.forEach(label=>{
-    const count = restaurants.filter(r => restaurantMatchesLabel(r, label, null)).length;
+    const count = inArea.filter(r => restaurantMatchesLabel(r, label, null)).length;
+    if(activeArea && count === 0) return; // inside an area, only show its cuisines
     const isGroup = isGroupLabel(label);
     html += `<button class="tab ${activeCategory===label?'active':''}" data-cat="${escapeHtml(label)}">${escapeHtml(label)}${isGroup ? ' ▾' : ''} <span class="cnt">${count}</span></button>`;
   });
@@ -1057,7 +1281,8 @@ function renderTabs(){
     subEl.style.display = 'flex';
     subEl.innerHTML = `<button class="sub-tab ${!activeSubTag?'active':''}" data-sub="">All ${escapeHtml(activeCategory)}</button>` +
       children.map(c=>{
-        const count = restaurants.filter(r=>(r.categories||[]).includes(c)).length;
+        const count = inArea.filter(r=>(r.categories||[]).includes(c)).length;
+        if(activeArea && count === 0) return '';
         return `<button class="sub-tab ${activeSubTag===c?'active':''}" data-sub="${escapeHtml(c)}">${escapeHtml(c)} <span class="cnt">${count}</span></button>`;
       }).join('');
     $$('.sub-tab', subEl).forEach(btn=>{
@@ -1121,7 +1346,8 @@ function escapeHtml(s){
 }
 
 function getFilteredSortedList(){
-  let list = restaurants.filter(r => activeCategory==='All' || restaurantMatchesLabel(r, activeCategory, activeSubTag));
+  let list = restaurants.filter(r => restaurantInArea(r, activeArea));
+  list = list.filter(r => activeCategory==='All' || restaurantMatchesLabel(r, activeCategory, activeSubTag));
   if(searchQuery.trim()){
     const q = searchQuery.trim().toLowerCase();
     list = list.filter(r => r.name.toLowerCase().includes(q));
@@ -1316,10 +1542,157 @@ function showMapPopup(mapEl, pinEl){
 }
 
 
+/* ---------- Neighborhoods landing page ---------- */
+function areaCounts(){
+  const hoods = {};
+  const townByRegion = {};
+  let unassigned = 0;
+  restaurants.forEach(r=>{
+    if(r.region && r.region !== 'Chicago'){
+      const region = REGION_ORDER.includes(r.region) ? r.region : 'Other Suburbs';
+      (townByRegion[region] = townByRegion[region] || {});
+      townByRegion[region][r.town] = (townByRegion[region][r.town] || 0) + 1;
+    } else if(r.neighborhood){
+      hoods[r.neighborhood] = (hoods[r.neighborhood] || 0) + 1;
+    } else {
+      unassigned++;
+    }
+  });
+  return { hoods, townByRegion, unassigned };
+}
+
+function renderAreasPage(){
+  const el = $('#areasPage');
+  const { hoods, townByRegion, unassigned } = areaCounts();
+  const hoodChips = Object.entries(hoods).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]))
+    .map(([name,count])=>`<button class="area-chip" data-type="neighborhood" data-name="${escapeHtml(name)}">${escapeHtml(name)} <span class="cnt">${count}</span></button>`).join('');
+  const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
+    const chips = Object.entries(townByRegion[region]).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]))
+      .map(([town,count])=>`<button class="area-chip" data-type="town" data-name="${escapeHtml(town)}">${escapeHtml(town)} <span class="cnt">${count}</span></button>`).join('');
+    return `<div class="area-group-label">${escapeHtml(region)}</div><div class="area-chips">${chips}</div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="areas-head">
+      <div>
+        <div class="areas-title">Pick your territory</div>
+        <div class="areas-sub">Tap a neighborhood on the map — or a chip below — and its spots and cuisines pop up.</div>
+      </div>
+      <div class="areas-head-actions">
+        <button class="btn secondary" id="addFromAreas">+ New Listing</button>
+        <button class="btn" id="browseAllBtn">Browse all listings →</button>
+      </div>
+    </div>
+    <div class="area-map-wrap" id="areaMapWrap"><div id="hoodMapEl"></div></div>
+    <div class="area-groups">
+      ${hoodChips ? `<div class="area-group-label">Chicago</div><div class="area-chips">${hoodChips}
+        ${unassigned ? `<button class="area-chip" data-type="other" data-name="Elsewhere in Chicago">Elsewhere in Chicago <span class="cnt">${unassigned}</span></button>` : ''}</div>`
+      : (unassigned ? `<div class="area-group-label">Chicago</div><div class="area-chips"><button class="area-chip" data-type="other" data-name="Elsewhere in Chicago">Elsewhere in Chicago <span class="cnt">${unassigned}</span></button></div>` : '')}
+      ${suburbGroups}
+    </div>
+  `;
+
+  $('#browseAllBtn').addEventListener('click', ()=>{ activeArea = null; currentPage = 'listings'; renderAll(); });
+  $('#addFromAreas').addEventListener('click', openAddRestaurant);
+  $$('.area-chip', el).forEach(chip=>{
+    chip.addEventListener('click', ()=> openArea({ type: chip.dataset.type, name: chip.dataset.name }));
+  });
+
+  initAreaMap(hoods, townByRegion);
+}
+
+function initAreaMap(hoods, townByRegion){
+  if(areaMap){ try{ areaMap.remove(); }catch(e){} areaMap = null; }
+  const wrap = $('#areaMapWrap');
+  if(typeof L === 'undefined' || !hoodGeo){
+    // Boundaries or Leaflet unavailable — the chip groups below still cover everything.
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+  areaMap = L.map('hoodMapEl', { scrollWheelZoom: true }).setView([41.85, -87.68], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxZoom: 19
+  }).addTo(areaMap);
+
+  const layer = L.geoJSON(hoodGeo, {
+    style: f => {
+      const name = displayHoodName(f.properties.pri_neigh);
+      const count = hoods[name] || 0;
+      return count > 0
+        ? { color:'#7EC8F2', weight:1.4, fillColor:'#4FA8DE', fillOpacity: Math.min(0.3 + count*0.05, 0.68) }
+        : { color:'rgba(243,237,224,0.4)', weight:0.7, fillColor:'#F3EDE0', fillOpacity:0.05, dashArray:'3' };
+    },
+    onEachFeature: (f, lyr) => {
+      const name = displayHoodName(f.properties.pri_neigh);
+      const count = hoods[name] || 0;
+      lyr.bindTooltip(`${name}${count ? ' · ' + count + ' spot' + (count===1?'':'s') : ''}`, { sticky:true, className:'hood-tip' });
+      if(count > 0){
+        lyr.on('mouseover', ()=> lyr.setStyle({ weight: 2.5, color: '#E23A50' }));
+        lyr.on('mouseout', ()=> layer.resetStyle(lyr));
+        lyr.on('click', ()=> openArea({ type:'neighborhood', name }));
+      }
+    }
+  }).addTo(areaMap);
+
+  // Suburb towns get a clickable marker at the centroid of their listings.
+  const bounds = layer.getBounds();
+  Object.values(townByRegion).forEach(towns=>{
+    Object.entries(towns).forEach(([town, count])=>{
+      const pts = restaurants.filter(r => r.town === town && r.lat != null && r.lng != null);
+      if(!pts.length) return;
+      const lat = pts.reduce((s,r)=>s+r.lat,0) / pts.length;
+      const lng = pts.reduce((s,r)=>s+r.lng,0) / pts.length;
+      const m = L.circleMarker([lat, lng], {
+        radius: 9 + Math.min(count * 1.5, 8),
+        color: '#E23A50', weight: 2, fillColor: '#E23A50', fillOpacity: 0.5
+      }).addTo(areaMap);
+      m.bindTooltip(`${town} · ${count} spot${count===1?'':'s'}`, { sticky:true, className:'hood-tip' });
+      m.on('click', ()=> openArea({ type:'town', name: town }));
+      bounds.extend([lat, lng]);
+    });
+  });
+  try{ areaMap.fitBounds(bounds.pad(0.04)); }catch(e){}
+}
+
+function renderAreaBanner(){
+  const el = $('#areaBanner');
+  if(currentPage !== 'listings'){ el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  const count = restaurants.filter(r => restaurantInArea(r, activeArea)).length;
+  el.innerHTML = `
+    <button class="btn secondary small" id="backToAreas">← Neighborhoods</button>
+    ${activeArea
+      ? `<span class="area-pill">📍 ${escapeHtml(activeArea.name)} · ${count} spot${count===1?'':'s'} <button class="tag-x" id="clearArea" title="Show all of Chicagoland">×</button></span>`
+      : `<span class="area-all-note">All of Chicagoland</span>`}
+  `;
+  $('#backToAreas').addEventListener('click', ()=>{ currentPage = 'areas'; activeArea = null; renderAll(); });
+  const clearBtn = $('#clearArea');
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{ activeArea = null; renderAll(); });
+}
+
+function renderPageVisibility(){
+  const listings = currentPage === 'listings';
+  $('#areasPage').style.display = listings ? 'none' : '';
+  $('.controls').style.display = listings ? '' : 'none';
+  $('.tools-row').style.display = listings ? '' : 'none';
+  $('#content').style.display = listings ? '' : 'none';
+  if(!listings){
+    $('#subTabs').style.display = 'none';
+    if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
+  }
+}
+
 function renderAll(){
+  renderPageVisibility();
   renderStats();
-  renderTabs();
-  renderContent();
+  if(currentPage === 'listings'){
+    renderTabs();
+    renderContent();
+  } else {
+    renderAreasPage();
+  }
+  renderAreaBanner();
   renderProfileChip();
 }
 
@@ -1523,6 +1896,7 @@ function openAddRestaurant(){
       if(selectedPlace.website) record.website = selectedPlace.website;
       if(selectedPlace.placeId) record.mapsUrl = `https://www.google.com/maps/place/?q=place_id:${selectedPlace.placeId}`;
     }
+    assignAreaFields(record);
     restaurants.push(record);
     await saveRestaurants();
     const rect = e.target.getBoundingClientRect();
@@ -1793,8 +2167,9 @@ function openLogVisit(restaurantId){
     renderCalendar();
   });
   $('.modal', $('#modalRoot')).addEventListener('click', (e)=>{
-    if(!e.target.closest('#miniCal') && !e.target.closest('#dateDisplay')){
-      $('#miniCal').classList.remove('open');
+    const cal = $('#miniCal'); // gone if the modal was already swapped out mid-click
+    if(cal && !e.target.closest('#miniCal') && !e.target.closest('#dateDisplay')){
+      cal.classList.remove('open');
     }
   });
 
@@ -2432,7 +2807,16 @@ async function removeRemovedListings(){
   await removeStrayTags();
   await removeRemovedListings();
   await seedMenusFromVisits();
+  await assignAreas();
   renderAll();
+  // Boundary data loads in the background; neighborhoods persist on each
+  // record once assigned, so this is a real fetch only the first time.
+  loadHoodGeo().then(async geo=>{
+    if(geo){
+      await assignNeighborhoods(geo);
+      renderAll();
+    }
+  });
 })();
 </script>
 <script>
