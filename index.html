@@ -433,22 +433,29 @@ h1{
   stroke: rgba(41,19,15,0.5); stroke-width: 1;
 }
 .area-block:not(.ghost) .block-shape{ filter: drop-shadow(0 5px 12px rgba(0,0,0,0.35)); }
+/* Label sits at the shape's deepest interior point (not the cell center),
+   on a pill of the same block color — invisible where it overlaps the
+   shape, and a readable tag where a skinny shape can't contain the text. */
 .block-label{
-  position:absolute; inset:0; padding: 12px;
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  position:absolute; left:50%; top:50%;
+  transform: translate(-50%, -50%);
+  max-width: 96%;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
   pointer-events:none;
+  background: var(--block);
+  border-radius: 10px;
+  padding: 5px 9px 6px;
 }
 .block-name{
   text-align:center;
-  font-family:'Oswald', sans-serif; font-weight:700; font-size:16.5px; line-height:1.12;
+  font-family:'Oswald', sans-serif; font-weight:700; font-size:15.5px; line-height:1.12;
   color: var(--ink);
-  text-shadow: 0 0 6px var(--block), 0 0 12px var(--block), 0 0 18px var(--block);
 }
-.block-icons{ font-size:13px; letter-spacing:2px; text-shadow: 0 0 6px var(--block); }
+.block-icons{ font-size:12.5px; letter-spacing:2px; line-height:1.2; }
 .block-meta{
-  font-family:'IBM Plex Mono', monospace; font-size:9px; letter-spacing:0.7px;
+  font-family:'IBM Plex Mono', monospace; font-size:8.5px; letter-spacing:0.6px;
   color: var(--ink); opacity:0.9;
-  text-shadow: 0 0 6px var(--block), 0 0 10px var(--block);
+  text-align:center;
 }
 /* Areas with no listings yet: dim dashed outline of the same real shape —
    territory still on the map, waiting to be claimed. */
@@ -457,11 +464,12 @@ h1{
   stroke: var(--block); stroke-width: 1.6; stroke-dasharray: 5 4;
 }
 .area-block.ghost:hover .block-shape path{ fill: rgba(243,237,224,0.1); stroke-dasharray: none; }
+.area-block.ghost .block-label{ background: transparent; padding: 0; }
 .area-block.ghost .block-name{
-  font-size:13px; font-weight:600; color: var(--cream-dim); text-shadow:none;
+  font-size:12.5px; font-weight:600; color: var(--cream-dim);
 }
 .area-block.ghost:hover .block-name{ color: var(--cream); }
-.area-block.ghost .block-meta{ color: var(--cream-dim); opacity:0.7; font-size:8.5px; text-shadow:none; }
+.area-block.ghost .block-meta{ color: var(--cream-dim); opacity:0.7; font-size:8px; }
 
 /* ---- Active-area banner on the listings page ---- */
 .area-banner{
@@ -1136,6 +1144,9 @@ const HOOD_RENAME = {
   'Sheffield & DePaul': 'Lincoln Park',
 };
 function displayHoodName(name){ return HOOD_RENAME[name] || name; }
+/* Community areas that aren't dining neighborhoods (the airport) — left
+   off the landing grid unless a listing ever actually lands there. */
+const HOOD_EXCLUDE = new Set(["O'Hare"]);
 
 function parseTown(address){
   if(!address) return null;
@@ -1674,10 +1685,46 @@ function featurePolys(f){
   return g.type === 'MultiPolygon' ? g.coordinates : (g.type === 'Polygon' ? [g.coordinates] : []);
 }
 
-/* The area's true outline, fitted into a 100x100 viewBox. Longitude is
-   compressed by cos(latitude) first so the shape keeps its real-world
-   proportions at Chicago's latitude. */
-function areaShapePath(area){
+/* The area's true outline, fitted into a 100x100 viewBox, plus the best
+   spot inside it to anchor the label. Longitude is compressed by
+   cos(latitude) first so the shape keeps its real-world proportions. */
+function distToSegment(px, py, ax, ay, bx, by){
+  const dx = bx - ax, dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+/* Deepest interior point of the largest ring (coarse polylabel): the label
+   lands on the shape's fattest part — Garfield Ridge's wide bottom, not
+   the empty air above its skinny arm. */
+function shapeLabelAnchor(rings){
+  let best = null, bestArea = 0;
+  rings.forEach(r=>{
+    const xs = r.map(p => p[0]), ys = r.map(p => p[1]);
+    const a = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+    if(a > bestArea){ bestArea = a; best = r; }
+  });
+  if(!best) return { x: 50, y: 50 };
+  const xs = best.map(p => p[0]), ys = best.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  let anchor = { x: 50, y: 50 }, bestScore = -1;
+  const N = 14;
+  for(let i = 1; i < N; i++){
+    for(let j = 1; j < N; j++){
+      const x = minX + (maxX - minX) * i / N;
+      const y = minY + (maxY - minY) * j / N;
+      if(!pointInRing(x, y, best)) continue;
+      let d = Infinity;
+      for(let k = 0; k < best.length && d > bestScore; k++){
+        const a = best[k], b = best[(k + 1) % best.length];
+        d = Math.min(d, distToSegment(x, y, a[0], a[1], b[0], b[1]));
+      }
+      if(d > bestScore){ bestScore = d; anchor = { x, y }; }
+    }
+  }
+  return anchor;
+}
+function areaShapeData(area){
   const polys = areaFeatures(area).flatMap(featurePolys);
   if(!polys.length) return null;
   const LNG_SCALE = Math.cos(41.85 * Math.PI / 180);
@@ -1690,13 +1737,14 @@ function areaShapePath(area){
   const scale = 100 / Math.max(maxX - minX, maxY - minY);
   const ox = (100 - (maxX - minX) * scale) / 2;
   const oy = (100 - (maxY - minY) * scale) / 2;
-  return polys.map(p =>
-    p[0].map(([lng, lat], i)=>{
-      const x = ((lng * LNG_SCALE - minX) * scale + ox).toFixed(1);
-      const y = ((maxY - lat) * scale + oy).toFixed(1);
-      return `${i ? 'L' : 'M'}${x} ${y}`;
-    }).join('') + 'Z'
+  const rings = polys.map(p => p[0].map(([lng, lat]) => [
+    (lng * LNG_SCALE - minX) * scale + ox,
+    (maxY - lat) * scale + oy,
+  ]));
+  const path = rings.map(r =>
+    r.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join('') + 'Z'
   ).join('');
+  return { path, anchor: shapeLabelAnchor(rings) };
 }
 
 /* Center point of an area — boundary centroid when we have the shape,
@@ -1756,12 +1804,14 @@ const FALLBACK_SHAPE = 'M22 8 H78 Q92 8 92 22 V78 Q92 92 78 92 H22 Q8 92 8 78 V2
 function areaBlockHTML(area){
   const stats = areaStats(area);
   const [bg, ink] = blockColor(area.name);
-  const shape = areaShapePath(area) || FALLBACK_SHAPE;
+  const data = areaShapeData(area);
+  const shape = data ? data.path : FALLBACK_SHAPE;
+  const anchor = data ? data.anchor : { x: 50, y: 50 };
   const ghost = stats.count === 0;
   return `
     <button class="area-block${ghost ? ' ghost' : ''}" data-type="${area.type}" data-name="${escapeHtml(area.name)}" style="--block:${bg};--ink:${ink};">
       <svg class="block-shape" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${shape}"/></svg>
-      <span class="block-label">
+      <span class="block-label" style="left:${anchor.x.toFixed(1)}%;top:${anchor.y.toFixed(1)}%;">
         <span class="block-name">${escapeHtml(area.name)}</span>
         ${!ghost && stats.icons.length ? `<span class="block-icons">${stats.icons.join(' ')}</span>` : ''}
         <span class="block-meta">${ghost ? 'no spots yet' : `${stats.count} spot${stats.count===1?'':'s'}${stats.visited ? ` · ${stats.visited}/${stats.count} visited` : ''}`}</span>
@@ -1776,7 +1826,10 @@ function renderAreasPage(){
   // Every neighborhood gets a shape-card — stocked ones in full color,
   // empty ones as dim outlines — laid out in map-reading order.
   const allHoodNames = new Set(Object.keys(hoods));
-  if(hoodGeo) (hoodGeo.features || []).forEach(f => allHoodNames.add(displayHoodName(f.properties.pri_neigh)));
+  if(hoodGeo) (hoodGeo.features || []).forEach(f=>{
+    const name = displayHoodName(f.properties.pri_neigh);
+    if(!HOOD_EXCLUDE.has(name)) allHoodNames.add(name);
+  });
   const chicagoBlocks = geoSortAreas(Array.from(allHoodNames).map(name => ({ type:'neighborhood', name })))
     .map(areaBlockHTML).join('')
     + (unassigned ? areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' }) : '');
