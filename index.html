@@ -1090,9 +1090,9 @@ function categories(){
       this list any time you want another umbrella; just tell me the
       grouping and I'll add it here. */
 const PARENT_GROUPS = {
-  // Sandwich types live under American — five kinds of lunch, not a cuisine.
-  'American': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Hot Dogs', 'Seafood', 'Halal', 'Soul Food',
-               'Hoagie', 'Sandwich', 'Cheesesteak', 'Bagel', 'Wrap'],
+  // One Sandwiches sub-tag — hoagies, wraps, cheesesteaks, bagels are all
+  // sandwiches. Brianna's guides define the granularity; don't split finer.
+  'American': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Hot Dogs', 'Seafood', 'Halal', 'Soul Food', 'Sandwiches'],
   // Countries are main guides (all flags at one level); Ramen and Sushi
   // are kinds of Japanese food, so they nest under Japanese the way
   // Burgers nest under American. The old regional umbrellas (Asian,
@@ -2865,21 +2865,21 @@ const SEED_RESTAURANTS = [
   {name:"Legend Tasty House", category:"Ice Cream", address:"Chicago, IL"},
   {name:"Molly's Cupcakes", category:"Bakery", address:"Chicago, IL"},
   // Sandwiches (15)
-  {name:"The Hoagie Place #2", category:"Hoagie", address:"Dolton, IL"},
-  {name:"Chicago Hoagie House", category:"Hoagie", address:"Chicago, IL"},
-  {name:"Bronzeville Hoagie & Panini", category:"Hoagie", address:"Chicago, IL"},
-  {name:"Corey's NYC Bagel Deli", category:"Bagel", address:"Chicago, IL"},
-  {name:"Simply Soups Salads and Sandwiches", category:"Sandwich", address:"Chicago, IL"},
+  {name:"The Hoagie Place #2", category:"Sandwiches", address:"Dolton, IL"},
+  {name:"Chicago Hoagie House", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Bronzeville Hoagie & Panini", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Corey's NYC Bagel Deli", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Simply Soups Salads and Sandwiches", category:"Sandwiches", address:"Chicago, IL"},
   {name:"D'Amato's Bakery", category:"Bakery", address:"Chicago, IL"},
   {name:"NYC Halal Eats", category:"Halal", address:"Burbank, IL"},
   {name:"NYC Halal Eats", category:"Burgers", address:"Burbank, IL"},
   {name:"Philly's Best", category:"Pizza", address:"Chicago, IL"},
-  {name:"Philly's Original Steak & Lemonade", category:"Cheesesteak", address:"Chicago, IL"},
+  {name:"Philly's Original Steak & Lemonade", category:"Sandwiches", address:"Chicago, IL"},
   {name:"Devil Dawgs", category:"Hot Dogs", address:"Chicago, IL"},
   {name:"Portillo's", category:"Hot Dogs", address:"Chicago, IL"},
-  {name:"Home of the Hoagy", category:"Hoagie", address:"Chicago, IL"},
-  {name:"Wrap & Roll Cafe", category:"Wrap", address:"Chicago, IL"},
-  {name:"Lemme get umm", category:"Sandwich", address:"Chicago, IL"},
+  {name:"Home of the Hoagy", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Wrap & Roll Cafe", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Lemme get umm", category:"Sandwiches", address:"Chicago, IL"},
   // Breakfast (7)
   {name:"Migos Fine Food", category:"Mexican", address:"Chicago, IL"},
   {name:"Griddle 24", category:"Breakfast & Brunch", address:"Chicago, IL"},
@@ -2947,7 +2947,7 @@ const SEED_RESTAURANTS = [
   {name:"Piece Pizzeria & Brewery", category:"Pizza", address:"Chicago, IL"},
   {name:"Piece Pizzeria & Brewery", category:"Bars", address:"Chicago, IL"},
   {name:"Fontano's Pizza and Subs", category:"Pizza", address:"Chicago, IL"},
-  {name:"Fontano's Pizza and Subs", category:"Sandwich", address:"Chicago, IL"},
+  {name:"Fontano's Pizza and Subs", category:"Sandwiches", address:"Chicago, IL"},
   {name:"Williams Inn Pizza & Sports Bar", category:"Pizza", address:"Chicago, IL"},
   {name:"De Arco's Pizza & Restaurant", category:"Pizza", address:"Chicago, IL"},
   {name:"Gigios Pizza", category:"Pizza", address:"Chicago, IL"},
@@ -3079,20 +3079,20 @@ const ADDRESS_LOOKUP = [
   {name:"The Dopest Bar & Grill", category:"Bars", address:"2343 W Roosevelt Rd, Chicago, IL 60608", phone:null, placeId:"ChIJV-yv1o4tDogRETpSoBTGLaI", lat:41.8664339, lng:-87.6852057},
   {name:"Federales", category:"Bars", address:"180 N Morgan St, Chicago, IL 60607", phone:"+1 773-831-9696", placeId:"ChIJc4CaDdosDogRD-B2RcMW5yE", lat:41.8852162, lng:-87.6523893, website:"https://www.federalesbars.com/chicago"},
   {name:"The Bureau Bar and Restaurant", category:"Bars", address:"2115 S State St, Chicago, IL 60616", phone:"+1 312-444-1638", placeId:"ChIJreaOqhMtDogREsyrRF4y8YY", lat:41.8537198, lng:-87.6268692, website:"https://bureaubarandrestaurant.com/"},
-  {name:"The Hoagie Place #2", category:"Hoagie", address:"1117 Sibley Blvd, Dolton, IL 60419", phone:"+1 708-880-0307", placeId:"ChIJ-Y9LcgghDogRrct61JReAuI", lat:41.6222608, lng:-87.5897424},
-  {name:"Chicago Hoagie House", category:"Hoagie", address:"7358 S Stony Island Ave, Chicago, IL 60649", phone:"+1 773-414-7029", placeId:"ChIJ6X257RIpDogRN4YIc6V7HMk", lat:41.7606891, lng:-87.5866247},
-  {name:"Bronzeville Hoagie & Panini", category:"Hoagie", address:"238 E 35th St, Chicago, IL 60616", phone:"+1 872-258-9940", placeId:"ChIJf1E_SgAtDogRxyg4qgPOEmw", lat:41.8312242, lng:-87.6202361, website:"https://www.bronzevillehoagiepanini.com/"},
-  {name:"Corey's NYC Bagel Deli", category:"Bagel", address:"515 N Dearborn St, Chicago, IL 60654", phone:"+1 312-923-9999", placeId:"ChIJS366FbIsDogRpjhueVRi2GA", lat:41.8913441, lng:-87.6294604, website:"https://coreysbagels.com/"},
-  {name:"Simply Soups Salads and Sandwiches", category:"Sandwich", address:"635 E 47th St, Chicago, IL 60653", phone:"+1 773-373-3810", placeId:"ChIJZxsJv1ApDogRD-4jzVbxCfs", lat:41.8093196, lng:-87.609953, website:"https://www.simplysoupsaladsandsandwiches.com/"},
+  {name:"The Hoagie Place #2", category:"Sandwiches", address:"1117 Sibley Blvd, Dolton, IL 60419", phone:"+1 708-880-0307", placeId:"ChIJ-Y9LcgghDogRrct61JReAuI", lat:41.6222608, lng:-87.5897424},
+  {name:"Chicago Hoagie House", category:"Sandwiches", address:"7358 S Stony Island Ave, Chicago, IL 60649", phone:"+1 773-414-7029", placeId:"ChIJ6X257RIpDogRN4YIc6V7HMk", lat:41.7606891, lng:-87.5866247},
+  {name:"Bronzeville Hoagie & Panini", category:"Sandwiches", address:"238 E 35th St, Chicago, IL 60616", phone:"+1 872-258-9940", placeId:"ChIJf1E_SgAtDogRxyg4qgPOEmw", lat:41.8312242, lng:-87.6202361, website:"https://www.bronzevillehoagiepanini.com/"},
+  {name:"Corey's NYC Bagel Deli", category:"Sandwiches", address:"515 N Dearborn St, Chicago, IL 60654", phone:"+1 312-923-9999", placeId:"ChIJS366FbIsDogRpjhueVRi2GA", lat:41.8913441, lng:-87.6294604, website:"https://coreysbagels.com/"},
+  {name:"Simply Soups Salads and Sandwiches", category:"Sandwiches", address:"635 E 47th St, Chicago, IL 60653", phone:"+1 773-373-3810", placeId:"ChIJZxsJv1ApDogRD-4jzVbxCfs", lat:41.8093196, lng:-87.609953, website:"https://www.simplysoupsaladsandsandwiches.com/"},
   {name:"D'Amato's Bakery", category:"Bakery", address:"1124 W Grand Ave, Chicago, IL 60642", phone:"+1 312-733-5456", placeId:"ChIJlXMCgNYsDogRqUYBlMRWJAM", lat:41.8912922, lng:-87.6556771, website:"https://damatoschicago.com/"},
   {name:"NYC Halal Eats", category:"Halal", address:"8409 S Harlem Ave, Burbank, IL 60459", phone:"+1 708-741-7092", placeId:"ChIJm4yPRAA5DogRhDVm-2L5Ifc", lat:41.7385407, lng:-87.7989297, website:"https://eatnychalaleats.com/"},
   {name:"Philly's Best", category:"Pizza", address:"769 W Jackson Blvd Unit 103, Chicago, IL 60661", phone:"+1 312-715-9800", placeId:"ChIJO3Jf5sIsDogR1qCb1zxAewc", lat:41.8778166, lng:-87.6468623, website:"https://phillysbest.com/"},
-  {name:"Philly's Original Steak & Lemonade", category:"Cheesesteak", address:"2472 E State St, Burnham, IL 60633", phone:"+1 708-832-4846", placeId:"ChIJnaJyoOwgDogRp26OASbe6ZE", lat:41.630295, lng:-87.5608305},
+  {name:"Philly's Original Steak & Lemonade", category:"Sandwiches", address:"2472 E State St, Burnham, IL 60633", phone:"+1 708-832-4846", placeId:"ChIJnaJyoOwgDogRp26OASbe6ZE", lat:41.630295, lng:-87.5608305},
   {name:"Devil Dawgs", category:"Hot Dogs", address:"767 S State St, Chicago, IL 60605", phone:"+1 312-583-9100", placeId:"ChIJeTMAuJksDogR18rhH0XFMjc", lat:41.8721787, lng:-87.627288, website:"https://www.devildawgs.com/location/devil-dawgs-south-loop/"},
   {name:"Portillo's", category:"Hot Dogs", address:"100 W Ontario St, Chicago, IL 60610", phone:"+1 312-587-8910", placeId:"ChIJf_CED7MsDogR72PLB04AlFA", lat:41.893511, lng:-87.6315393, website:"https://www.portillos.com/"},
-  {name:"Home of the Hoagy", category:"Hoagie", address:"1316 W 111th St, Chicago, IL 60643", phone:"+1 773-238-7171", placeId:"ChIJY4TVKFQkDogR4mjVqRDBbLU", lat:41.6924046, lng:-87.6553609, website:"https://home-of-the-hoagy.business.site/"},
-  {name:"Wrap & Roll Cafe", category:"Wrap", address:"1141 S Western Ave, Chicago, IL 60612", phone:"+1 312-995-9027", placeId:"ChIJ_elO1SAtDogRsibFMADQ2NY", lat:41.867214, lng:-87.6857217},
-  {name:"Lemme get umm", category:"Sandwich", address:"109 E 51st St, Chicago, IL 60615", phone:"+1 773-413-7573", placeId:"ChIJ7wbdARsvDogRGlR2xGQqjiw", lat:41.8016876, lng:-87.6221266},
+  {name:"Home of the Hoagy", category:"Sandwiches", address:"1316 W 111th St, Chicago, IL 60643", phone:"+1 773-238-7171", placeId:"ChIJY4TVKFQkDogR4mjVqRDBbLU", lat:41.6924046, lng:-87.6553609, website:"https://home-of-the-hoagy.business.site/"},
+  {name:"Wrap & Roll Cafe", category:"Sandwiches", address:"1141 S Western Ave, Chicago, IL 60612", phone:"+1 312-995-9027", placeId:"ChIJ_elO1SAtDogRsibFMADQ2NY", lat:41.867214, lng:-87.6857217},
+  {name:"Lemme get umm", category:"Sandwiches", address:"109 E 51st St, Chicago, IL 60615", phone:"+1 773-413-7573", placeId:"ChIJ7wbdARsvDogRGlR2xGQqjiw", lat:41.8016876, lng:-87.6221266},
   {name:"Migos Fine Food", category:"Mexican", address:"5044 W Montrose Ave, Chicago, IL 60641", phone:"+1 872-946-7015", placeId:"ChIJI9VAd0nND4gRo_ixebU0ac0", lat:41.9608017, lng:-87.7541722, website:"https://www.migoschicago.com/"},
   {name:"Griddle 24", category:"Breakfast & Brunch", address:"334 W Chicago Ave, Chicago, IL 60654", phone:"+1 872-259-9602", placeId:"ChIJc96d6krTD4gRgX9JTfI-cO4", lat:41.896781, lng:-87.6369655, website:"https://www.griddle24.com/"},
   {name:"Egg Harbor Cafe", category:"Breakfast & Brunch", address:"220 E Illinois St, Chicago, IL 60611", phone:"+1 312-392-2570", placeId:"ChIJz30bIkwtDogRGFIWlkyfoW4", lat:41.8912318, lng:-87.6216051, website:"https://eggharborcafe.com/"},
@@ -3209,6 +3209,12 @@ const CUISINE_RENAMES = {
   'Italian Cuisine': 'Italian',
   'Indian Cuisine': 'Indian',
   'Fondue': 'Swiss',
+  // Hoagies and wraps are still sandwiches — one sub-tag, not five.
+  'Hoagie': 'Sandwiches',
+  'Sandwich': 'Sandwiches',
+  'Cheesesteak': 'Sandwiches',
+  'Bagel': 'Sandwiches',
+  'Wrap': 'Sandwiches',
 };
 async function renameCuisineTags(){
   let changed = false;
