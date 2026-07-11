@@ -412,50 +412,56 @@ h1{
 }
 .area-blocks{
   display:grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
   margin-bottom: 26px;
 }
+/* The block IS the city: each cell is the area's real boundary shape,
+   scaled up to hold its name, cuisine icons, and count. Same treatment
+   for Chicago neighborhoods and suburb towns. */
 .area-block{
-  position:relative; overflow:hidden; border:none; cursor:pointer;
-  border-radius: 14px;
-  padding: 20px 14px 14px;
-  min-height: 128px;
-  background: var(--block);
-  color: var(--ink);
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+  position:relative; border:none; background:transparent; cursor:pointer;
+  aspect-ratio: 1;
+  padding: 4px;
   font-family:'Manrope', sans-serif;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-  transition: transform .14s ease, box-shadow .14s ease;
+  transition: transform .14s ease;
 }
-.area-block:hover{ transform: translateY(-3px) scale(1.02); box-shadow: 0 14px 30px rgba(0,0,0,0.4); }
-.block-shape{ position:absolute; inset:7%; width:86%; height:86%; opacity:0.17; pointer-events:none; }
-.block-shape path{ fill: var(--ink); }
+.area-block:hover{ transform: translateY(-3px) scale(1.045); z-index: 2; }
+.block-shape{ width:100%; height:100%; display:block; pointer-events:none; }
+.block-shape path{
+  fill: var(--block);
+  stroke: rgba(41,19,15,0.5); stroke-width: 1;
+}
+.area-block:not(.ghost) .block-shape{ filter: drop-shadow(0 5px 12px rgba(0,0,0,0.35)); }
+.block-label{
+  position:absolute; inset:0; padding: 12px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  pointer-events:none;
+}
 .block-name{
-  position:relative; text-align:center;
-  font-family:'Oswald', sans-serif; font-weight:700; font-size:18px; line-height:1.15;
+  text-align:center;
+  font-family:'Oswald', sans-serif; font-weight:700; font-size:16.5px; line-height:1.12;
+  color: var(--ink);
+  text-shadow: 0 0 6px var(--block), 0 0 12px var(--block), 0 0 18px var(--block);
 }
-.block-icons{ position:relative; font-size:13.5px; letter-spacing:2px; }
+.block-icons{ font-size:13px; letter-spacing:2px; text-shadow: 0 0 6px var(--block); }
 .block-meta{
-  position:relative;
-  font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:0.8px;
-  opacity:0.85;
+  font-family:'IBM Plex Mono', monospace; font-size:9px; letter-spacing:0.7px;
+  color: var(--ink); opacity:0.9;
+  text-shadow: 0 0 6px var(--block), 0 0 10px var(--block);
 }
-/* Neighborhoods with no listings yet: compact "ghost" blocks that keep the
-   map order intact and invite you to claim the territory. */
-.area-block.ghost{
-  background: transparent;
-  border: 1.5px dashed var(--block);
-  color: var(--cream-dim);
-  min-height: 68px;
-  padding: 10px 8px;
-  box-shadow: none;
+/* Areas with no listings yet: dim dashed outline of the same real shape —
+   territory still on the map, waiting to be claimed. */
+.area-block.ghost .block-shape path{
+  fill: rgba(243,237,224,0.035);
+  stroke: var(--block); stroke-width: 1.6; stroke-dasharray: 5 4;
 }
-.area-block.ghost:hover{ border-style: solid; color: var(--cream); }
-.area-block.ghost .block-name{ font-size:13.5px; font-weight:600; }
-.area-block.ghost .block-shape{ opacity:0.1; }
-.area-block.ghost .block-shape path{ fill: var(--block); }
-.area-block.ghost .block-meta{ font-size:8.5px; opacity:0.65; }
+.area-block.ghost:hover .block-shape path{ fill: rgba(243,237,224,0.1); stroke-dasharray: none; }
+.area-block.ghost .block-name{
+  font-size:13px; font-weight:600; color: var(--cream-dim); text-shadow:none;
+}
+.area-block.ghost:hover .block-name{ color: var(--cream); }
+.area-block.ghost .block-meta{ color: var(--cream-dim); opacity:0.7; font-size:8.5px; text-shadow:none; }
 
 /* ---- Active-area banner on the listings page ---- */
 .area-banner{
@@ -1115,11 +1121,19 @@ const REGION_ORDER = ['South Suburbs', 'West Suburbs', 'North Suburbs', 'Other S
 const HOOD_RENAME = {
   'Lower West Side': 'Pilsen',
   'Near South Side': 'South Loop',
-  'Millenium Park': 'Millennium Park',
   // Douglas + Grand Boulevard are both halves of what everyone calls
   // Bronzeville — renaming both merges them into one area.
   'Douglas': 'Bronzeville',
   'Grand Boulevard': 'Bronzeville',
+  // The city boundary file includes landmark zones that aren't real
+  // neighborhoods; fold each into the neighborhood it actually sits in.
+  'United Center': 'Near West Side',
+  'Museum Campus': 'South Loop',
+  'Millenium Park': 'Loop',
+  'Grant Park': 'Loop',
+  'Magnificent Mile': 'Streeterville',
+  'Rush & Division': 'Gold Coast',
+  'Sheffield & DePaul': 'Lincoln Park',
 };
 function displayHoodName(name){ return HOOD_RENAME[name] || name; }
 
@@ -1734,17 +1748,24 @@ function areaStats(area){
   return { count: list.length, visited, icons };
 }
 
+/* Areas whose boundary isn't on hand yet (first load before the fetch, or
+   a town missing from the Census file) fall back to a soft square so the
+   card still renders with the same treatment. */
+const FALLBACK_SHAPE = 'M22 8 H78 Q92 8 92 22 V78 Q92 92 78 92 H22 Q8 92 8 78 V22 Q8 8 22 8 Z';
+
 function areaBlockHTML(area){
   const stats = areaStats(area);
   const [bg, ink] = blockColor(area.name);
-  const shape = areaShapePath(area);
+  const shape = areaShapePath(area) || FALLBACK_SHAPE;
   const ghost = stats.count === 0;
   return `
     <button class="area-block${ghost ? ' ghost' : ''}" data-type="${area.type}" data-name="${escapeHtml(area.name)}" style="--block:${bg};--ink:${ink};">
-      ${shape ? `<svg class="block-shape" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${shape}"/></svg>` : ''}
-      <span class="block-name">${escapeHtml(area.name)}</span>
-      ${stats.icons.length ? `<span class="block-icons">${stats.icons.join(' ')}</span>` : ''}
-      <span class="block-meta">${ghost ? 'no spots yet' : `${stats.count} spot${stats.count===1?'':'s'}${stats.visited ? ` · ${stats.visited}/${stats.count} visited` : ''}`}</span>
+      <svg class="block-shape" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${shape}"/></svg>
+      <span class="block-label">
+        <span class="block-name">${escapeHtml(area.name)}</span>
+        ${!ghost && stats.icons.length ? `<span class="block-icons">${stats.icons.join(' ')}</span>` : ''}
+        <span class="block-meta">${ghost ? 'no spots yet' : `${stats.count} spot${stats.count===1?'':'s'}${stats.visited ? ` · ${stats.visited}/${stats.count} visited` : ''}`}</span>
+      </span>
     </button>`;
 }
 
@@ -1752,14 +1773,14 @@ function renderAreasPage(){
   const el = $('#areasPage');
   const { hoods, townByRegion, unassigned } = areaCounts();
 
-  // Every neighborhood in the boundary file gets a block — stocked ones in
-  // full color, empty ones as compact ghosts — so the grid reads like the
-  // whole map, not just the parts with food on file yet.
+  // Every neighborhood gets a shape-card — stocked ones in full color,
+  // empty ones as dim outlines — laid out in map-reading order.
   const allHoodNames = new Set(Object.keys(hoods));
   if(hoodGeo) (hoodGeo.features || []).forEach(f => allHoodNames.add(displayHoodName(f.properties.pri_neigh)));
   const chicagoBlocks = geoSortAreas(Array.from(allHoodNames).map(name => ({ type:'neighborhood', name })))
     .map(areaBlockHTML).join('')
     + (unassigned ? areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' }) : '');
+  const chicagoSection = chicagoBlocks ? `<div class="area-group-label">Chicago</div><div class="area-blocks">${chicagoBlocks}</div>` : '';
   const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
     const blocks = geoSortAreas(Object.keys(townByRegion[region]).map(town => ({ type:'town', name: town })))
       .map(areaBlockHTML).join('');
@@ -1770,7 +1791,7 @@ function renderAreasPage(){
     <div class="areas-head">
       <div>
         <div class="areas-title">Pick your territory</div>
-        <div class="areas-sub">Tap a block and that area's spots and cuisines pop up.</div>
+        <div class="areas-sub">Tap a neighborhood and its spots and cuisines pop up.</div>
       </div>
       <div class="areas-head-actions">
         <button class="btn secondary" id="addFromAreas">+ New Listing</button>
@@ -1778,7 +1799,7 @@ function renderAreasPage(){
       </div>
     </div>
     <div class="area-groups">
-      ${chicagoBlocks ? `<div class="area-group-label">Chicago</div><div class="area-blocks">${chicagoBlocks}</div>` : ''}
+      ${chicagoSection}
       ${suburbGroups}
     </div>
   `;
