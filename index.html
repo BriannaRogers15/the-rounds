@@ -639,6 +639,11 @@ h1{
 .toggle-pair button.no.on{ background: var(--flag-red); border-color: var(--flag-red); color: var(--cream); }
 
 .modal-actions{ display:flex; gap:8px; margin-top:22px; justify-content:flex-end; }
+.filing-under{
+  margin-top: 12px;
+  font-size: 12px; color: var(--cream-dim);
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+}
 .places-notice{
   margin-top:12px; padding: 10px 12px;
   border: 1px solid var(--flag-red-dim); border-radius: 8px;
@@ -2103,14 +2108,12 @@ function openProfiles(){
 }
 
 function openAddRestaurant(){
-  const cats = categories();
-  const datalist = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov">
       <div class="modal">
         <button class="close" id="closeAdd">×</button>
         <h2>New Listing</h2>
-        <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Add a place from one of your guides.</div>
+        <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Search it, tap it, done — address, website, and cuisines fill themselves.</div>
         <div class="places-notice" id="placesNotice" style="display:none;">
           ⚠️ Google Maps is rejecting requests from this address (API key referrer restrictions),
           so search is unavailable — add the key's allowed referrers in Google Cloud Console.
@@ -2125,12 +2128,8 @@ function openAddRestaurant(){
           <label>Address</label>
           <input type="text" id="rAddr" placeholder="e.g. 123 Main St">
         </div>
-        <div class="field">
-          <label>Guides / Categories <span style="text-transform:none;">(comma-separated)</span></label>
-          <input type="text" id="rCat" list="catList" placeholder="e.g. Sports Bars, American Cuisine">
-          <datalist id="catList">${datalist}</datalist>
-        </div>
-        <div style="margin-top:-8px;margin-bottom:4px;">
+        <div class="filing-under" id="filingUnder" style="display:none;"></div>
+        <div style="margin-top:10px;margin-bottom:4px;">
           <a href="#" id="manualToggle" style="color:var(--flag-blue-bright);text-decoration:underline;cursor:pointer;font-size:11.5px;">Can't find it on Google Maps? Add it manually</a>
         </div>
         <div class="modal-actions">
@@ -2169,6 +2168,15 @@ function openAddRestaurant(){
       pac.addEventListener('gmp-select', async ({ placePrediction })=>{
         const place = placePrediction.toPlace();
         await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType'] });
+        // Cuisines map themselves from Google's classification — there is
+        // no categories field. Anything Google can't classify gets tagged
+        // during the next curation sweep instead of blocking the add.
+        const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
+        const tags = [];
+        types.forEach(t=>{
+          const tag = GOOGLE_TYPE_TAG[t];
+          if(tag && !tags.includes(tag)) tags.push(tag);
+        });
         selectedPlace = {
           name: place.displayName || '',
           address: place.formattedAddress || '',
@@ -2177,19 +2185,14 @@ function openAddRestaurant(){
           phone: place.internationalPhoneNumber || null,
           website: place.websiteURI || null,
           placeId: place.id || null,
+          tags,
         };
-        // Auto-map Google's place types onto guide tags so the categories
-        // fill themselves; the field stays editable for personal guides
-        // (Dinner Dates, Happy Hour...).
-        const catBox = $('#rCat');
-        if(catBox && !catBox.value.trim()){
-          const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
-          const tags = [];
-          types.forEach(t=>{
-            const tag = GOOGLE_TYPE_TAG[t];
-            if(tag && !tags.includes(tag)) tags.push(tag);
-          });
-          if(tags.length) catBox.value = tags.join(', ');
+        const fu = $('#filingUnder');
+        if(fu){
+          fu.style.display = '';
+          fu.innerHTML = tags.length
+            ? `Filing under: ${tags.map(t=>`<span class="card-tag">${tagIcon(t)} ${escapeHtml(t)}</span>`).join(' ')}`
+            : `Google didn't specify a cuisine — it'll be added untagged and tagged on the next sweep.`;
         }
       });
       // Probe one real request: a referrer-blocked or misconfigured API key
@@ -2214,12 +2217,11 @@ function openAddRestaurant(){
   $('#saveAdd').addEventListener('click', async (e)=>{
     const name = manualMode ? $('#rName').value.trim() : (selectedPlace ? selectedPlace.name : '');
     const address = manualMode ? $('#rAddr').value.trim() : (selectedPlace ? selectedPlace.address : '');
-    const catRaw = $('#rCat').value.trim();
-    const categoriesList = catRaw.split(',').map(c=>c.trim()).filter(Boolean);
-    if(!name || categoriesList.length === 0 || (manualMode && !address)){
-      alert(manualMode ? 'Name, address, and at least one category are required. (If it\'s not on Google Maps, the full address is on you.)' : 'Search and select a restaurant (or switch to manual entry), and add at least one category.');
+    if(!name || (manualMode && !address)){
+      alert(manualMode ? 'Name and address are required. (If it\'s not on Google Maps, the full address is on you.)' : 'Search and select a restaurant, or switch to manual entry.');
       return;
     }
+    const categoriesList = (!manualMode && selectedPlace && selectedPlace.tags) ? selectedPlace.tags : [];
     const record = { id: uid(), name, categories: categoriesList, address, createdAt: Date.now() };
     if(selectedPlace && !manualMode){
       if(selectedPlace.lat != null) record.lat = selectedPlace.lat;
