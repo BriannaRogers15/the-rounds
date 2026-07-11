@@ -1108,9 +1108,10 @@ const PARENT_GROUPS = {
   // Burgers nest under American. The old regional umbrellas (Asian,
   // Latin American, Caribbean, European) are gone.
   'Japanese': ['Ramen', 'Sushi'],
-  'Desserts': ['Ice Cream', 'Bakery', 'Frozen Yogurt'],
-  'Special Events': ['Dinner Dates', 'Happy Hour', 'Late Night', 'Breakfast & Brunch', 'Rooftop'],
-  'Italian': ['Pizza', 'Pasta'],
+  // Desserts is a single guide — bakeries, ice cream, and frozen yogurt
+  // all consolidated into it (same rule as sandwiches).
+  'Special Events': ['Dinner Dates', 'Happy Hour', 'Late Night', 'Breakfast', 'Brunch', 'Rooftop'],
+  'Italian': ['Pizza'],
 };
 function groupForTag(tag){
   const lower = tag.toLowerCase();
@@ -1618,8 +1619,7 @@ const TAG_ICON = {
   'hoagie': '🥪', 'sandwich': '🥪', 'cheesesteak': '🧀', 'bagel': '🥯', 'wrap': '🌯',
   'hot dogs': '🌭', 'pizza': '🍕', 'halal': '🕌',
   'mexican': '🇲🇽', 'peruvian': '🇵🇪', 'swiss': '🇨🇭', 'seafood': '🦐',
-  'breakfast & brunch': '🥞', 'rooftop': '🏙️',
-  'ice cream': '🍦', 'bakery': '🥐', 'frozen yogurt': '🍧',
+  'breakfast': '🍳', 'brunch': '🥞', 'rooftop': '🏙️',
   'happy hour': '🍻', 'late night': '🌙', 'jamaican': '🇯🇲', 'soul food': '🍲', 'italian': '🇮🇹', 'pasta': '🍝',
   'american': '🇺🇸',
   // Group/guide labels — every rail entry gets a real icon, never the 🍴 fallback.
@@ -1651,17 +1651,17 @@ const GOOGLE_TYPE_TAG = {
   barbecue_restaurant: 'BBQ',
   seafood_restaurant: 'Seafood',
   american_restaurant: 'American',
-  breakfast_restaurant: 'Breakfast & Brunch',
-  brunch_restaurant: 'Breakfast & Brunch',
-  bakery: 'Bakery',
-  ice_cream_shop: 'Ice Cream',
+  breakfast_restaurant: 'Breakfast',
+  brunch_restaurant: 'Brunch',
+  bakery: 'Desserts',
+  ice_cream_shop: 'Desserts',
   dessert_shop: 'Desserts',
   dessert_restaurant: 'Desserts',
-  sandwich_shop: 'Sandwich',
-  bagel_shop: 'Bagel',
+  sandwich_shop: 'Sandwiches',
+  bagel_shop: 'Sandwiches',
   bar: 'Bars',
   pub: 'Bars',
-  wine_bar: 'Bars',
+  wine_bar: 'Wine Bars',
   bar_and_grill: 'Bars',
   night_club: 'Late Night',
 };
@@ -3068,6 +3068,83 @@ const SEED_RESTAURANTS = [
   {name:"Maxwell Street Depot", category:"Chicago Gems", address:"Chicago, IL"},
   {name:"Philly's Original Steak & Lemonade", category:"Chicago Gems", address:"Chicago, IL"},
   {name:"Frasca Pizzeria + Wine Bar", category:"Wine Bars", address:"Chicago, IL"},
+  // Batch 2 of the guide audit (2026-07-11): italian, jamaican, occasions,
+  // sandwiches, bbq, desserts, chicken, indian, sports bars, american,
+  // burgers, steakhouses, seafood, bars, asian, breakfast, brunch guides.
+  {name:"Mel's California Hoagies", category:"Sandwiches", address:"813 Maple Ave, Homewood, IL 60430"},
+  {name:"Burp Catering", category:"Sandwiches", address:"154 W 95th St, Chicago, IL 60628"},
+  {name:"Sweetwater Tavern & Grille", category:"American", address:"225 N Michigan Ave, Chicago, IL 60601"},
+  {name:"Hangry's", category:"American", address:"5000 W Fullerton Ave, Chicago, IL 60639"},
+  {name:"North & Maple Kitchen + Bar", category:"American", address:"18401 N Creek Dr, Tinley Park, IL 60477"},
+  {name:"The Dearborn", category:"American", address:"145 N Dearborn St, Chicago, IL 60602"},
+  {name:"That's A Burger", category:"Burgers", address:"8301 S Stony Island Ave, Chicago, IL 60617"},
+  {name:"Shrimp House Fish & Chicken", category:"Seafood", address:"11623 S Halsted St, Chicago, IL 60628"},
+  {name:"King Crab House Chicago", category:"Seafood", address:"1816 N Halsted St, Chicago, IL 60614"},
+  {name:"Happy Lobster", category:"Seafood", address:"15 W Washington St, Chicago, IL 60602"},
+  {name:"Frank's Chicago Shrimp House", category:"Seafood", address:"6539 W 79th St, Burbank, IL 60459"},
+  {name:"Luke's Lobster", category:"Seafood", address:"134 N LaSalle St, Chicago, IL 60602"},
+  {name:"Azul Mariscos", category:"Seafood", address:"1177 N Elston Ave, Chicago, IL 60642"},
+  {name:"Provar\u00e9", category:"Seafood", address:"1523 W Chicago Ave, Chicago, IL 60642"},
+  {name:"The Boil Cajun Seafood", category:"Seafood", address:"1805 W Division St, Chicago, IL 60622"},
+  {name:"Pappadeaux Seafood Kitchen", category:"Seafood", address:"921 Pasquinelli Dr, Westmont, IL 60559"},
+  {name:"Crab Du Jour", category:"Seafood", address:"851 W North Ave, Melrose Park, IL 60160"},
+  {name:"Joe Willie's Seafood Bar", category:"Seafood", address:"337 S Sacramento Blvd, Chicago, IL 60612"},
+  {name:"Wu's Korean BBQ", category:"Korean", address:"403 E Illinois St, Chicago, IL 60611"},
+  {name:"Crosby's Kitchen", category:"Brunch", address:"3455 N Southport Ave, Chicago, IL 60657"},
+  {name:"Crosby's Kitchen", category:"American", address:"3455 N Southport Ave, Chicago, IL 60657"},
+  {name:"To Be Served", category:"Brunch", address:"1950 W 87th St, Chicago, IL 60620"},
+  {name:"To Be Served", category:"American", address:"1950 W 87th St, Chicago, IL 60620"},
+  {name:"Eleven19 Kitchen & Cocktails", category:"Brunch", address:"1119 10th St, North Chicago, IL 60064"},
+  {name:"Eleven19 Kitchen & Cocktails", category:"Bars", address:"1119 10th St, North Chicago, IL 60064"},
+  {name:"Parlay Lincoln Park", category:"Brunch", address:"950 W Wrightwood Ave, Chicago, IL 60614"},
+  {name:"Parlay Lincoln Park", category:"Sports Bars", address:"950 W Wrightwood Ave, Chicago, IL 60614"},
+  {name:"Haymarket Pub & Brewery", category:"Brunch", address:"737 W Randolph St, Chicago, IL 60661"},
+  {name:"Haymarket Pub & Brewery", category:"Bars", address:"737 W Randolph St, Chicago, IL 60661"},
+  {name:"Bandit", category:"Brunch", address:"841 W Randolph St, Chicago, IL 60607"},
+  {name:"Bandit", category:"Bars", address:"841 W Randolph St, Chicago, IL 60607"},
+  {name:"14 Parish", category:"Brunch", address:"1644 E 53rd St, Chicago, IL 60615"},
+  {name:"14 Parish", category:"Jamaican", address:"1644 E 53rd St, Chicago, IL 60615"},
+  {name:"Vintage Bar", category:"Brunch", address:"1449 W Taylor St, Chicago, IL 60607"},
+  {name:"Vintage Bar", category:"Bars", address:"1449 W Taylor St, Chicago, IL 60607"},
+  {name:"Honeybear Cafe", category:"Brunch", address:"7036 N Clark St, Chicago, IL 60626"},
+  {name:"Honeybear Cafe", category:"American", address:"7036 N Clark St, Chicago, IL 60626"},
+  {name:"Honey Berry Pancakes and Cafe", category:"Brunch", address:"901 S State St, Chicago, IL 60605"},
+  {name:"Honey Berry Pancakes and Cafe", category:"American", address:"901 S State St, Chicago, IL 60605"},
+  {name:"LH Rooftop", category:"Brunch", address:"85 E Wacker Dr 22nd Floor, Chicago, IL 60601"},
+  {name:"LH Rooftop", category:"Bars", address:"85 E Wacker Dr 22nd Floor, Chicago, IL 60601"},
+  {name:"Wake 'n Bacon", category:"Brunch", address:"420 W Belmont Ave, Chicago, IL 60657"},
+  {name:"Wake 'n Bacon", category:"American", address:"420 W Belmont Ave, Chicago, IL 60657"},
+  {name:"Row 24", category:"Brunch", address:"2411 S Michigan Ave, Chicago, IL 60616"},
+  {name:"Row 24", category:"American", address:"2411 S Michigan Ave, Chicago, IL 60616"},
+  {name:"Truth Italian Restaurant", category:"Brunch", address:"56 E Pershing Rd, Chicago, IL 60653"},
+  {name:"Truth Italian Restaurant", category:"Italian", address:"56 E Pershing Rd, Chicago, IL 60653"},
+  {name:"The Duplex", category:"Brunch", address:"3137 W Logan Blvd, Chicago, IL 60647"},
+  {name:"The Duplex", category:"American", address:"3137 W Logan Blvd, Chicago, IL 60647"},
+  {name:"Recess", category:"Brunch", address:"838 W Kinzie St, Chicago, IL 60642"},
+  {name:"Recess", category:"American", address:"838 W Kinzie St, Chicago, IL 60642"},
+  {name:"ROOF on theWit", category:"Brunch", address:"201 N State St 27th Floor, Chicago, IL 60601"},
+  {name:"ROOF on theWit", category:"Bars", address:"201 N State St 27th Floor, Chicago, IL 60601"},
+  {name:"First Watch", category:"Brunch", address:"1355 E Ogden Ave Suite 103, Naperville, IL 60563"},
+  {name:"First Watch", category:"American", address:"1355 E Ogden Ave Suite 103, Naperville, IL 60563"},
+  {name:"Tree House", category:"Brunch", address:"149 W Kinzie St, Chicago, IL 60654"},
+  {name:"Tree House", category:"Italian", address:"149 W Kinzie St, Chicago, IL 60654"},
+  {name:"Yardbird", category:"Brunch", address:"530 N Wabash Ave, Chicago, IL 60654"},
+  {name:"Yardbird", category:"American", address:"530 N Wabash Ave, Chicago, IL 60654"},
+  {name:"The Whale", category:"Brunch", address:"2427 N Milwaukee Ave, Chicago, IL 60647"},
+  {name:"The Whale", category:"American", address:"2427 N Milwaukee Ave, Chicago, IL 60647"},
+  {name:"Migos Fine Food", category:"Breakfast", address:"Chicago, IL"},
+  {name:"Roscoe's", category:"Breakfast", address:"Chicago, IL"},
+  {name:"D'Amato's Bakery", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"NYC Halal Eats", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Philly's Best", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Devil Dawgs", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"Portillo's", category:"Sandwiches", address:"Chicago, IL"},
+  {name:"MiMi's Craft Kitchen", category:"American", address:"Chicago, IL"},
+  {name:"The Barrel Club", category:"American", address:"Chicago, IL"},
+  {name:"El G-Fe", category:"Seafood", address:"Chicago, IL"},
+  {name:"Paradise Park", category:"Brunch", address:"Chicago, IL"},
+  {name:"The Bureau Bar and Restaurant", category:"Brunch", address:"Chicago, IL"},
+  {name:"Prime 57 Restaurant & Lounge", category:"American", address:"Chicago, IL"},
 ];
 
 async function seedIfNeeded(){
@@ -3295,6 +3372,46 @@ const ADDRESS_LOOKUP = [
   {name:"Cleo's - Bronzeville", category:"Soul Food", address:"4248 S Cottage Grove Ave, Chicago, IL 60653", phone:"+1 773-575-7120", placeId:"ChIJM-CYYugrDogRllsDrW7ZCMk", lat:41.8171113, lng:-87.6070765, website:"http://www.cleos.com/"},
   {name:"Soul Vibez - Orland Park", category:"Soul Food", address:"24 Orland Square Dr, Orland Park, IL 60462", phone:"+1 708-645-4031", placeId:"ChIJw2MpZW8_DogRA33puh7HK1Q", lat:41.6206049, lng:-87.852942, website:"https://soulvibezinc.com/soulvibez?utm_source=google"},
   {name:"Chant", category:"Asian Fusion", address:"1509 E 53rd St, Chicago, IL 60615", phone:"+1 773-324-1999", placeId:"ChIJLbMUBnIpDogRqrlyV8CQOBQ", lat:41.7994033, lng:-87.5886494, website:"https://www.chantchicago.com/"},
+  {name:"Mel's California Hoagies", category:"Sandwiches", address:"813 Maple Ave, Homewood, IL 60430", phone:"+1 708-668-2395", placeId:"ChIJHU6TfgAZDogRN0aAyt7dhjI", lat:41.5666812, lng:-87.63751239999999, website:"https://melscaliforniahoagies.com/"},
+  {name:"Burp Catering", category:"Sandwiches", address:"154 W 95th St, Chicago, IL 60628", phone:"+1 773-840-3226", placeId:"ChIJTUREnJklDogRs7x5BAXi_yc", lat:41.7219012, lng:-87.62838149999999},
+  {name:"Sweetwater Tavern & Grille", category:"American", address:"225 N Michigan Ave, Chicago, IL 60601", phone:"+1 312-698-7111", placeId:"ChIJ2WUVRK8sDogRCez7TBpL278", lat:41.8865653, lng:-87.62422749999999, website:"http://www.sweetwatertavernandgrille.com/"},
+  {name:"Hangry's", category:"American", address:"5000 W Fullerton Ave, Chicago, IL 60639", phone:"+1 773-637-4668", placeId:"ChIJueWI63nND4gR_pgRE0-FIBo", lat:41.924561800000006, lng:-87.7514602, website:"https://www.hangryschicago.com/"},
+  {name:"North & Maple Kitchen + Bar", category:"American", address:"18401 N Creek Dr, Tinley Park, IL 60477", phone:"+1 708-468-8181", placeId:"ChIJSy9ukYQVDogRhrPvMTfELIk", lat:41.556689999999996, lng:-87.79559929999999, website:"https://www.northandmaple.com/"},
+  {name:"The Dearborn", category:"American", address:"145 N Dearborn St, Chicago, IL 60602", phone:"+1 312-384-1242", placeId:"ChIJ-XdXNKUsDogRW-m5g5Siao8", lat:41.8843373, lng:-87.6292766, website:"http://www.thedearborntavern.com/"},
+  {name:"That's A Burger", category:"Burgers", address:"8301 S Stony Island Ave, Chicago, IL 60617", phone:"+1 773-721-6777", placeId:"ChIJy86m7VAoDogR6SjowgWETJw", lat:41.7440818, lng:-87.5848651, website:"https://thatsaburgermenu.com/"},
+  {name:"Shrimp House Fish & Chicken", category:"Seafood", address:"11623 S Halsted St, Chicago, IL 60628", phone:"+1 773-928-9000", placeId:"ChIJZ04c60YkDogRzvvsjYrrfMg", lat:41.6831788, lng:-87.6415696},
+  {name:"King Crab House Chicago", category:"Seafood", address:"1816 N Halsted St, Chicago, IL 60614", phone:"+1 312-280-8990", placeId:"ChIJl3NYatMsDogRynr1Y4Cbp98", lat:41.9143514, lng:-87.64866169999999, website:"https://kingcrabchicago.com/"},
+  {name:"Happy Lobster", category:"Seafood", address:"15 W Washington St, Chicago, IL 60602", phone:"+1 708-497-9653", placeId:"ChIJCUYZY5gtDogRGUQ3bmv_e2A", lat:41.8829813, lng:-87.62858419999999, website:"https://happylobsterchicago.com/"},
+  {name:"Frank's Chicago Shrimp House", category:"Seafood", address:"6539 W 79th St, Burbank, IL 60459", phone:"+1 708-233-9844", placeId:"ChIJLYJ7PlA3DogRXlp-0LebH5c", lat:41.747998599999995, lng:-87.7845766, website:"https://online.skytab.com/s/frankschicagoshrimpburbank"},
+  {name:"Luke's Lobster", category:"Seafood", address:"134 N LaSalle St, Chicago, IL 60602", phone:"+1 312-982-2977", placeId:"ChIJ64RsIrosDogRebfl0hZOehk", lat:41.8840112, lng:-87.6326625, website:"https://lukeslobster.com/pages/city-hall?utm_source=google&utm_medium=places&utm_campaign=cityhall&utm_content=main"},
+  {name:"Azul Mariscos", category:"Seafood", address:"1177 N Elston Ave, Chicago, IL 60642", phone:"+1 773-770-3766", placeId:"ChIJx6qly3rTD4gRLJDyWfXS5vY", lat:41.9031646, lng:-87.6576126, website:"https://www.azulchi.com/"},
+  {name:"Provar\u00e9", category:"Seafood", address:"1523 W Chicago Ave, Chicago, IL 60642", phone:"+1 312-988-0943", placeId:"ChIJseVXOfHTD4gRZ3f6t3Gmkok", lat:41.8958899, lng:-87.6658611, website:"https://www.provarerestaurants.com/"},
+  {name:"The Boil Cajun Seafood", category:"Seafood", address:"1805 W Division St, Chicago, IL 60622", phone:"+1 773-698-6011", placeId:"ChIJxT2F8CzTD4gRnamP3WWPVww", lat:41.9030269, lng:-87.67260639999999, website:"https://smorefood.com/order-online/the-boil-cajun-seafood-chicago-60622-x2by5pkq?utm_source=gmb&utm_medium=website"},
+  {name:"Pappadeaux Seafood Kitchen", category:"Seafood", address:"921 Pasquinelli Dr, Westmont, IL 60559", phone:"+1 630-455-9846", placeId:"ChIJcYr4355ODogRPj62pNz8FCI", lat:41.8193409, lng:-87.9540832, website:"https://pappadeaux.com/"},
+  {name:"Crab Du Jour", category:"Seafood", address:"851 W North Ave, Melrose Park, IL 60160", phone:"+1 708-410-2250", placeId:"ChIJ562gEIzLD4gR_jHmFLPWRXA", lat:41.9092967, lng:-87.84473059999999, website:"https://www.cdjmelrosepark.com/"},
+  {name:"Joe Willie's Seafood Bar", category:"Seafood", address:"337 S Sacramento Blvd, Chicago, IL 60612", phone:"+1 773-826-3474", placeId:"ChIJDSr2b58yDogROJ5gHc3Bb4w", lat:41.8762353, lng:-87.7006593},
+  {name:"Wu's Korean BBQ", category:"Korean", address:"403 E Illinois St, Chicago, IL 60611", phone:"+1 312-837-3200", placeId:"ChIJcem6QAArDogRO8f3E7DxOYM", lat:41.8909752, lng:-87.6172576, website:"https://www.wuskoreanbbq.com/"},
+  {name:"Crosby's Kitchen", category:"Brunch", address:"3455 N Southport Ave, Chicago, IL 60657", phone:"+1 773-883-2525", placeId:"ChIJQ7on71HSD4gR15TKDclPI-Q", lat:41.945090199999996, lng:-87.6637174, website:"http://www.crosbyschicago.com/"},
+  {name:"To Be Served", category:"Brunch", address:"1950 W 87th St, Chicago, IL 60620", phone:"+1 773-456-4062", placeId:"ChIJzcEq4oQlDogRR5x52infljw", lat:41.736048, lng:-87.6723229, website:"https://tobeservedil.com/"},
+  {name:"Eleven19 Kitchen & Cocktails", category:"Brunch", address:"1119 10th St, North Chicago, IL 60064", phone:"+1 847-672-4265", placeId:"ChIJJUi9hLbtD4gRgXV2wwSHHpo", lat:42.3410752, lng:-87.84592459999999, website:"http://eleven19kc.com/"},
+  {name:"Parlay Lincoln Park", category:"Brunch", address:"950 W Wrightwood Ave, Chicago, IL 60614", phone:"+1 773-904-7790", placeId:"ChIJQ3yWFYrTD4gRup2nbuTdLX8", lat:41.9292862, lng:-87.6533154, website:"https://www.parlaylincolnpark.com/"},
+  {name:"Haymarket Pub & Brewery", category:"Brunch", address:"737 W Randolph St, Chicago, IL 60661", phone:"+1 312-638-0700", placeId:"ChIJweWyPcUsDogRtPwqbtgjTsQ", lat:41.8841667, lng:-87.64722220000002, website:"https://www.haymarketbeer.com/"},
+  {name:"Bandit", category:"Brunch", address:"841 W Randolph St, Chicago, IL 60607", phone:"+1 312-878-3111", placeId:"ChIJBy9179AtDogR-0bMsngyl1Q", lat:41.884074999999996, lng:-87.6491288, website:"http://www.banditliquors.com/"},
+  {name:"14 Parish", category:"Brunch", address:"1644 E 53rd St, Chicago, IL 60615", phone:"+1 312-291-8379", placeId:"ChIJZ1O0VnksDogR3-KtPsNw7Io", lat:41.799752399999996, lng:-87.5848303, website:"https://www.14parish.com/"},
+  {name:"Vintage Bar", category:"Brunch", address:"1449 W Taylor St, Chicago, IL 60607", phone:"+1 312-526-3647", placeId:"ChIJpSKBjxstDogRZpORMP6WC-U", lat:41.8691588, lng:-87.66351879999999, website:"http://www.vintageontaylor.com/"},
+  {name:"Honeybear Cafe", category:"Brunch", address:"7036 N Clark St, Chicago, IL 60626", phone:"+1 773-754-7450", placeId:"ChIJ_bvTDB7RD4gRbEeJ_cVVOdE", lat:42.0100445, lng:-87.6743688, website:"https://www.honeybearrp.com/"},
+  {name:"Honey Berry Pancakes and Cafe", category:"Brunch", address:"901 S State St, Chicago, IL 60605", phone:"+1 312-583-0333", placeId:"ChIJAf7ePOMtDogRxdmkmnpdIkA", lat:41.870264899999995, lng:-87.6272272, website:"https://honeyberrycafe.com/"},
+  {name:"LH Rooftop", category:"Brunch", address:"85 E Wacker Dr 22nd Floor, Chicago, IL 60601", phone:"+1 312-357-1200", placeId:"ChIJYTTn_a4sDogRVVaRtalmGH4", lat:41.8877738, lng:-87.6253083, website:"https://londonhousechicago.com/rooftop/?SEO_id=GMB--R-CHILHQQ&y_source=1_MjY1ODkzNDItNzE1LWxvY2F0aW9uLndlYnNpdGU%3D"},
+  {name:"Wake 'n Bacon", category:"Brunch", address:"420 W Belmont Ave, Chicago, IL 60657", phone:"+1 773-880-5100", placeId:"ChIJVXuId7HTD4gRpx9OtFIPatY", lat:41.94022090000001, lng:-87.6403387, website:"http://www.eatwakenbacon.com/", temporarilyClosed:true},
+  {name:"Row 24", category:"Brunch", address:"2411 S Michigan Ave, Chicago, IL 60616", phone:"+1 312-374-3165", placeId:"ChIJC4HiY3ksDogRt4-tsKWlStk", lat:41.84891700000001, lng:-87.62331300000001, website:"http://rowtwentyfour.com/"},
+  {name:"Truth Italian Restaurant", category:"Brunch", address:"56 E Pershing Rd, Chicago, IL 60653", phone:"+1 773-710-5365", placeId:"ChIJKR9GxQUsDogRHSqNxvqoG-c", lat:41.8239312, lng:-87.62424329999999, website:"https://truthchicago39.com/?utm_source=google"},
+  {name:"The Duplex", category:"Brunch", address:"3137 W Logan Blvd, Chicago, IL 60647", phone:"+1 773-923-0353", placeId:"ChIJPbAur-3ND4gRxHGvh-IIiP4", lat:41.927701, lng:-87.7063979, website:"https://theduplexchicago.com/"},
+  {name:"Recess", category:"Brunch", address:"838 W Kinzie St, Chicago, IL 60642", phone:"+1 312-801-1181", placeId:"ChIJgwIq-pAtDogRYRwi-mN7-NA", lat:41.8892853, lng:-87.6490594, website:"https://recesschicago.com/"},
+  {name:"ROOF on theWit", category:"Brunch", address:"201 N State St 27th Floor, Chicago, IL 60601", phone:"+1 312-239-9502", placeId:"ChIJH7aA-q8sDogREB67iM5kWks", lat:41.886041399999996, lng:-87.62762330000001, website:"http://www.roofonthewit.com/"},
+  {name:"First Watch", category:"Brunch", address:"1355 E Ogden Ave Suite 103, Naperville, IL 60563", phone:"+1 331-249-2296", placeId:"ChIJcSB9gmFXDogR3YQK8a6-viY", lat:41.7967594, lng:-88.1197949, website:"https://www.firstwatch.com/locations/naperville/?utm_source=gbp-listing&utm_medium=organic&utm_campaign=gbp-listing&utm_content=naperville"},
+  {name:"Tree House", category:"Brunch", address:"149 W Kinzie St, Chicago, IL 60654", phone:"+1 708-960-8449", placeId:"ChIJdWeDEQstDogRrRVXRRWkdAs", lat:41.8890599, lng:-87.6330242, website:"https://www.treehousechicago.com/"},
+  {name:"Yardbird", category:"Brunch", address:"530 N Wabash Ave, Chicago, IL 60654", phone:"+1 312-999-9760", placeId:"ChIJqxH3MW8tDogR0L1uFTO2IvQ", lat:41.891980800000006, lng:-87.62704289999999, website:"https://www.runchickenrun.com/location-page-chicago/"},
+  {name:"The Whale", category:"Brunch", address:"2427 N Milwaukee Ave, Chicago, IL 60647", phone:"+1 773-825-2900", placeId:"ChIJDZNgCZHND4gRP3VyXXbfYhY", lat:41.9254885, lng:-87.70119969999999, website:"http://thewhalechicago.com/"},
 ];
 
 async function enrichAddresses(){
@@ -3333,27 +3450,6 @@ async function removeClosedPlaces(){
   await saveVisits();
 }
 
-/* Desserts places used to carry one flat "Desserts" tag; now that they
-   have specific subtypes (Ice Cream / Bakery / Frozen Yogurt), drop the
-   old generic tag so it doesn't sit alongside the new one. Safe to
-   re-run — no-op once already migrated. */
-const DESSERT_RETAG_NAMES = [
-  "Nitro Nostalgia", "Classic Cobbler Cafe", "Pan Artesanal", "Panaderia La Central",
-  "La Central Bakery", "Forever Yogurt", "Shawn Michelle's Homemade Ice Cream",
-  "Legend Tasty House", "Molly's Cupcakes",
-];
-async function retagDesserts(){
-  let changed = false;
-  DESSERT_RETAG_NAMES.forEach(name=>{
-    const r = restaurants.find(x => x.name.toLowerCase() === name.toLowerCase());
-    if(r && r.categories && r.categories.includes('Desserts')){
-      r.categories = r.categories.filter(c => c !== 'Desserts');
-      changed = true;
-    }
-  });
-  if(changed) await saveRestaurants();
-}
-
 /* Cuisine tags dropped their redundant "Cuisine" suffix for a cleaner tag
    bar (e.g. "Italian Cuisine" -> "Italian"). Rename any already-stored
    long-form tags to the short form. Safe to re-run — no-op once migrated. */
@@ -3368,6 +3464,18 @@ const CUISINE_RENAMES = {
   'Cheesesteak': 'Sandwiches',
   'Bagel': 'Sandwiches',
   'Wrap': 'Sandwiches',
+  // Same rule as sandwiches: bakeries and ice cream shops are still
+  // desserts, and cocktail/tiki bars are still bars. Wine Bars and
+  // Sports Bars stay — those are real guides of Brianna's.
+  'Bakery': 'Desserts',
+  'Ice Cream': 'Desserts',
+  'Frozen Yogurt': 'Desserts',
+  'Pasta': 'Italian',
+  'Cocktail Bars': 'Bars',
+  'Tiki Bars': 'Bars',
+  // The library has separate breakfast and brunch guides — split the merged
+  // tag. Every spot that carried it is a breakfast-guide spot.
+  'Breakfast & Brunch': 'Breakfast',
 };
 async function renameCuisineTags(){
   let changed = false;
@@ -3392,6 +3500,13 @@ const REMOVED_TAGS_BY_NAME = {
   "Geja's Cafe": ["American"],
   "Soul Shack Express": ["Jamaican"], // it's soul food — mis-tagged in the original upload
   "Peach's Restaurant": ["Soul Food"], // breakfast spot — not in the soul guide
+  "Prime 57 Restaurant & Lounge": ["Jamaican"], // upscale American lounge — mis-tagged in the original upload
+  "Philly's Best": ["Pizza"], // cheesesteak shop — it's in the sandwiches guide, not the pizza guide
+  "NYC Halal Eats": ["Burgers"], // sandwiches-guide spot; Halal + Sandwiches cover it
+  // Bakeries by trade, but they live in the sandwiches / breakfast guides —
+  // keeps Desserts to the nine spots actually in the dessert guide.
+  "D'Amato's Bakery": ["Desserts"],
+  "Goddess and the Baker": ["Desserts"],
 };
 async function removeStrayTags(){
   let changed = false;
@@ -3420,8 +3535,11 @@ async function seedMenusFromVisits(){
 }
 
 /* One-time removal of listings that no longer belong (e.g. not an actual
-   restaurant). Safe to re-run — no-op once already removed. */
-const REMOVED_LISTING_NAMES = ["Burp Catering"];
+   restaurant). Safe to re-run — no-op once already removed.
+   (Burp Catering was once on this list as "just a caterer", but it's in
+   the sandwiches guide and Google confirms a storefront restaurant at
+   154 W 95th St — so it's back in.) */
+const REMOVED_LISTING_NAMES = [];
 async function removeRemovedListings(){
   const removeIds = new Set(
     restaurants.filter(r => REMOVED_LISTING_NAMES.some(n => n.toLowerCase() === r.name.toLowerCase())).map(r => r.id)
@@ -3439,7 +3557,6 @@ async function removeRemovedListings(){
   await seedIfNeeded();
   await enrichAddresses();
   await removeClosedPlaces();
-  await retagDesserts();
   await renameCuisineTags();
   await removeStrayTags();
   await removeRemovedListings();
