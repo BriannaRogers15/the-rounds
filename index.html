@@ -551,6 +551,14 @@ h1{
   background:#fff;
 }
 
+.gem-badge{
+  position:absolute; top:8px; left:10px;
+  font-size:14px; z-index:2;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  pointer-events:none;
+}
+.ticket{ position:relative; }
+
 .empty{
   text-align:center; padding: 60px 20px; color: var(--cream-dim);
   border: 1px dashed var(--hairline); border-radius: 12px;
@@ -837,6 +845,7 @@ h1{
           <input type="text" id="searchBox" class="search-box" placeholder="Search your listings…">
         </div>
         <button class="filter-chip" id="unvisitedToggle">Haven't been yet</button>
+        <button class="filter-chip" id="gemsToggle">💎 Gems</button>
         <div class="tools-divider"></div>
         <div class="seg-group">
           <span class="seg-label">Sort</span>
@@ -878,6 +887,7 @@ let userLocation = null;
 let locationRequested = false;
 let searchQuery = '';
 let unvisitedOnly = false;
+let gemsOnly = false;
 let viewMode = 'grid';
 let leafletMap = null;
 let mapRenderToken = 0;
@@ -1114,10 +1124,17 @@ function groupForTag(tag){
   if(/bar/i.test(tag)) return 'Bars';
   return null;
 }
+/* Badge tags mark a property of a restaurant (a staple, a gem) rather than
+   a category — they render as a 💎 corner badge + a tools-row filter,
+   never as a guide in the rail or a chip on the card. */
+const BADGE_TAGS = new Set(['Chicago Gems']);
+function isGem(r){ return (r.categories || []).includes('Chicago Gems'); }
+
 function topLevelLabels(){
   const cats = categories();
   const labels = new Set();
   cats.forEach(c=>{
+    if(BADGE_TAGS.has(c)) return;
     const g = groupForTag(c);
     labels.add(g || c);
   });
@@ -1135,7 +1152,7 @@ function childTagsOf(group){
    editable tag row in the detail modal, since a synthesized parent tag
    has no real delete action behind it. */
 function displayTags(categories){
-  const tags = categories || [];
+  const tags = (categories || []).filter(t => !BADGE_TAGS.has(t));
   const parents = [];
   tags.forEach(t=>{
     const parent = groupForTag(t);
@@ -1608,6 +1625,7 @@ const TAG_ICON = {
   // Group/guide labels — every rail entry gets a real icon, never the 🍴 fallback.
   'asian': '🥢', 'caribbean': '🏝️', 'european': '🇪🇺', 'latin american': '🌮',
   'sandwiches': '🥪', 'special events': '🎉', 'chicago gems': '💎',
+  'wine bars': '🍷',
   'thai': '🇹🇭', 'vietnamese': '🇻🇳',
 };
 function tagIcon(tag){
@@ -1667,6 +1685,9 @@ function getFilteredSortedList(){
   if(unvisitedOnly){
     list = list.filter(r => visitsFor(r.id).length === 0);
   }
+  if(gemsOnly){
+    list = list.filter(isGem);
+  }
   return sortRestaurants(list);
 }
 
@@ -1696,6 +1717,7 @@ function renderContent(){
     const distTxt = showDist ? distanceMiles(userLocation.lat, userLocation.lng, r.lat, r.lng).toFixed(1) + ' mi' : null;
     return `
       <div class="ticket" data-id="${r.id}">
+        ${isGem(r) ? `<div class="gem-badge" title="Chicago Gem">💎</div>` : ''}
         ${visited ? `<div class="stamp"><svg viewBox="-4 -4 8 8" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/></svg>VISITED</div>` : ''}
         <div class="ticket-tags">${tags.map(t=>`<span class="card-tag">${tagIcon(t)} ${escapeHtml(singularizeTag(t))}</span>`).join('')}</div>
         <div class="ticket-name">${r.website
@@ -1966,6 +1988,7 @@ function areaStats(area){
   const visited = list.filter(r => visitsFor(r.id).length > 0).length;
   const iconCounts = {};
   list.forEach(r => (r.categories || []).forEach(t=>{
+    if(BADGE_TAGS.has(t)) return;
     const icon = tagIcon(t);
     iconCounts[icon] = (iconCounts[icon] || 0) + 1;
   }));
@@ -2732,6 +2755,12 @@ $('#unvisitedToggle').addEventListener('click', ()=>{
   renderContent();
 });
 
+$('#gemsToggle').addEventListener('click', ()=>{
+  gemsOnly = !gemsOnly;
+  $('#gemsToggle').classList.toggle('active', gemsOnly);
+  renderContent();
+});
+
 $$('#viewOpts button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     viewMode = btn.dataset.view;
@@ -2968,6 +2997,77 @@ const SEED_RESTAURANTS = [
   {name:"Litehouse Whole Food Grill", category:"Italian", address:"Chicago, IL"},
   {name:"Tre Dita", category:"Italian", address:"Chicago, IL"},
   {name:"Tre Dita", category:"Pasta", address:"Chicago, IL"},
+  // --- Batch 1 from Brianna's guide screenshots (2026-07-11): mexican, gems, winery, soul + Chant ---
+  {name:"Flaco's Tacos", category:"Mexican", address:"725 S Dearborn St, Chicago, IL 60605"},
+  {name:"Taqueria El Milagro", category:"Mexican", address:"3050 W 26th St, Chicago, IL 60623"},
+  {name:"Taqueria Varitas", category:"Mexican", address:"700 E 47th St Unit b, Chicago, IL 60653"},
+  {name:"Pearls & Roses", category:"Mexican", address:"14636 Pulaski Rd, Midlothian, IL 60445"},
+  {name:"Mercadito", category:"Mexican", address:"108 W Kinzie St, Chicago, IL 60654"},
+  {name:"Taco Max Mexican Grill", category:"Mexican", address:"3402 W Montrose Ave, Chicago, IL 60618"},
+  {name:"La Pasadita", category:"Mexican", address:"1140 N Ashland Ave, Chicago, IL 60622"},
+  {name:"Mi Tierra En La Villita", category:"Mexican", address:"2528 S Kedzie Ave, Chicago, IL 60623"},
+  {name:"Martinez Mexican Bar & Grill", category:"Mexican", address:"3301 S Morgan St, Chicago, IL 60608"},
+  {name:"La Mejikana", category:"Mexican", address:"1820 S Ashland Ave, Chicago, IL 60608"},
+  {name:"La Catrina Restaurant", category:"Mexican", address:"3924 W Diversey Ave, Chicago, IL 60647"},
+  {name:"Tacos El Rey", category:"Mexican", address:"9625 S Ewing Ave, Chicago, IL 60617"},
+  {name:"Fuerte Tacos & Ice Cream", category:"Mexican", address:"331 E Glenwood Lansing Rd, Glenwood, IL 60425"},
+  {name:"La Caba\u00f1a Midlothian", category:"Mexican", address:"4038 147th St, Midlothian, IL 60445"},
+  {name:"Tacotlan", category:"Mexican", address:"4312 W Fullerton Ave, Chicago, IL 60639"},
+  {name:"QuesaBirria Jalisco Pilsen", category:"Mexican", address:"1314 W 18th St, Chicago, IL 60608"},
+  {name:"Antique Taco Bridgeport", category:"Mexican", address:"1000 W 35th St, Chicago, IL 60609"},
+  {name:"Los Tacos & Desserts", category:"Mexican", address:"8548 S Commercial Ave, Chicago, IL 60617"},
+  {name:"Tequila CJ Cantina Grill", category:"Mexican", address:"5750 S Archer Ave, Chicago, IL 60638"},
+  {name:"Bar Tabu", category:"Mexican", address:"401 N Morgan St, Chicago, IL 60642"},
+  {name:"MiMi's Craft Kitchen", category:"Mexican", address:"1352 W Taylor St, Chicago, IL 60607"},
+  {name:"Birrieria Zaragoza", category:"Mexican", address:"4800 N Broadway, Chicago, IL 60640"},
+  {name:"El G-Fe", category:"Mexican", address:"4253 W 47th St, Chicago, IL 60632"},
+  {name:"La Mexicana Grill", category:"Mexican", address:"3731 N Clark St Unit 1, Chicago, IL 60613"},
+  {name:"Tastee Rolls", category:"Chicago Gems", address:"130 E 79th St, Chicago, IL 60619"},
+  {name:"Watta Potato by Yogis Bistro", category:"Chicago Gems", address:"5202 W Washington Blvd, Chicago, IL 60644"},
+  {name:"Chicago Wingz Around The World", category:"Chicago Gems", address:"108 E 47th St, Chicago, IL 60653"},
+  {name:"Chicago Wingz Around The World", category:"Chicken", address:"108 E 47th St, Chicago, IL 60653"},
+  {name:"Fred and Jack's", category:"Chicago Gems", address:"7600 S Yale Ave, Chicago, IL 60620"},
+  {name:"Italian Fiesta Pizzeria", category:"Chicago Gems", address:"1919 E 71st St, Chicago, IL 60649"},
+  {name:"Italian Fiesta Pizzeria", category:"Pizza", address:"1919 E 71st St, Chicago, IL 60649"},
+  {name:"Beggars Pizza", category:"Chicago Gems", address:"8100 S Stony Island Ave, Chicago, IL 60617"},
+  {name:"Beggars Pizza", category:"Pizza", address:"8100 S Stony Island Ave, Chicago, IL 60617"},
+  {name:"Hienie's Shrimp House", category:"Chicago Gems", address:"10359 S Torrence Ave, Chicago, IL 60617"},
+  {name:"Hienie's Shrimp House", category:"Chicken", address:"10359 S Torrence Ave, Chicago, IL 60617"},
+  {name:"Hienie's Shrimp House", category:"Seafood", address:"10359 S Torrence Ave, Chicago, IL 60617"},
+  {name:"Sharks Fish & Chicken", category:"Chicago Gems", address:"35 E 59th St, Chicago, IL 60637"},
+  {name:"Sharks Fish & Chicken", category:"Seafood", address:"35 E 59th St, Chicago, IL 60637"},
+  {name:"Sharks Fish & Chicken", category:"Chicken", address:"35 E 59th St, Chicago, IL 60637"},
+  {name:"Harold's Chicken Hyde Park", category:"Chicago Gems", address:"Kimbark Plaza Parking Lot, 1208 E 53rd St, Chicago, IL 60615"},
+  {name:"Harold's Chicken Hyde Park", category:"Chicken", address:"Kimbark Plaza Parking Lot, 1208 E 53rd St, Chicago, IL 60615"},
+  {name:"Union Submarine Shop", category:"Chicago Gems", address:"110 E 51st St, Chicago, IL 60615"},
+  {name:"Union Submarine Shop", category:"Sandwiches", address:"110 E 51st St, Chicago, IL 60615"},
+  {name:"Tony's Original Phillysteak", category:"Chicago Gems", address:"1413 W 127th St, Calumet Park, IL 60827"},
+  {name:"Tony's Original Phillysteak", category:"Sandwiches", address:"1413 W 127th St, Calumet Park, IL 60827"},
+  {name:"Tony's Original Phillysteak", category:"Seafood", address:"1413 W 127th St, Calumet Park, IL 60827"},
+  {name:"Captain Hooks", category:"Chicago Gems", address:"601 E 79th St, Chicago, IL 60619"},
+  {name:"Captain Hooks", category:"Seafood", address:"601 E 79th St, Chicago, IL 60619"},
+  {name:"Captain Hooks", category:"Chicken", address:"601 E 79th St, Chicago, IL 60619"},
+  {name:"Cork + Oak", category:"Wine Bars", address:"18155 Roy St, Lansing, IL 60438"},
+  {name:"Bronzeville Winery", category:"Wine Bars", address:"4420 S Cottage Grove Ave, Chicago, IL 60653"},
+  {name:"Chicago Winery", category:"Wine Bars", address:"739 N Clark St, Chicago, IL 60654"},
+  {name:"City Winery Chicago Riverwalk", category:"Wine Bars", address:"11 W Riverwalk, Chicago, IL 60601"},
+  {name:"S.L Wine Bar", category:"Wine Bars", address:"3224 Ridge Rd Ste 105, Lansing, IL 60438"},
+  {name:"Cooper's Hawk Winery & Restaurant", category:"Wine Bars", address:"950 Lake St, Oak Park, IL 60301"},
+  {name:"Luella's Southern Kitchen", category:"Soul Food", address:"4114 N Kedzie Ave, Chicago, IL 60618"},
+  {name:"Wishbone", category:"Soul Food", address:"161 N Jefferson St, Chicago, IL 60661"},
+  {name:"Shake A Leg", category:"Soul Food", address:"5512 W Division St, Chicago, IL 60651"},
+  {name:"Storyville Chicago", category:"Soul Food", address:"712 N Clark St, Chicago, IL 60654"},
+  {name:"Virtue Restaurant", category:"Soul Food", address:"1462 E 53rd St, Chicago, IL 60615"},
+  {name:"The Barrel Club", category:"Soul Food", address:"4910 W 111th St, Oak Lawn, IL 60453"},
+  {name:"Daisy's Po-Boy and Tavern", category:"Soul Food", address:"5215 S Harper Ave, Chicago, IL 60615"},
+  {name:"Cleo's - Bronzeville", category:"Soul Food", address:"4248 S Cottage Grove Ave, Chicago, IL 60653"},
+  {name:"Soul Vibez - Orland Park", category:"Soul Food", address:"24 Orland Square Dr, Orland Park, IL 60462"},
+  {name:"Chant", category:"Asian Fusion", address:"1509 E 53rd St, Chicago, IL 60615"},
+  {name:"Portillo's", category:"Chicago Gems", address:"Chicago, IL"},
+  {name:"LEM'S Bar-B-Q", category:"Chicago Gems", address:"Chicago, IL"},
+  {name:"Maxwell Street Depot", category:"Chicago Gems", address:"Chicago, IL"},
+  {name:"Philly's Original Steak & Lemonade", category:"Chicago Gems", address:"Chicago, IL"},
+  {name:"Frasca Pizzeria + Wine Bar", category:"Wine Bars", address:"Chicago, IL"},
 ];
 
 async function seedIfNeeded(){
@@ -3142,6 +3242,59 @@ const ADDRESS_LOOKUP = [
   {name:"Canal Street Eatery & Market", category:"Italian", address:"314 S Canal St, Chicago, IL 60606", phone:"+1 312-967-6060", placeId:"ChIJ16YJsywtDogRnFIYuZ4DqRk", lat:41.877212, lng:-87.6400529, website:"https://canalstreetchicago.com/"},
   {name:"Litehouse Whole Food Grill", category:"Italian", address:"1368 E 53rd St, Chicago, IL 60615", phone:"+1 773-633-2587", placeId:"ChIJjbP4OmwpDogR0oe0J_y_Fag", lat:41.7996654, lng:-87.5924207, website:"https://litehousewholefoodgrill.com/"},
   {name:"Tre Dita", category:"Italian", address:"401 E Wacker Dr, Chicago, IL 60601", phone:"+1 312-725-1724", placeId:"ChIJpTZfhUUrDogRsMadd7b4mek", lat:41.8873909, lng:-87.61733, website:"https://www.treditarestaurant.com/"},
+  // --- Batch 1 lookups (verified via Places API 2026-07-11) ---
+  {name:"Flaco's Tacos", category:"Mexican", address:"725 S Dearborn St, Chicago, IL 60605", phone:"+1 312-922-8226", placeId:"ChIJhRFgd5csDogRnLQgyTqKy-0", lat:41.8727352, lng:-87.6289697, website:"http://www.flacostacosonline.com/"},
+  {name:"Taqueria El Milagro", category:"Mexican", address:"3050 W 26th St, Chicago, IL 60623", phone:"+1 773-847-9407", placeId:"ChIJM_hwKncyDogR4M0INwQVLHI", lat:41.8447191, lng:-87.7022288, website:"https://el-milagro.com/"},
+  {name:"Taqueria Varitas", category:"Mexican", address:"700 E 47th St Unit b, Chicago, IL 60653", phone:"+1 872-244-3360", placeId:"ChIJ8dnmB1opDogRJ8gyXD6qGgE", lat:41.8098326, lng:-87.6086974, website:"https://www.facebook.com/TaqueriaVaritas/"},
+  {name:"Pearls & Roses", category:"Mexican", address:"14636 Pulaski Rd, Midlothian, IL 60445", phone:"+1 708-937-4811", placeId:"ChIJM4q6ZnY9DogRcxyn0K4fKGQ", lat:41.6264325, lng:-87.7182237},
+  {name:"Mercadito", category:"Mexican", address:"108 W Kinzie St, Chicago, IL 60654", phone:"+1 312-329-9555", placeId:"ChIJ3waAcrEsDogRpVNpOKMTLz8", lat:41.889377499999995, lng:-87.6315984, website:"https://www.mercaditorivernorth.com/"},
+  {name:"Taco Max Mexican Grill", category:"Mexican", address:"3402 W Montrose Ave, Chicago, IL 60618", phone:"+1 872-208-7002", placeId:"ChIJu4GqQSfND4gR2av163Bc7r4", lat:41.961319599999996, lng:-87.7134236, website:"http://www.tacomax-grill.com/"},
+  {name:"La Pasadita", category:"Mexican", address:"1140 N Ashland Ave, Chicago, IL 60622", phone:"+1 773-278-2130", placeId:"ChIJgXLY3tHSD4gRzRO4g7Ljdhk", lat:41.902704799999995, lng:-87.66785209999999, website:"http://lapasaditachicago.com/"},
+  {name:"Mi Tierra En La Villita", category:"Mexican", address:"2528 S Kedzie Ave, Chicago, IL 60623", phone:"+1 773-254-7722", placeId:"ChIJHeG9WXAyDogRi0B71-Fx2mQ", lat:41.845389, lng:-87.705438, website:"https://www.mitierraenlavillita.com/"},
+  {name:"Martinez Mexican Bar & Grill", category:"Mexican", address:"3301 S Morgan St, Chicago, IL 60608", phone:"+1 773-254-4048", placeId:"ChIJJde-SzYsDogRRUm3_4WtgJs", lat:41.834672999999995, lng:-87.65092, website:"http://martinezmexicanbargrill.com/"},
+  {name:"La Mejikana", category:"Mexican", address:"1820 S Ashland Ave, Chicago, IL 60608", phone:"+1 312-877-5400", placeId:"ChIJt7tUSpUtDogRPopzhXfm3Nk", lat:41.8571111, lng:-87.6664547, website:"http://lamejikana.com/"},
+  {name:"La Catrina Restaurant", category:"Mexican", address:"3924 W Diversey Ave, Chicago, IL 60647", phone:"+1 773-772-9566", placeId:"ChIJp21mqATND4gRAw3DH3ZTDwU", lat:41.931979, lng:-87.725614, website:"https://lcatrina.com/"},
+  {name:"Tacos El Rey", category:"Mexican", address:"9625 S Ewing Ave, Chicago, IL 60617", phone:"+1 773-359-6007", placeId:"ChIJr29y6G3ZEYgRyFITagi6yw0", lat:41.7205576, lng:-87.5350302, website:"https://tacoselreychicago.com/"},
+  {name:"Fuerte Tacos & Ice Cream", category:"Mexican", address:"331 E Glenwood Lansing Rd, Glenwood, IL 60425", phone:"+1 708-996-4026", placeId:"ChIJiUHBjRYfDogRtOpuaD-7SpE", lat:41.5431007, lng:-87.60324729999999},
+  {name:"La Caba\u00f1a Midlothian", category:"Mexican", address:"4038 147th St, Midlothian, IL 60445", phone:"+1 708-629-0116", placeId:"ChIJP8XX6y49DogRVfeJLHrozfQ", lat:41.625808, lng:-87.719296, website:"https://www.toasttab.com/la-cabana-midlothian/v3"},
+  {name:"Tacotlan", category:"Mexican", address:"4312 W Fullerton Ave, Chicago, IL 60639", phone:"+1 773-666-5259", placeId:"ChIJ__9jqh3ND4gRyXxBP4BY1Tk", lat:41.9246009, lng:-87.7346719, website:"https://www.tacotlan.com/"},
+  {name:"QuesaBirria Jalisco Pilsen", category:"Mexican", address:"1314 W 18th St, Chicago, IL 60608", phone:"+1 773-771-2123", placeId:"ChIJe-XHyHwtDogRUZiww0tON24", lat:41.8579953, lng:-87.65954769999999, website:"https://visit-chicago.com/birria-tacos-consome-quesabirria/"},
+  {name:"Antique Taco Bridgeport", category:"Mexican", address:"1000 W 35th St, Chicago, IL 60609", phone:"+1 773-823-9410", placeId:"ChIJ08HsADQsDogRho4n0e-e9ws", lat:41.8309356, lng:-87.6512837, website:"http://www.antiquetaco.com/"},
+  {name:"Los Tacos & Desserts", category:"Mexican", address:"8548 S Commercial Ave, Chicago, IL 60617", phone:"+1 773-359-4000", placeId:"ChIJB27IyRIpDogR1GH_CLBSnqI", lat:41.739610000000006, lng:-87.5517287},
+  {name:"Tequila CJ Cantina Grill", category:"Mexican", address:"5750 S Archer Ave, Chicago, IL 60638", phone:"+1 773-284-7555", placeId:"ChIJ50khaxUxDogRLdBUZLBj_IY", lat:41.796811299999995, lng:-87.75652869999999, website:"https://tequilacjcantinagrill.com/#menu"},
+  {name:"Bar Tabu", category:"Mexican", address:"401 N Morgan St, Chicago, IL 60642", phone:"+1 773-453-8228", placeId:"ChIJ3SQfZostDogRkbF-frfXxcE", lat:41.889137, lng:-87.65213639999999, website:"https://www.bartabu.com/", temporarilyClosed:true},
+  {name:"MiMi's Craft Kitchen", category:"Mexican", address:"1352 W Taylor St, Chicago, IL 60607", phone:"+1 312-929-3775", placeId:"ChIJrxfIkO0tDogRRslQVLwWc5c", lat:41.869527399999996, lng:-87.6611392, website:"https://mimiscraftkitchen.com/?utm_source=google"},
+  {name:"Birrieria Zaragoza", category:"Mexican", address:"4800 N Broadway, Chicago, IL 60640", phone:"+1 773-334-5650", placeId:"ChIJ7ZHO3TrTD4gRf8g3wnmwf18", lat:41.9691446, lng:-87.65989139999999, website:"https://www.birrieriazaragoza.com/"},
+  {name:"El G-Fe", category:"Mexican", address:"4253 W 47th St, Chicago, IL 60632", phone:"+1 773-565-4669", placeId:"ChIJN37t4dMxDogRUnhvV245uI4", lat:41.8076547, lng:-87.73053639999999, website:"https://www.toasttab.com/local/order/el-g-fe-47-new/r-6ca783a2-b245-42ab-89e6-2ebb2feb4e88"},
+  {name:"La Mexicana Grill", category:"Mexican", address:"3731 N Clark St Unit 1, Chicago, IL 60613", phone:"+1 773-857-0606", placeId:"ChIJzWShToLTD4gRbNK9Ec9v4Mw", lat:41.9498727, lng:-87.6583847, website:"https://lamexicanagrill.com/lamexicanagrill?utm_source=google"},
+  {name:"Tastee Rolls", category:"Chicago Gems", address:"130 E 79th St, Chicago, IL 60619", phone:"+1 773-966-6080", placeId:"ChIJM98UOqovDogRt8L54OhqR5w", lat:41.7512017, lng:-87.6200684, website:"https://www.tasteerolls.com/locations/chicago"},
+  {name:"Watta Potato by Yogis Bistro", category:"Chicago Gems", address:"5202 W Washington Blvd, Chicago, IL 60644", phone:"+1 773-413-7048", placeId:"ChIJ_3y6oCszDogRQMedVkJqey8", lat:41.8825712, lng:-87.7554017, website:"https://wattapotato.com/?utm_source=google"},
+  {name:"Chicago Wingz Around The World", category:"Chicago Gems", address:"108 E 47th St, Chicago, IL 60653", phone:"+1 773-952-4789", placeId:"ChIJlXphUWYvDogR3DXSwLDUUQQ", lat:41.8094597, lng:-87.6223192, website:"https://www.chicagowingzaroundtheworldmenu.com/"},
+  {name:"Fred and Jack's", category:"Chicago Gems", address:"7600 S Yale Ave, Chicago, IL 60620", phone:"+1 773-783-9700", placeId:"ChIJy5lKqC8vDogRAUyZ4Sl-rbY", lat:41.7561658, lng:-87.6316858, website:"https://order.online/business/fred-jacks-172927"},
+  {name:"Italian Fiesta Pizzeria", category:"Chicago Gems", address:"1919 E 71st St, Chicago, IL 60649", phone:"+1 773-684-2222", placeId:"ChIJKYOjlFcoDogRnVJsYQgS2_w", lat:41.7659521, lng:-87.57772229999999, website:"http://italianfiestapizzeria.com/"},
+  {name:"Beggars Pizza", category:"Chicago Gems", address:"8100 S Stony Island Ave, Chicago, IL 60617", phone:"+1 773-221-2500", placeId:"ChIJ74dhAY8oDogRHcLBOY_EdXA", lat:41.7476269, lng:-87.5863463, website:"https://www.beggarspizza.com/"},
+  {name:"Hienie's Shrimp House", category:"Chicago Gems", address:"10359 S Torrence Ave, Chicago, IL 60617", phone:"+1 773-734-8400", placeId:"ChIJuyFmYb0nDogRHttuw-bz7c0", lat:41.7065604, lng:-87.5593596, website:"http://www.hienieschicken.com/"},
+  {name:"Sharks Fish & Chicken", category:"Chicago Gems", address:"35 E 59th St, Chicago, IL 60637", phone:"+1 773-952-6870", placeId:"ChIJH7MvyPkvDogRVWNl2OEHLXI", lat:41.7871533, lng:-87.624152},
+  {name:"Harold's Chicken Hyde Park", category:"Chicago Gems", address:"Kimbark Plaza Parking Lot, 1208 E 53rd St, Chicago, IL 60615", phone:"+1 773-752-9270", placeId:"ChIJh_2702spDogR41jhyNK4rfs", lat:41.8000542, lng:-87.5960602, website:"http://haroldschickenhydepark.com/"},
+  {name:"Union Submarine Shop", category:"Chicago Gems", address:"110 E 51st St, Chicago, IL 60615", phone:"+1 773-373-2040", placeId:"ChIJkQa1MfwvDogRoWgb3-g39yU", lat:41.8021404, lng:-87.6220733},
+  {name:"Tony's Original Phillysteak", category:"Chicago Gems", address:"1413 W 127th St, Calumet Park, IL 60827", phone:"+1 708-389-3001", placeId:"ChIJ6ek3xX0kDogR6E0-MspMU4Q", lat:41.662655099999995, lng:-87.6566102, website:"https://www.tonysphillysteaksharksfish.com/"},
+  {name:"Captain Hooks", category:"Chicago Gems", address:"601 E 79th St, Chicago, IL 60619", phone:"+1 773-723-7788", placeId:"ChIJ3VAWNrcoDogRh8PKtE4TYzw", lat:41.7508333, lng:-87.6097222},
+  {name:"Cork + Oak", category:"Wine Bars", address:"18155 Roy St, Lansing, IL 60438", phone:"+1 708-251-5394", placeId:"ChIJ8S6nCQ7hEYgR1E8z6gT-rqQ", lat:41.5649443, lng:-87.53676519999999, website:"http://www.thecorkandoak.com/"},
+  {name:"Bronzeville Winery", category:"Wine Bars", address:"4420 S Cottage Grove Ave, Chicago, IL 60653", phone:"+1 872-244-7065", placeId:"ChIJLZ2WbDwpDogR2A7JbXKusW8", lat:41.8142125, lng:-87.6069522, website:"https://www.bronzevillewinery.com/"},
+  {name:"Chicago Winery", category:"Wine Bars", address:"739 N Clark St, Chicago, IL 60654", phone:"+1 312-763-3674", placeId:"ChIJJ5wNQDnTD4gRzzlRcOX99ZA", lat:41.8959927, lng:-87.63090869999999, website:"https://www.chiwinery.com/"},
+  {name:"City Winery Chicago Riverwalk", category:"Wine Bars", address:"11 W Riverwalk, Chicago, IL 60601", phone:"+1 312-229-5593", placeId:"ChIJ116KJrAsDogRRLCYua_pQuE", lat:41.887051799999995, lng:-87.6288472, website:"https://citywinery.com/pages/locations/riverwalk"},
+  {name:"S.L Wine Bar", category:"Wine Bars", address:"3224 Ridge Rd Ste 105, Lansing, IL 60438", phone:"+1 708-251-5014", placeId:"ChIJy_DMZw7hEYgROv5pV3MtOM8", lat:41.5650974, lng:-87.5385381, website:"http://slwinebar.com/"},
+  {name:"Cooper's Hawk Winery & Restaurant", category:"Wine Bars", address:"950 Lake St, Oak Park, IL 60301", phone:"+1 708-613-2999", placeId:"ChIJHzZbocg0DogRCXhCAB0ZcGM", lat:41.888824799999995, lng:-87.79988089999999, website:"https://chwinery.com/locations/illinois/oak-park-il"},
+  {name:"Luella's Southern Kitchen", category:"Soul Food", address:"4114 N Kedzie Ave, Chicago, IL 60618", phone:"+1 773-961-8196", placeId:"ChIJU-kDchDSD4gRDWNk-3qo3jA", lat:41.9562434, lng:-87.7083459, website:"https://www.luellassouthernkitchen.com/"},
+  {name:"Wishbone", category:"Soul Food", address:"161 N Jefferson St, Chicago, IL 60661", phone:"+1 312-850-2663", placeId:"ChIJ9UWPMNosDogR63ijWQvYXqM", lat:41.8850445, lng:-87.6424621, website:"https://www.wishbonechicago.com/"},
+  {name:"Shake A Leg", category:"Soul Food", address:"5512 W Division St, Chicago, IL 60651", phone:"+1 773-887-5459", placeId:"ChIJH31z2ITND4gR_o7Oqydi1BY", lat:41.9023415, lng:-87.7644559, website:"https://shakealeg.squarespace.com/"},
+  {name:"Storyville Chicago", category:"Soul Food", address:"712 N Clark St, Chicago, IL 60654", phone:"+1 872-279-3331", placeId:"ChIJy-bfKmctDogRgkWuRiriCTw", lat:41.8952564, lng:-87.63154449999999, website:"https://storyvillechicago.com/"},
+  {name:"Virtue Restaurant", category:"Soul Food", address:"1462 E 53rd St, Chicago, IL 60615", phone:"+1 773-947-8831", placeId:"ChIJdQBzqFMpDogRblcUhYQDPu0", lat:41.7996669, lng:-87.58925149999999, website:"https://www.virtuerestaurant.com/"},
+  {name:"The Barrel Club", category:"Soul Food", address:"4910 W 111th St, Oak Lawn, IL 60453", phone:"+1 708-581-3357", placeId:"ChIJvS__4HA7DogRoHRQNH3mqEk", lat:41.691836099999996, lng:-87.7426911, website:"http://www.barrelclubillinois.com/"},
+  {name:"Daisy's Po-Boy and Tavern", category:"Soul Food", address:"5215 S Harper Ave, Chicago, IL 60615", phone:"+1 773-675-8767", placeId:"ChIJ-2GXX28pDogR8oof0wT6oOs", lat:41.800488099999995, lng:-87.58893289999999, website:"http://www.daisyspoboychicago.com/"},
+  {name:"Cleo's - Bronzeville", category:"Soul Food", address:"4248 S Cottage Grove Ave, Chicago, IL 60653", phone:"+1 773-575-7120", placeId:"ChIJM-CYYugrDogRllsDrW7ZCMk", lat:41.8171113, lng:-87.6070765, website:"http://www.cleos.com/"},
+  {name:"Soul Vibez - Orland Park", category:"Soul Food", address:"24 Orland Square Dr, Orland Park, IL 60462", phone:"+1 708-645-4031", placeId:"ChIJw2MpZW8_DogRA33puh7HK1Q", lat:41.6206049, lng:-87.852942, website:"https://soulvibezinc.com/soulvibez?utm_source=google"},
+  {name:"Chant", category:"Asian Fusion", address:"1509 E 53rd St, Chicago, IL 60615", phone:"+1 773-324-1999", placeId:"ChIJLbMUBnIpDogRqrlyV8CQOBQ", lat:41.7994033, lng:-87.5886494, website:"https://www.chantchicago.com/"},
 ];
 
 async function enrichAddresses(){
@@ -3238,6 +3391,7 @@ const REMOVED_TAGS_BY_NAME = {
   "VU Rooftop": ["Tapas"],
   "Geja's Cafe": ["American"],
   "Soul Shack Express": ["Jamaican"], // it's soul food — mis-tagged in the original upload
+  "Peach's Restaurant": ["Soul Food"], // breakfast spot — not in the soul guide
 };
 async function removeStrayTags(){
   let changed = false;
