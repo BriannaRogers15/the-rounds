@@ -2928,7 +2928,6 @@ const SEED_RESTAURANTS = [
   // Jamaican (3)
   {name:"Jamaican Gates Restaurant", category:"Jamaican", address:"Chicago, IL"},
   {name:"Exclusive Jerk Caribbean Restaurant", category:"Jamaican", address:"Chicago Heights, IL"},
-  {name:"Soul Shack Express", category:"Jamaican", address:"Chicago, IL"},
   {name:"Soul Shack Express", category:"Soul Food", address:"Chicago, IL"},
   // Pizza (16, Williams Inn already on file)
   {name:"LaCoco's Pizza and Sports Club", category:"Pizza", address:"Chicago, IL"},
@@ -3229,7 +3228,11 @@ async function renameCuisineTags(){
 /* One-time removal of a single stray tag ("Tapas" doesn't cleanly describe
    VU Rooftop, which is better represented by its "American" tag alone).
    Safe to re-run — no-op once already migrated. */
-const REMOVED_TAGS_BY_NAME = { "VU Rooftop": ["Tapas"], "Geja's Cafe": ["American"] };
+const REMOVED_TAGS_BY_NAME = {
+  "VU Rooftop": ["Tapas"],
+  "Geja's Cafe": ["American"],
+  "Soul Shack Express": ["Jamaican"], // it's soul food — mis-tagged in the original upload
+};
 async function removeStrayTags(){
   let changed = false;
   Object.entries(REMOVED_TAGS_BY_NAME).forEach(([name, tagsToRemove])=>{
