@@ -11,8 +11,6 @@
 <meta name="apple-mobile-web-app-title" content="The Rounds">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
   (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
     key: "AIzaSyAVZ64YRjaRdOjardWtmbvZ8z_5AWF6DdA",
@@ -402,6 +400,19 @@ h1{
   display:flex; align-items:flex-end; justify-content:space-between; gap:12px;
   flex-wrap:wrap; margin-bottom:14px;
 }
+.data-row{
+  display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+  margin-top: 10px; padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 11px; color: var(--cream-dim);
+}
+.link-btn{
+  background:none; border:none; cursor:pointer; padding:0;
+  font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.5px;
+  color: var(--flag-blue-bright);
+}
+.link-btn:hover{ text-decoration:underline; }
+
 .areas-title{ font-family:'Oswald', sans-serif; font-weight:700; font-size:22px; color: var(--cream); }
 .areas-sub{ font-size:12px; color: var(--cream-dim); margin-top:3px; }
 .areas-head-actions{ display:flex; gap:8px; }
@@ -944,6 +955,51 @@ function activeProfile(){
   return profiles.find(p => p.id === activeProfileId) || null;
 }
 
+/* ---------- Backup / restore ----------
+   Everything lives in this browser's localStorage — one "Clear Website
+   Data" would erase every visit ever logged. Export writes the whole
+   ledger to a JSON file; restore replaces this device's data with it. */
+function exportBackup(){
+  const payload = {
+    app: 'the-rounds',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    restaurants, visits, profiles, activeProfileId,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `the-rounds-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 5000);
+}
+async function importBackup(file){
+  let data;
+  try{ data = JSON.parse(await file.text()); }
+  catch(e){ alert("That file isn't readable as a backup."); return; }
+  if(data.app !== 'the-rounds' || !Array.isArray(data.restaurants) || !Array.isArray(data.visits)){
+    alert("That file doesn't look like a The Rounds backup.");
+    return;
+  }
+  const summary = `${data.restaurants.length} listings, ${data.visits.length} visits, ${(data.profiles||[]).length} reviewer${(data.profiles||[]).length===1?'':'s'}`;
+  if(!confirm(`Restore this backup (${summary})? It replaces everything currently on this device.`)) return;
+  restaurants = data.restaurants;
+  visits = data.visits;
+  profiles = Array.isArray(data.profiles) ? data.profiles : [];
+  activeProfileId = data.activeProfileId && profiles.some(p=>p.id===data.activeProfileId)
+    ? data.activeProfileId
+    : (profiles[0] ? profiles[0].id : null);
+  await saveRestaurants();
+  await saveVisits();
+  await saveProfiles();
+  // Backups from before the area fields existed still restore cleanly.
+  await assignAreas();
+  if(hoodGeo) await assignNeighborhoods(hoodGeo);
+  renderAll();
+}
+
 function visitsFor(restaurantId){
   return visits.filter(v => v.restaurantId === restaurantId).sort((a,b)=> b.date.localeCompare(a.date));
 }
@@ -1423,10 +1479,13 @@ function tagIcon(tag){
   return TAG_ICON[tag.toLowerCase()] || '🍴';
 }
 
+/* Escapes &, <, > via the DOM, then quotes by hand — this output is used
+   inside double- and single-quoted HTML attributes throughout, so an
+   unescaped quote in a dish/tag/restaurant name would break the markup. */
 function escapeHtml(s){
   const d = document.createElement('div');
   d.textContent = s;
-  return d.innerHTML;
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function getFilteredSortedList(){
@@ -1487,11 +1546,30 @@ function renderContent(){
   });
 }
 
-/* Map view: tries a real interactive street map first (Leaflet + OpenStreetMap
-   tiles). Some sandboxed preview environments block cross-origin tile images,
-   so if tiles haven't loaded within ~2.5s, it automatically swaps to a
-   self-contained relative-position map that needs no network access at all.
-   Opening the downloaded file in a normal browser will always show the real map. */
+/* Leaflet loads lazily: the landing and grid views never need it, so the
+   library (~180KB css+js) only downloads the first time the Map view is
+   opened. The service worker keeps it cached after that, offline included. */
+let leafletLoadPromise = null;
+function loadLeaflet(){
+  if(typeof L !== 'undefined') return Promise.resolve(true);
+  if(leafletLoadPromise) return leafletLoadPromise;
+  leafletLoadPromise = new Promise((resolve)=>{
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+    document.head.appendChild(css);
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    s.onload = ()=> resolve(true);
+    s.onerror = ()=>{ leafletLoadPromise = null; resolve(false); };
+    document.head.appendChild(s);
+  });
+  return leafletLoadPromise;
+}
+
+/* Map view: a real interactive street map (Leaflet + OpenStreetMap tiles).
+   If the library or tiles can't load (offline, sandboxed preview), it swaps
+   to a self-contained relative-position map that needs no network at all. */
 function renderMapView(el, list){
   const myToken = ++mapRenderToken;
   const withCoords = list.filter(r => r.lat != null && r.lng != null);
@@ -1510,10 +1588,19 @@ function renderMapView(el, list){
   if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
 
   if(typeof L === 'undefined'){
-    renderRelativeMap(el, withCoords, noteHtml);
+    el.innerHTML = `<div class="loading">Loading the map…</div>`;
+    loadLeaflet().then(ok=>{
+      if(myToken !== mapRenderToken) return; // view changed while loading
+      if(!ok){ renderRelativeMap(el, withCoords, noteHtml, true); return; }
+      renderLeafletMap(el, withCoords, noteHtml, myToken);
+    });
     return;
   }
 
+  renderLeafletMap(el, withCoords, noteHtml, myToken);
+}
+
+function renderLeafletMap(el, withCoords, noteHtml, myToken){
   el.innerHTML = `<div class="map-wrap"><div id="leafletMapEl" style="height:520px;"></div></div>${noteHtml}`;
 
   const bounds = withCoords.map(r=>[r.lat, r.lng]);
@@ -1780,10 +1867,22 @@ function renderAreasPage(){
       ${chicagoSection}
       ${suburbGroups}
     </div>
+    <div class="data-row">
+      <span>Your whole ledger lives on this device.</span>
+      <button class="link-btn" id="exportBtn">⤓ Export backup</button>
+      <button class="link-btn" id="importBtn">⤒ Restore backup</button>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
+    </div>
   `;
 
   $('#browseAllBtn').addEventListener('click', ()=>{ activeArea = null; currentPage = 'listings'; renderAll(); });
   $('#addFromAreas').addEventListener('click', openAddRestaurant);
+  $('#exportBtn').addEventListener('click', exportBackup);
+  $('#importBtn').addEventListener('click', ()=> $('#importFile').click());
+  $('#importFile').addEventListener('change', (e)=>{
+    if(e.target.files[0]) importBackup(e.target.files[0]);
+    e.target.value = '';
+  });
   $$('.area-block', el).forEach(block=>{
     block.addEventListener('click', ()=> openArea({ type: block.dataset.type, name: block.dataset.name }));
   });
