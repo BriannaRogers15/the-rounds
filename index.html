@@ -511,8 +511,10 @@ h1{
 
 /* ---- In-app website popup ---- */
 .overlay.site-overlay{ align-items:center; padding: 24px 16px; z-index: 60; }
-.site-modal{
-  max-width: 1100px; width: 100%; height: 88vh;
+/* Doubled class so this outranks the base .modal max-width (520px), which
+   is declared later in the sheet and was silently clamping the popup. */
+.modal.site-modal{
+  max-width: min(1400px, 94vw); width: 100%; height: 90vh;
   display:flex; flex-direction:column;
   padding: 14px 16px 16px;
 }
@@ -637,6 +639,12 @@ h1{
 .toggle-pair button.no.on{ background: var(--flag-red); border-color: var(--flag-red); color: var(--cream); }
 
 .modal-actions{ display:flex; gap:8px; margin-top:22px; justify-content:flex-end; }
+.places-notice{
+  margin-top:12px; padding: 10px 12px;
+  border: 1px solid var(--flag-red-dim); border-radius: 8px;
+  background: rgba(226,58,80,0.08);
+  font-size: 11.5px; line-height:1.5; color: var(--cream);
+}
 
 /* ---- Detail / visit log ---- */
 .detail-head{ display:flex; justify-content:space-between; align-items:flex-start; }
@@ -695,6 +703,26 @@ h1{
 .paste-menu-wrap textarea:focus{ outline:none; border-color: var(--flag-blue); box-shadow: 0 0 0 3px rgba(79,168,222,0.15); }
 .paste-menu-actions{ display:flex; gap:8px; margin-top:8px; justify-content:flex-end; }
 .no-menu{ font-size:12px; color: var(--cream-dim); }
+
+/* ---- Log a Visit: reviewer line + first-time menu paste ---- */
+.logged-by{
+  font-size: 12px; color: var(--cream-dim); margin-top: 4px;
+}
+.logged-by b{ color: var(--cream); font-weight: 700; }
+.logged-by a{
+  color: var(--flag-blue-bright); font-size: 11px; margin-left: 8px;
+  text-decoration: underline; cursor: pointer;
+}
+.menu-bootstrap{ margin-bottom: 8px; }
+.menu-bootstrap-hint{ font-size: 11.5px; color: var(--cream-dim); margin-bottom: 8px; line-height: 1.5; }
+.menu-bootstrap textarea{
+  width: 100%; min-height: 74px; resize: vertical;
+  font-family:'Manrope', sans-serif; font-size: 13px;
+  padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 8px;
+  background: var(--brick-deep); color: var(--cream);
+  margin-bottom: 8px;
+}
+.menu-bootstrap textarea:focus{ outline:none; border-color: var(--flag-blue); box-shadow: 0 0 0 3px rgba(79,168,222,0.15); }
 
 /* ---- Dish checklist in Log a Visit ---- */
 .dish-checklist{
@@ -1479,6 +1507,40 @@ function tagIcon(tag){
   return TAG_ICON[tag.toLowerCase()] || '🍴';
 }
 
+/* Google Places types -> guide tags, so a new listing's categories fill in
+   automatically on selection. Unmapped types (cafe, meal_takeaway...) are
+   simply skipped — the field stays editable for personal guides. */
+const GOOGLE_TYPE_TAG = {
+  pizza_restaurant: 'Pizza',
+  italian_restaurant: 'Italian',
+  japanese_restaurant: 'Japanese',
+  sushi_restaurant: 'Sushi',
+  ramen_restaurant: 'Ramen',
+  chinese_restaurant: 'Chinese',
+  korean_restaurant: 'Korean',
+  asian_restaurant: 'Asian Fusion',
+  mexican_restaurant: 'Mexican',
+  indian_restaurant: 'Indian',
+  steak_house: 'Steakhouses',
+  hamburger_restaurant: 'Burgers',
+  barbecue_restaurant: 'BBQ',
+  seafood_restaurant: 'Seafood',
+  american_restaurant: 'American',
+  breakfast_restaurant: 'Breakfast & Brunch',
+  brunch_restaurant: 'Breakfast & Brunch',
+  bakery: 'Bakery',
+  ice_cream_shop: 'Ice Cream',
+  dessert_shop: 'Desserts',
+  dessert_restaurant: 'Desserts',
+  sandwich_shop: 'Sandwich',
+  bagel_shop: 'Bagel',
+  bar: 'Bars',
+  pub: 'Bars',
+  wine_bar: 'Bars',
+  bar_and_grill: 'Bars',
+  night_club: 'Late Night',
+};
+
 /* Escapes &, <, > via the DOM, then quotes by hand — this output is used
    inside double- and single-quoted HTML attributes throughout, so an
    unescaped quote in a dish/tag/restaurant name would break the markup. */
@@ -2049,6 +2111,11 @@ function openAddRestaurant(){
         <button class="close" id="closeAdd">×</button>
         <h2>New Listing</h2>
         <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Add a place from one of your guides.</div>
+        <div class="places-notice" id="placesNotice" style="display:none;">
+          ⚠️ Google Maps is rejecting requests from this address (API key referrer restrictions),
+          so search is unavailable — add the key's allowed referrers in Google Cloud Console.
+          Manual entry is open below.
+        </div>
         <div class="field">
           <label>Name <span style="text-transform:none;">(search for the restaurant)</span></label>
           <div id="nameAutocompleteContainer"></div>
@@ -2092,15 +2159,16 @@ function openAddRestaurant(){
 
   (async ()=>{
     try{
-      const { PlaceAutocompleteElement } = await google.maps.importLibrary('places');
+      const { PlaceAutocompleteElement, AutocompleteSuggestion } = await google.maps.importLibrary('places');
+      const CHICAGOLAND = { north: 42.3, south: 41.2, east: -87.3, west: -88.4 };
       const pac = new PlaceAutocompleteElement();
       pac.includedPrimaryTypes = ['restaurant', 'cafe', 'bar', 'bakery', 'meal_takeaway'];
       // Chicagoland metro bounding box (city + suburbs), so results outside the area don't show up.
-      pac.locationRestriction = { north: 42.3, south: 41.2, east: -87.3, west: -88.4 };
+      pac.locationRestriction = CHICAGOLAND;
       $('#nameAutocompleteContainer').appendChild(pac);
       pac.addEventListener('gmp-select', async ({ placePrediction })=>{
         const place = placePrediction.toPlace();
-        await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id'] });
+        await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType'] });
         selectedPlace = {
           name: place.displayName || '',
           address: place.formattedAddress || '',
@@ -2110,7 +2178,33 @@ function openAddRestaurant(){
           website: place.websiteURI || null,
           placeId: place.id || null,
         };
+        // Auto-map Google's place types onto guide tags so the categories
+        // fill themselves; the field stays editable for personal guides
+        // (Dinner Dates, Happy Hour...).
+        const catBox = $('#rCat');
+        if(catBox && !catBox.value.trim()){
+          const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
+          const tags = [];
+          types.forEach(t=>{
+            const tag = GOOGLE_TYPE_TAG[t];
+            if(tag && !tags.includes(tag)) tags.push(tag);
+          });
+          if(tags.length) catBox.value = tags.join(', ');
+        }
       });
+      // Probe one real request: a referrer-blocked or misconfigured API key
+      // renders the widget fine but 403s every suggestion, which looks like
+      // a dead search box. Surface that loudly and open manual entry.
+      try{
+        await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: 'pizza',
+          locationRestriction: CHICAGOLAND,
+        });
+      }catch(probeErr){
+        console.warn('Places requests are blocked for this origin.', probeErr);
+        $('#placesNotice').style.display = '';
+        enableManualMode();
+      }
     } catch(err){
       console.warn('Places Autocomplete unavailable — falling back to manual entry.', err);
       enableManualMode();
@@ -2316,12 +2410,12 @@ function openLogVisit(restaurantId){
       <div class="modal">
         <button class="close" id="closeLog">×</button>
         <h2>Log a Visit</h2>
-        <div class="field">
-          <label>Reviewer</label>
-          ${profiles.length
-            ? `<select id="vReviewer">${profiles.map(p=>`<option value="${p.id}" ${p.id===activeProfileId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>`
-            : `<input type="text" id="vReviewerNew" placeholder="Pick a username — e.g. Brianna">`}
-        </div>
+        ${profiles.length
+          ? `<div class="logged-by">Logging as <b>${escapeHtml((activeProfile() || profiles[0]).name)}</b><a href="#" id="switchReviewer">switch</a></div>`
+          : `<div class="field">
+              <label>Pick your username <span style="text-transform:none;">(first visit only — future visits are stamped automatically)</span></label>
+              <input type="text" id="vReviewerNew" placeholder="e.g. Brianna">
+            </div>`}
         <div class="field">
           <label>Date</label>
           <button type="button" class="date-display" id="dateDisplay">${fmtDate(selectedDate)}</button>
@@ -2335,10 +2429,17 @@ function openLogVisit(restaurantId){
           </div>
         </div>
         <div class="field">
-          <label>What did you eat?${menu.length ? ' <span style="text-transform:none;">(check everything you had)</span>' : ''}</label>
-          ${menu.length ? `<div class="dish-checklist">${menu.map((d,i)=>`
-            <label class="dish-check"><input type="checkbox" data-i="${i}"><span>${escapeHtml(d)}</span></label>`).join('')}</div>` : ''}
-          <input type="text" id="vAte" placeholder="${menu.length ? '+ something not on the menu list yet' : 'e.g. Buffalo wings + fries'}">
+          <label>What did you eat? <span style="text-transform:none;">(check everything you had)</span></label>
+          <div id="dishArea">
+            ${menu.length ? `<div class="dish-checklist">${menu.map(d=>`
+              <label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"><span>${escapeHtml(d)}</span></label>`).join('')}</div>`
+            : `<div class="menu-bootstrap">
+                <div class="menu-bootstrap-hint">No menu on file for this spot yet — paste it once (one dish per line) and you'll check dishes off here from now on.</div>
+                <textarea id="logPasteMenu" placeholder="Italian beef&#10;Cheese fries&#10;Peach cobbler"></textarea>
+                <button type="button" class="btn small secondary" id="logPasteMenuBtn">Add to their menu</button>
+              </div>`}
+          </div>
+          <input type="text" id="vAte" placeholder="+ something not on the menu list">
         </div>
         <div class="field">
           <label>Rating</label>
@@ -2354,8 +2455,8 @@ function openLogVisit(restaurantId){
           </div>
         </div>
         <div class="field">
-          <label>Notes <span style="text-transform:none;">(optional)</span></label>
-          <textarea id="vNotes" placeholder="e.g. Great patio, ask for Jesse, loud on weekends"></textarea>
+          <label>Notes <span style="text-transform:none;">(modifications, tips — optional)</span></label>
+          <textarea id="vNotes" placeholder="e.g. sub fries for rice, no onions, ask for Jesse"></textarea>
         </div>
         <div class="modal-actions">
           <button class="btn secondary" id="cancelLog">Cancel</button>
@@ -2435,30 +2536,60 @@ function openLogVisit(restaurantId){
   $('#closeLog').addEventListener('click', ()=> openDetail(restaurantId));
   $('#cancelLog').addEventListener('click', ()=> openDetail(restaurantId));
   $('#ov2').addEventListener('click', (e)=>{ if(e.target.id==='ov2') openDetail(restaurantId); });
+
+  // "Logging as X — switch": swaps the line for a reviewer select in place,
+  // without losing anything already entered in the form.
+  const switchLink = $('#switchReviewer');
+  if(switchLink) switchLink.addEventListener('click', (e)=>{
+    e.preventDefault();
+    e.target.closest('.logged-by').outerHTML = `
+      <div class="field">
+        <label>Reviewer</label>
+        <select id="vReviewer">${profiles.map(p=>`<option value="${p.id}" ${p.id===activeProfileId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+      </div>`;
+  });
+
+  // First visit at a spot with no menu yet: paste it right here, and the
+  // checklist appears in place — rating/date/notes already entered stay put.
+  const pasteBtn = $('#logPasteMenuBtn');
+  if(pasteBtn) pasteBtn.addEventListener('click', async ()=>{
+    const lines = $('#logPasteMenu').value.split('\n').map(l=>l.trim()).filter(Boolean);
+    let added = 0;
+    lines.forEach(l=>{ if(addDishToMenu(restaurantId, l)) added++; });
+    if(!added) return;
+    await saveRestaurants();
+    const m = rest ? menuOf(rest) : [];
+    $('#dishArea').innerHTML = `<div class="dish-checklist">${m.map(d=>`
+      <label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"><span>${escapeHtml(d)}</span></label>`).join('')}</div>`;
+  });
+
   $('#saveLog').addEventListener('click', async (e)=>{
     if(!rating){ alert('Pick a rating.'); return; }
     if(wouldReturn === null){ alert('Let us know if you\'d go back.'); return; }
     let reviewerName;
-    if(profiles.length){
-      const pid = $('#vReviewer').value;
-      const p = profiles.find(x=>x.id===pid);
+    const reviewerSelect = $('#vReviewer');
+    const reviewerNew = $('#vReviewerNew');
+    if(reviewerSelect){
+      const p = profiles.find(x=>x.id===reviewerSelect.value);
       reviewerName = p ? p.name : '';
-      if(p && pid !== activeProfileId){
-        activeProfileId = pid;
+      if(p && p.id !== activeProfileId){
+        activeProfileId = p.id;
         await saveProfiles();
         renderProfileChip();
       }
-    } else {
-      reviewerName = $('#vReviewerNew').value.trim();
+    } else if(reviewerNew){
+      reviewerName = reviewerNew.value.trim();
       if(!reviewerName){ alert('Pick a reviewer username.'); return; }
       const p = { id: uid(), name: reviewerName };
       profiles.push(p);
       activeProfileId = p.id;
       await saveProfiles();
       renderProfileChip();
+    } else {
+      reviewerName = (activeProfile() || profiles[0]).name;
     }
     const date = selectedDate || today;
-    const checkedDishes = $$('.dish-check input:checked', $('#modalRoot')).map(cb => menu[parseInt(cb.dataset.i)]);
+    const checkedDishes = $$('.dish-check input:checked', $('#modalRoot')).map(cb => cb.dataset.dish);
     const typedDish = $('#vAte').value.trim();
     const ate = [...checkedDishes];
     if(typedDish && !ate.some(d => d.toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
