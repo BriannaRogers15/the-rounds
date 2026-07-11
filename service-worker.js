@@ -11,7 +11,14 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          // Only clean up this worker's own old versions ('the-rounds-*').
+          // The page keeps its boundary data in 'rounds-geo-*' — deleting
+          // that here would wipe the offline map every SW update.
+          .filter((k) => k.startsWith('the-rounds-') && k !== CACHE_NAME)
+          .map((k) => caches.delete(k))
+      )
     )
   );
   self.clients.claim();
