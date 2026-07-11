@@ -1705,43 +1705,6 @@ function areaShapePath(area){
   ).join('');
 }
 
-/* Center point of an area — boundary centroid when we have the shape,
-   otherwise the average of its listings' coordinates. Drives the
-   map-reading block order. */
-function areaCentroid(area){
-  const polys = areaFeatures(area).flatMap(featurePolys);
-  if(polys.length){
-    let sLat = 0, sLng = 0, n = 0;
-    polys.forEach(p => p[0].forEach(([lng, lat])=>{ sLng += lng; sLat += lat; n++; }));
-    return { lat: sLat / n, lng: sLng / n };
-  }
-  const pts = restaurants.filter(r => restaurantInArea(r, area) && r.lat != null && r.lng != null);
-  if(pts.length){
-    return {
-      lat: pts.reduce((s,r)=>s+r.lat,0) / pts.length,
-      lng: pts.reduce((s,r)=>s+r.lng,0) / pts.length,
-    };
-  }
-  return null;
-}
-
-/* Map-reading order: north-to-south in ~2-mile latitude bands, then
-   west-to-east inside a band — so Bronzeville sits left of Kenwood the
-   way it does on a map. */
-function geoSortAreas(areas){
-  const BAND = 0.03; // degrees latitude per row band
-  const band = c => Math.floor((42.6 - c.lat) / BAND);
-  return areas
-    .map(a => ({ a, c: areaCentroid(a) }))
-    .sort((x, y)=>{
-      if(!x.c && !y.c) return x.a.name.localeCompare(y.a.name);
-      if(!x.c) return 1;
-      if(!y.c) return -1;
-      return (band(x.c) - band(y.c)) || (x.c.lng - y.c.lng);
-    })
-    .map(x => x.a);
-}
-
 function areaStats(area){
   const list = restaurants.filter(r => restaurantInArea(r, area));
   const visited = list.filter(r => visitsFor(r.id).length > 0).length;
@@ -1780,11 +1743,15 @@ function renderAreasPage(){
     const name = displayHoodName(f.properties.pri_neigh);
     if(!HOOD_EXCLUDE.has(name) && !hoods[name] && !ghostNames.includes(name)) ghostNames.push(name);
   });
-  const stockedBlocks = geoSortAreas(Object.keys(hoods).map(name => ({ type:'neighborhood', name })))
+  // Stocked areas: biggest territory first (ties A–Z) — the landing reads
+  // as a scoreboard. The unexplored list is A–Z: it's a lookup list.
+  const byCountDesc = counts => (a, b) => (counts[b.name] || 0) - (counts[a.name] || 0) || a.name.localeCompare(b.name);
+  const stockedBlocks = Object.keys(hoods).map(name => ({ type:'neighborhood', name }))
+    .sort(byCountDesc(hoods))
     .map(areaBlockHTML).join('')
     + (unassigned ? areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' }) : '');
   const ghostBlocks = showGhosts
-    ? geoSortAreas(ghostNames.map(name => ({ type:'neighborhood', name }))).map(areaBlockHTML).join('')
+    ? ghostNames.sort((a, b) => a.localeCompare(b)).map(name => areaBlockHTML({ type:'neighborhood', name })).join('')
     : '';
   const chicagoSection = (stockedBlocks || ghostNames.length) ? `
     <div class="area-group-label">Chicago</div>
@@ -1792,7 +1759,8 @@ function renderAreasPage(){
     ${ghostNames.length ? `<button class="ghost-toggle" id="ghostToggle">${showGhosts ? 'Hide' : 'Show'} ${ghostNames.length} unexplored neighborhood${ghostNames.length===1?'':'s'} ${showGhosts ? '▴' : '▾'}</button>` : ''}
     ${ghostBlocks ? `<div class="area-blocks">${ghostBlocks}</div>` : ''}` : '';
   const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
-    const blocks = geoSortAreas(Object.keys(townByRegion[region]).map(town => ({ type:'town', name: town })))
+    const blocks = Object.keys(townByRegion[region]).map(town => ({ type:'town', name: town }))
+      .sort(byCountDesc(townByRegion[region]))
       .map(areaBlockHTML).join('');
     return `<div class="area-group-label">${escapeHtml(region)}</div><div class="area-blocks">${blocks}</div>`;
   }).join('');
