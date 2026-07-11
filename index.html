@@ -1093,13 +1093,14 @@ const PARENT_GROUPS = {
   // Sandwich types live under American — five kinds of lunch, not a cuisine.
   'American': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Hot Dogs', 'Seafood', 'Halal', 'Soul Food',
                'Hoagie', 'Sandwich', 'Cheesesteak', 'Bagel', 'Wrap'],
-  'Asian': ['Japanese', 'Chinese', 'Korean', 'Ramen', 'Sushi', 'Asian Fusion'],
+  // Countries are main guides (all flags at one level); Ramen and Sushi
+  // are kinds of Japanese food, so they nest under Japanese the way
+  // Burgers nest under American. The old regional umbrellas (Asian,
+  // Latin American, Caribbean, European) are gone.
+  'Japanese': ['Ramen', 'Sushi'],
   'Desserts': ['Ice Cream', 'Bakery', 'Frozen Yogurt'],
   'Special Events': ['Dinner Dates', 'Happy Hour', 'Late Night', 'Breakfast & Brunch', 'Rooftop'],
   'Italian': ['Pizza', 'Pasta'],
-  'Latin American': ['Mexican', 'Peruvian'],
-  'Caribbean': ['Jamaican'],
-  'European': ['Swiss'],
 };
 function groupForTag(tag){
   const lower = tag.toLowerCase();
@@ -1505,9 +1506,13 @@ function railItemHTML(label, count, active, opts = {}){
 /* Rail order: cuisines (flags and regions together), then food & drink,
    then occasion guides. Unmapped new guides land in Food & Drink. */
 const GUIDE_SECTION = {
-  'American':'Cuisines','Asian':'Cuisines','Caribbean':'Cuisines','European':'Cuisines',
-  'Indian':'Cuisines','Italian':'Cuisines','Latin American':'Cuisines','Mexican':'Cuisines',
-  'Thai':'Cuisines','Vietnamese':'Cuisines',
+  'American':'Cuisines','Chinese':'Cuisines','Indian':'Cuisines','Italian':'Cuisines',
+  'Jamaican':'Cuisines','Japanese':'Cuisines','Korean':'Cuisines','Mexican':'Cuisines',
+  'Peruvian':'Cuisines','Swiss':'Cuisines','Thai':'Cuisines','Vietnamese':'Cuisines',
+  'Asian Fusion':'Cuisines',
+  // Defensive: if anything ever gets tagged with an old umbrella name, it
+  // still files under Cuisines rather than the fallback section.
+  'Asian':'Cuisines','Caribbean':'Cuisines','European':'Cuisines','Latin American':'Cuisines',
   'Bars':'Food & Drink','Desserts':'Food & Drink','Pizza':'Food & Drink',
   'Special Events':'Occasions','Chicago Gems':'Occasions',
 };
