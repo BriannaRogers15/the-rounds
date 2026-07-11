@@ -53,7 +53,7 @@ body{
   padding: 0 0 70px 0;
 }
 
-.wrap{ max-width: 1000px; margin: 0 auto; padding: 40px 20px 0; }
+.wrap{ max-width: 1180px; margin: 0 auto; padding: 40px 20px 0; }
 
 /* ---- Header ---- */
 header{ text-align:center; margin-bottom: 20px; }
@@ -112,61 +112,75 @@ h1{
   .receipt-row{ border-right:none; border-bottom:1px solid var(--hairline); padding-bottom:10px; }
 }
 
-/* ---- Controls row ---- */
+/* ---- Listings layout: cuisine rail + main column ---- */
+.listings-layout{ display:flex; gap:18px; align-items:flex-start; }
+.listings-main{ flex:1; min-width:0; }
 .controls{
-  display:flex; gap:10px; align-items:center; justify-content:space-between;
+  display:flex; gap:10px; align-items:center;
   flex-wrap: wrap; margin-bottom: 14px;
   background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
   border: 1px solid var(--hairline);
   border-radius: 16px;
-  padding: 10px 12px 10px 16px;
+  padding: 10px 12px;
   box-shadow: 0 12px 28px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03);
 }
-.tabs{
-  display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; flex:1;
-}
-.tab{
-  font-family:'IBM Plex Mono', monospace;
-  font-size: 11px; letter-spacing: 0.8px;
-  background: var(--brick-deep);
-  border: 1px solid var(--hairline);
-  color: var(--cream-dim);
-  padding: 8px 14px;
-  border-radius: 999px;
-  cursor:pointer;
-  white-space: nowrap;
-  flex-shrink:0;
-  transition: all .15s ease;
-  position: relative;
-}
-.tab:hover{ border-color: var(--flag-blue-dim); color: var(--cream); }
-.tab.active{
-  background: var(--flag-blue);
-  color: var(--brick-deep);
-  border-color: var(--flag-blue);
-  font-weight:600;
-  padding-left: 20px;
-  box-shadow: 0 4px 14px rgba(79,168,222,0.35);
-}
-.tab.active::before{
-  content:"";
-  position:absolute; left:10px; top:50%; transform:translateY(-50%);
-  width:6px; height:6px; border-radius:50%;
-  background: var(--flag-red);
-  box-shadow: 0 0 0 2px rgba(226,58,80,0.25);
-}
-.tab .cnt{ opacity:0.65; margin-left:5px; }
 
-.sub-tabs{ margin-top:-6px; margin-bottom:14px; padding-left:6px; border-left: 2px solid var(--hairline); }
-.sub-tab{
-  font-family:'Manrope', sans-serif; font-weight:600; font-size:11px;
-  background: transparent; border: 1px solid var(--hairline); color: var(--cream-dim);
-  padding: 6px 12px; border-radius: 999px; cursor:pointer; white-space:nowrap; flex-shrink:0;
-  transition: all .15s ease;
+/* The vertical guide list. Desktop: sticky rail beside the cards.
+   Phone: off-canvas drawer that slides in from the left. */
+.cuisine-rail{
+  width: 212px; flex-shrink:0;
+  position: sticky; top: 16px;
+  max-height: calc(100vh - 32px); overflow-y:auto;
+  background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 12px 10px 14px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03);
 }
-.sub-tab:hover{ border-color: var(--flag-blue-dim); color: var(--cream); }
-.sub-tab.active{ background: var(--flag-blue-dim); border-color: var(--flag-blue); color: var(--cream); font-weight:700; }
-.sub-tab .cnt{ opacity:0.7; margin-left:4px; }
+.rail-title{
+  font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:2px;
+  text-transform:uppercase; color: var(--flag-blue);
+  padding: 2px 10px 10px;
+}
+.rail-item{
+  display:flex; align-items:center; gap:9px; width:100%;
+  background:none; border:none; border-radius: 9px; cursor:pointer;
+  padding: 8px 10px;
+  color: var(--cream-dim); text-align:left;
+  font-family:'Manrope', sans-serif; font-weight:600; font-size:12.5px;
+  transition: background .12s ease, color .12s ease;
+}
+.rail-item:hover{ background: rgba(243,237,224,0.06); color: var(--cream); }
+.rail-item.active{ background: var(--flag-blue); color: var(--brick-deep); }
+.rail-item .rail-ico{ font-size:13px; width:18px; text-align:center; flex-shrink:0; }
+.rail-item .rail-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rail-item .rail-cnt{
+  margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:10px; opacity:0.75; flex-shrink:0;
+}
+.rail-children{
+  margin: 2px 0 6px 16px;
+  border-left: 2px solid var(--hairline);
+  padding-left: 6px;
+}
+.rail-item.child{ padding: 6px 8px; font-size: 12px; }
+.rail-item.child.active{ background: var(--flag-blue-dim); color: var(--cream); }
+.rail-toggle{ display:none; }
+.rail-scrim{ display:none; }
+
+@media (max-width: 900px){
+  .cuisine-rail{
+    position: fixed; left:0; top:0; bottom:0; z-index: 80;
+    width: 264px; max-height:none; border-radius: 0 16px 16px 0;
+    transform: translateX(-105%);
+    transition: transform .22s ease;
+  }
+  .cuisine-rail.open{ transform: none; }
+  .rail-scrim.show{
+    display:block; position:fixed; inset:0; z-index: 79;
+    background: rgba(6,16,13,0.62);
+  }
+  .rail-toggle{ display:inline-block; }
+}
 
 .btn{
   font-family:'Manrope', sans-serif;
@@ -799,40 +813,46 @@ h1{
 
   <div class="area-banner" id="areaBanner" style="display:none;"></div>
 
-  <div class="controls">
-    <div class="tabs" id="tabs"></div>
-    <button class="btn secondary" id="profileBtn">👤</button>
-    <button class="btn" id="addRestaurantBtn">+ New Listing</button>
-  </div>
-  <div class="tabs sub-tabs" id="subTabs" style="display:none;"></div>
-
-  <div class="tools-row">
-    <div class="search-wrap">
-      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M18 18L13.8 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-      <input type="text" id="searchBox" class="search-box" placeholder="Search your listings…">
-    </div>
-    <button class="filter-chip" id="unvisitedToggle">Haven't been yet</button>
-    <div class="tools-divider"></div>
-    <div class="seg-group">
-      <span class="seg-label">Sort</span>
-      <div class="segmented" id="sortOpts">
-        <button class="active" data-sort="name">Name</button>
-        <button data-sort="date">Date Added</button>
-        <button data-sort="rating">Rating</button>
-        <button data-sort="distance">Distance</button>
+  <div class="listings-layout" id="listingsLayout" style="display:none;">
+    <div class="rail-scrim" id="railScrim"></div>
+    <aside class="cuisine-rail" id="cuisineRail"></aside>
+    <div class="listings-main">
+      <div class="controls">
+        <button class="btn secondary small rail-toggle" id="railToggle">☰ Guides</button>
+        <div style="flex:1;"></div>
+        <button class="btn secondary" id="profileBtn">👤</button>
+        <button class="btn" id="addRestaurantBtn">+ New Listing</button>
       </div>
-    </div>
-    <div class="tools-divider"></div>
-    <div class="seg-group" style="margin-left:auto;">
-      <span class="seg-label">View</span>
-      <div class="segmented view-seg" id="viewOpts">
-        <button class="active" data-view="grid">Grid</button>
-        <button data-view="map">Map</button>
+
+      <div class="tools-row">
+        <div class="search-wrap">
+          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M18 18L13.8 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input type="text" id="searchBox" class="search-box" placeholder="Search your listings…">
+        </div>
+        <button class="filter-chip" id="unvisitedToggle">Haven't been yet</button>
+        <div class="tools-divider"></div>
+        <div class="seg-group">
+          <span class="seg-label">Sort</span>
+          <div class="segmented" id="sortOpts">
+            <button class="active" data-sort="name">Name</button>
+            <button data-sort="date">Date Added</button>
+            <button data-sort="rating">Rating</button>
+            <button data-sort="distance">Distance</button>
+          </div>
+        </div>
+        <div class="tools-divider"></div>
+        <div class="seg-group" style="margin-left:auto;">
+          <span class="seg-label">View</span>
+          <div class="segmented view-seg" id="viewOpts">
+            <button class="active" data-view="grid">Grid</button>
+            <button data-view="map">Map</button>
+          </div>
+        </div>
       </div>
+
+      <div id="content" class="loading">Pulling up your listings…</div>
     </div>
   </div>
-
-  <div id="content" class="loading">Pulling up your listings…</div>
 </div>
 
 <div id="modalRoot"></div>
@@ -1425,52 +1445,57 @@ function renderStats(){
   `;
 }
 
-function renderTabs(){
+/* The vertical guide list (desktop rail / phone drawer). A group that's
+   active unfolds its sub-cuisines indented beneath it, accordion-style. */
+function railItemHTML(label, count, active, opts = {}){
+  const cls = `rail-item${opts.child ? ' child' : ''}${active ? ' active' : ''}`;
+  const sub = opts.sub !== undefined ? ` data-sub="${escapeHtml(opts.sub)}"` : '';
+  return `<button class="${cls}" data-cat="${escapeHtml(label)}"${sub}>
+    <span class="rail-ico">${opts.icon || tagIcon(label)}</span>
+    <span class="rail-name">${escapeHtml(opts.name || label)}</span>
+    <span class="rail-cnt">${count}</span>
+  </button>`;
+}
+function renderCuisineRail(){
+  const railEl = $('#cuisineRail');
   const labels = topLevelLabels();
-  const tabsEl = $('#tabs');
   const inArea = restaurants.filter(r => restaurantInArea(r, activeArea));
-  const allCount = inArea.length;
-  let html = `<button class="tab ${activeCategory==='All'?'active':''}" data-cat="All">All <span class="cnt">${allCount}</span></button>`;
+  let html = `<div class="rail-title">Guides</div>`;
+  html += railItemHTML('All', inArea.length, activeCategory === 'All', { icon:'🍽️' });
   labels.forEach(label=>{
     const count = inArea.filter(r => restaurantMatchesLabel(r, label, null)).length;
-    if(activeArea && count === 0) return; // inside an area, only show its cuisines
-    const isGroup = isGroupLabel(label);
-    html += `<button class="tab ${activeCategory===label?'active':''}" data-cat="${escapeHtml(label)}">${escapeHtml(label)}${isGroup ? ' ▾' : ''} <span class="cnt">${count}</span></button>`;
+    if(activeArea && count === 0) return; // inside an area, only its cuisines
+    const active = activeCategory === label;
+    html += railItemHTML(label, count, active && !isGroupLabel(label));
+    if(isGroupLabel(label) && active){
+      html += `<div class="rail-children">`;
+      html += railItemHTML(label, count, !activeSubTag, { child:true, sub:'', name:`All ${label}`, icon:'▸' });
+      childTagsOf(label).forEach(c=>{
+        const ccount = inArea.filter(r => (r.categories||[]).includes(c)).length;
+        if(activeArea && ccount === 0) return;
+        html += railItemHTML(label, ccount, activeSubTag === c, { child:true, sub:c, name:c, icon:tagIcon(c) });
+      });
+      html += `</div>`;
+    }
   });
-  tabsEl.innerHTML = html;
-  $$('.tab', tabsEl).forEach(btn=>{
+  railEl.innerHTML = html;
+  $$('.rail-item', railEl).forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const cat = btn.dataset.cat;
-      activeCategory = (activeCategory === cat && cat !== 'All') ? 'All' : cat;
-      activeSubTag = null;
-      renderTabs();
+      if(btn.dataset.sub !== undefined){
+        activeSubTag = btn.dataset.sub || null;
+      } else {
+        activeCategory = (activeCategory === cat && cat !== 'All') ? 'All' : cat;
+        activeSubTag = null;
+      }
+      closeRail();
+      renderCuisineRail();
       renderContent();
     });
   });
-
-  const subEl = $('#subTabs');
-  if(isGroupLabel(activeCategory)){
-    const children = childTagsOf(activeCategory);
-    subEl.style.display = 'flex';
-    subEl.innerHTML = `<button class="sub-tab ${!activeSubTag?'active':''}" data-sub="">All ${escapeHtml(activeCategory)}</button>` +
-      children.map(c=>{
-        const count = inArea.filter(r=>(r.categories||[]).includes(c)).length;
-        if(activeArea && count === 0) return '';
-        return `<button class="sub-tab ${activeSubTag===c?'active':''}" data-sub="${escapeHtml(c)}">${escapeHtml(c)} <span class="cnt">${count}</span></button>`;
-      }).join('');
-    $$('.sub-tab', subEl).forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const sub = btn.dataset.sub || null;
-        activeSubTag = (activeSubTag === sub && sub !== null) ? null : sub;
-        renderTabs();
-        renderContent();
-      });
-    });
-  } else {
-    subEl.style.display = 'none';
-    subEl.innerHTML = '';
-  }
 }
+function openRail(){ $('#cuisineRail').classList.add('open'); $('#railScrim').classList.add('show'); }
+function closeRail(){ $('#cuisineRail').classList.remove('open'); $('#railScrim').classList.remove('show'); }
 
 /* Display-only singular form for venue-type tags on cards — a single
    restaurant is "a Steakhouse", not "Steakhouses". Cuisine/food tags
@@ -1979,11 +2004,9 @@ function renderAreaBanner(){
 function renderPageVisibility(){
   const listings = currentPage === 'listings';
   $('#areasPage').style.display = listings ? 'none' : '';
-  $('.controls').style.display = listings ? '' : 'none';
-  $('.tools-row').style.display = listings ? '' : 'none';
-  $('#content').style.display = listings ? '' : 'none';
+  $('#listingsLayout').style.display = listings ? '' : 'none';
   if(!listings){
-    $('#subTabs').style.display = 'none';
+    closeRail();
     if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
   }
 }
@@ -1992,7 +2015,7 @@ function renderAll(){
   renderPageVisibility();
   renderStats();
   if(currentPage === 'listings'){
-    renderTabs();
+    renderCuisineRail();
     renderContent();
   } else {
     renderAreasPage();
@@ -2608,6 +2631,8 @@ function openLogVisit(restaurantId){
 
 $('#addRestaurantBtn').addEventListener('click', openAddRestaurant);
 $('#profileBtn').addEventListener('click', openProfiles);
+$('#railToggle').addEventListener('click', openRail);
+$('#railScrim').addEventListener('click', closeRail);
 
 $$('#sortOpts button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
