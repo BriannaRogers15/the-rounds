@@ -142,6 +142,13 @@ h1{
   text-transform:uppercase; color: var(--flag-blue);
   padding: 2px 10px 10px;
 }
+.rail-section{
+  font-family:'IBM Plex Mono', monospace; font-size:8.5px; letter-spacing:1.8px;
+  text-transform:uppercase; color: var(--cream-dim); opacity:0.8;
+  padding: 14px 10px 5px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 8px;
+}
 .rail-item{
   display:flex; align-items:center; gap:9px; width:100%;
   background:none; border:none; border-radius: 9px; cursor:pointer;
@@ -1083,9 +1090,10 @@ function categories(){
       this list any time you want another umbrella; just tell me the
       grouping and I'll add it here. */
 const PARENT_GROUPS = {
-  'American': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Hot Dogs', 'Seafood', 'Halal', 'Soul Food'],
+  // Sandwich types live under American — five kinds of lunch, not a cuisine.
+  'American': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Hot Dogs', 'Seafood', 'Halal', 'Soul Food',
+               'Hoagie', 'Sandwich', 'Cheesesteak', 'Bagel', 'Wrap'],
   'Asian': ['Japanese', 'Chinese', 'Korean', 'Ramen', 'Sushi', 'Asian Fusion'],
-  'Sandwiches': ['Hoagie', 'Sandwich', 'Cheesesteak', 'Bagel', 'Wrap'],
   'Desserts': ['Ice Cream', 'Bakery', 'Frozen Yogurt'],
   'Special Events': ['Dinner Dates', 'Happy Hour', 'Late Night', 'Breakfast & Brunch', 'Rooftop'],
   'Italian': ['Pizza', 'Pasta'],
@@ -1494,27 +1502,48 @@ function railItemHTML(label, count, active, opts = {}){
     <span class="rail-cnt">${count}</span>
   </button>`;
 }
+/* Rail order: cuisines (flags and regions together), then food & drink,
+   then occasion guides. Unmapped new guides land in Food & Drink. */
+const GUIDE_SECTION = {
+  'American':'Cuisines','Asian':'Cuisines','Caribbean':'Cuisines','European':'Cuisines',
+  'Indian':'Cuisines','Italian':'Cuisines','Latin American':'Cuisines','Mexican':'Cuisines',
+  'Thai':'Cuisines','Vietnamese':'Cuisines',
+  'Bars':'Food & Drink','Desserts':'Food & Drink','Pizza':'Food & Drink',
+  'Special Events':'Occasions','Chicago Gems':'Occasions',
+};
+const RAIL_SECTION_ORDER = ['Cuisines', 'Food & Drink', 'Occasions'];
 function renderCuisineRail(){
   const railEl = $('#cuisineRail');
   const labels = topLevelLabels();
   const inArea = restaurants.filter(r => restaurantInArea(r, activeArea));
-  let html = `<div class="rail-title">Guides</div>`;
-  html += railItemHTML('All', inArea.length, activeCategory === 'All', { icon:'🍽️' });
+
+  const sections = {};
+  RAIL_SECTION_ORDER.forEach(s => sections[s] = []);
   labels.forEach(label=>{
     const count = inArea.filter(r => restaurantMatchesLabel(r, label, null)).length;
     if(activeArea && count === 0) return; // inside an area, only its cuisines
-    const active = activeCategory === label;
-    html += railItemHTML(label, count, active && !isGroupLabel(label));
-    if(isGroupLabel(label) && active){
-      html += `<div class="rail-children">`;
-      html += railItemHTML(label, count, !activeSubTag, { child:true, sub:'', name:`All ${label}`, icon:'▸' });
-      childTagsOf(label).forEach(c=>{
-        const ccount = inArea.filter(r => (r.categories||[]).includes(c)).length;
-        if(activeArea && ccount === 0) return;
-        html += railItemHTML(label, ccount, activeSubTag === c, { child:true, sub:c, name:c, icon:tagIcon(c) });
-      });
-      html += `</div>`;
-    }
+    sections[GUIDE_SECTION[label] || 'Food & Drink'].push({ label, count });
+  });
+
+  let html = `<div class="rail-title">Guides</div>`;
+  html += railItemHTML('All', inArea.length, activeCategory === 'All', { icon:'🍽️' });
+  RAIL_SECTION_ORDER.forEach(sec=>{
+    if(!sections[sec].length) return;
+    html += `<div class="rail-section">${sec}</div>`;
+    sections[sec].forEach(({ label, count })=>{
+      const active = activeCategory === label;
+      html += railItemHTML(label, count, active && !isGroupLabel(label));
+      if(isGroupLabel(label) && active){
+        html += `<div class="rail-children">`;
+        html += railItemHTML(label, count, !activeSubTag, { child:true, sub:'', name:`All ${label}`, icon:'▸' });
+        childTagsOf(label).forEach(c=>{
+          const ccount = inArea.filter(r => (r.categories||[]).includes(c)).length;
+          if(activeArea && ccount === 0) return;
+          html += railItemHTML(label, ccount, activeSubTag === c, { child:true, sub:c, name:c, icon:tagIcon(c) });
+        });
+        html += `</div>`;
+      }
+    });
   });
   railEl.innerHTML = html;
   $$('.rail-item', railEl).forEach(btn=>{
@@ -1571,6 +1600,10 @@ const TAG_ICON = {
   'ice cream': '🍦', 'bakery': '🥐', 'frozen yogurt': '🍧',
   'happy hour': '🍻', 'late night': '🌙', 'jamaican': '🇯🇲', 'soul food': '🍲', 'italian': '🇮🇹', 'pasta': '🍝',
   'american': '🇺🇸',
+  // Group/guide labels — every rail entry gets a real icon, never the 🍴 fallback.
+  'asian': '🥢', 'caribbean': '🏝️', 'european': '🇪🇺', 'latin american': '🌮',
+  'sandwiches': '🥪', 'special events': '🎉', 'chicago gems': '💎',
+  'thai': '🇹🇭', 'vietnamese': '🇻🇳',
 };
 function tagIcon(tag){
   return TAG_ICON[tag.toLowerCase()] || '🍴';
