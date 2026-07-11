@@ -1395,6 +1395,44 @@ function openArea(area){
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/* ---------- View state <-> URL hash ----------
+   The current page, area, and guide live in the address bar, so a refresh
+   keeps your place, the back button walks your real steps, and bookmarks
+   land on the right view. Empty hash = the territory landing. */
+let applyingHash = false;
+function stateToHash(){
+  if(currentPage !== 'listings') return '';
+  const p = new URLSearchParams();
+  p.set('v', activeArea ? 'area' : 'all');
+  if(activeArea){ p.set('t', activeArea.type); p.set('n', activeArea.name); }
+  if(activeCategory !== 'All') p.set('c', activeCategory);
+  if(activeSubTag) p.set('s', activeSubTag);
+  return '#' + p.toString();
+}
+function syncHash(){
+  if(applyingHash) return;
+  const h = stateToHash();
+  if((h || '#') === (location.hash || '#')) return;
+  location.hash = h;
+}
+function applyHash(){
+  applyingHash = true;
+  const p = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const v = p.get('v');
+  if(v === 'all' || v === 'area'){
+    currentPage = 'listings';
+    activeArea = (v === 'area' && p.get('t') && p.get('n')) ? { type: p.get('t'), name: p.get('n') } : null;
+    activeCategory = p.get('c') || 'All';
+    activeSubTag = p.get('s') || null;
+  } else {
+    currentPage = 'areas';
+    activeArea = null;
+  }
+  renderAll();
+  applyingHash = false;
+}
+window.addEventListener('hashchange', applyHash);
+
 /* ---------- Confetti (fun + interactive delight) ---------- */
 function spawnConfetti(x, y){
   const colors = ['#4FA8DE', '#E23A50', '#F3EDE0', '#1FA463', '#7EC8F2'];
@@ -1491,6 +1529,7 @@ function renderCuisineRail(){
       closeRail();
       renderCuisineRail();
       renderContent();
+      syncHash();
     });
   });
 }
@@ -2022,6 +2061,7 @@ function renderAll(){
   }
   renderAreaBanner();
   renderProfileChip();
+  syncHash();
 }
 
 /* ---------- Modals ---------- */
@@ -3204,7 +3244,7 @@ async function removeRemovedListings(){
   await removeRemovedListings();
   await seedMenusFromVisits();
   await assignAreas();
-  renderAll();
+  applyHash(); // restores the view from the address (empty hash = landing)
   // Boundary data (city neighborhoods + suburb towns) loads in the
   // background; neighborhood stamps persist on each record once assigned,
   // so these are real fetches only the first time.
