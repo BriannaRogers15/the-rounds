@@ -1108,8 +1108,7 @@ const PARENT_GROUPS = {
   // Burgers nest under American. The old regional umbrellas (Asian,
   // Latin American, Caribbean, European) are gone.
   'Japanese': ['Ramen', 'Sushi'],
-  // Desserts is a single guide — bakeries, ice cream, and frozen yogurt
-  // all consolidated into it (same rule as sandwiches).
+  'Desserts': ['Ice Cream', 'Bakery', 'Frozen Yogurt'],
   'Special Events': ['Dinner Dates', 'Happy Hour', 'Late Night', 'Breakfast', 'Brunch', 'Rooftop'],
   'Italian': ['Pizza'],
 };
@@ -1620,6 +1619,7 @@ const TAG_ICON = {
   'hot dogs': '🌭', 'pizza': '🍕', 'halal': '🕌',
   'mexican': '🇲🇽', 'peruvian': '🇵🇪', 'swiss': '🇨🇭', 'seafood': '🦐',
   'breakfast': '🍳', 'brunch': '🥞', 'rooftop': '🏙️',
+  'ice cream': '🍦', 'bakery': '🥐', 'frozen yogurt': '🍧',
   'happy hour': '🍻', 'late night': '🌙', 'jamaican': '🇯🇲', 'soul food': '🍲', 'italian': '🇮🇹', 'pasta': '🍝',
   'american': '🇺🇸',
   // Group/guide labels — every rail entry gets a real icon, never the 🍴 fallback.
@@ -1653,8 +1653,8 @@ const GOOGLE_TYPE_TAG = {
   american_restaurant: 'American',
   breakfast_restaurant: 'Breakfast',
   brunch_restaurant: 'Brunch',
-  bakery: 'Desserts',
-  ice_cream_shop: 'Desserts',
+  bakery: 'Bakery',
+  ice_cream_shop: 'Ice Cream',
   dessert_shop: 'Desserts',
   dessert_restaurant: 'Desserts',
   sandwich_shop: 'Sandwiches',
@@ -3037,8 +3037,6 @@ const SEED_RESTAURANTS = [
   {name:"Sharks Fish & Chicken", category:"Chicago Gems", address:"35 E 59th St, Chicago, IL 60637"},
   {name:"Sharks Fish & Chicken", category:"Seafood", address:"35 E 59th St, Chicago, IL 60637"},
   {name:"Sharks Fish & Chicken", category:"Chicken", address:"35 E 59th St, Chicago, IL 60637"},
-  {name:"Harold's Chicken Hyde Park", category:"Chicago Gems", address:"Kimbark Plaza Parking Lot, 1208 E 53rd St, Chicago, IL 60615"},
-  {name:"Harold's Chicken Hyde Park", category:"Chicken", address:"Kimbark Plaza Parking Lot, 1208 E 53rd St, Chicago, IL 60615"},
   {name:"Union Submarine Shop", category:"Chicago Gems", address:"110 E 51st St, Chicago, IL 60615"},
   {name:"Union Submarine Shop", category:"Sandwiches", address:"110 E 51st St, Chicago, IL 60615"},
   {name:"Tony's Original Phillysteak", category:"Chicago Gems", address:"1413 W 127th St, Calumet Park, IL 60827"},
@@ -3145,6 +3143,23 @@ const SEED_RESTAURANTS = [
   {name:"Paradise Park", category:"Brunch", address:"Chicago, IL"},
   {name:"The Bureau Bar and Restaurant", category:"Brunch", address:"Chicago, IL"},
   {name:"Prime 57 Restaurant & Lounge", category:"American", address:"Chicago, IL"},
+  // Gems curation (2026-07-11): Harold's corrected to the 35th St shack,
+  // Watta Potato + Tastee Rolls degemmed, four additions per Brianna.
+  {name:"Harold's Chicken #88", category:"Chicago Gems", address:"124 E 35th St, Chicago, IL 60616"},
+  {name:"Harold's Chicken #88", category:"Chicken", address:"124 E 35th St, Chicago, IL 60616"},
+  {name:"J&J Fish & Chicken", category:"Chicago Gems", address:"6814 S Stony Island Ave, Chicago, IL 60649"},
+  {name:"J&J Fish & Chicken", category:"Seafood", address:"6814 S Stony Island Ave, Chicago, IL 60649"},
+  {name:"J&J Fish & Chicken", category:"Chicken", address:"6814 S Stony Island Ave, Chicago, IL 60649"},
+  {name:"Uncle Remus Saucy Fried Chicken", category:"Chicago Gems", address:"5611 W Madison St, Chicago, IL 60644"},
+  {name:"Uncle Remus Saucy Fried Chicken", category:"Chicken", address:"5611 W Madison St, Chicago, IL 60644"},
+  {name:"Baba's Famous Steak & Lemonade", category:"Chicago Gems", address:"101 E 51st St, Chicago, IL 60615"},
+  {name:"Baba's Famous Steak & Lemonade", category:"Sandwiches", address:"101 E 51st St, Chicago, IL 60615"},
+  {name:"Herbachi", category:"Asian Fusion", address:"522 E 79th St, Chicago, IL 60619"},
+  {name:"Home of the Hoagy", category:"Chicago Gems", address:"Chicago, IL"},
+  // Cuisines for the gems-only spots that showed no category at all.
+  {name:"Watta Potato by Yogis Bistro", category:"American", address:"Chicago, IL"},
+  {name:"Tastee Rolls", category:"Asian Fusion", address:"Chicago, IL"},
+  {name:"Fred and Jack's", category:"Breakfast", address:"Chicago, IL"},
 ];
 
 async function seedIfNeeded(){
@@ -3352,7 +3367,6 @@ const ADDRESS_LOOKUP = [
   {name:"Beggars Pizza", category:"Chicago Gems", address:"8100 S Stony Island Ave, Chicago, IL 60617", phone:"+1 773-221-2500", placeId:"ChIJ74dhAY8oDogRHcLBOY_EdXA", lat:41.7476269, lng:-87.5863463, website:"https://www.beggarspizza.com/"},
   {name:"Hienie's Shrimp House", category:"Chicago Gems", address:"10359 S Torrence Ave, Chicago, IL 60617", phone:"+1 773-734-8400", placeId:"ChIJuyFmYb0nDogRHttuw-bz7c0", lat:41.7065604, lng:-87.5593596, website:"http://www.hienieschicken.com/"},
   {name:"Sharks Fish & Chicken", category:"Chicago Gems", address:"35 E 59th St, Chicago, IL 60637", phone:"+1 773-952-6870", placeId:"ChIJH7MvyPkvDogRVWNl2OEHLXI", lat:41.7871533, lng:-87.624152},
-  {name:"Harold's Chicken Hyde Park", category:"Chicago Gems", address:"Kimbark Plaza Parking Lot, 1208 E 53rd St, Chicago, IL 60615", phone:"+1 773-752-9270", placeId:"ChIJh_2702spDogR41jhyNK4rfs", lat:41.8000542, lng:-87.5960602, website:"http://haroldschickenhydepark.com/"},
   {name:"Union Submarine Shop", category:"Chicago Gems", address:"110 E 51st St, Chicago, IL 60615", phone:"+1 773-373-2040", placeId:"ChIJkQa1MfwvDogRoWgb3-g39yU", lat:41.8021404, lng:-87.6220733},
   {name:"Tony's Original Phillysteak", category:"Chicago Gems", address:"1413 W 127th St, Calumet Park, IL 60827", phone:"+1 708-389-3001", placeId:"ChIJ6ek3xX0kDogR6E0-MspMU4Q", lat:41.662655099999995, lng:-87.6566102, website:"https://www.tonysphillysteaksharksfish.com/"},
   {name:"Captain Hooks", category:"Chicago Gems", address:"601 E 79th St, Chicago, IL 60619", phone:"+1 773-723-7788", placeId:"ChIJ3VAWNrcoDogRh8PKtE4TYzw", lat:41.7508333, lng:-87.6097222},
@@ -3412,6 +3426,11 @@ const ADDRESS_LOOKUP = [
   {name:"Tree House", category:"Brunch", address:"149 W Kinzie St, Chicago, IL 60654", phone:"+1 708-960-8449", placeId:"ChIJdWeDEQstDogRrRVXRRWkdAs", lat:41.8890599, lng:-87.6330242, website:"https://www.treehousechicago.com/"},
   {name:"Yardbird", category:"Brunch", address:"530 N Wabash Ave, Chicago, IL 60654", phone:"+1 312-999-9760", placeId:"ChIJqxH3MW8tDogR0L1uFTO2IvQ", lat:41.891980800000006, lng:-87.62704289999999, website:"https://www.runchickenrun.com/location-page-chicago/"},
   {name:"The Whale", category:"Brunch", address:"2427 N Milwaukee Ave, Chicago, IL 60647", phone:"+1 773-825-2900", placeId:"ChIJDZNgCZHND4gRP3VyXXbfYhY", lat:41.9254885, lng:-87.70119969999999, website:"http://thewhalechicago.com/"},
+  {name:"Harold's Chicken #88", category:"Chicken", address:"124 E 35th St, Chicago, IL 60616", phone:"+1 312-877-5350", placeId:"ChIJV-gowwssDogRfpiuYnwXmHo", lat:41.8312232, lng:-87.6221193, website:"http://www.haroldschicken88chicago.net/"},
+  {name:"J&J Fish & Chicken", category:"Seafood", address:"6814 S Stony Island Ave, Chicago, IL 60649", phone:"+1 773-667-6617", placeId:"ChIJrX2FY_woDogR2XuO-JWx4I8", lat:41.7710198, lng:-87.5869358},
+  {name:"Uncle Remus Saucy Fried Chicken", category:"Chicken", address:"5611 W Madison St, Chicago, IL 60644", phone:"+1 877-201-0719", placeId:"ChIJJ-Ct3UIzDogRLg_x0Cup7Q0", lat:41.879966, lng:-87.765393, website:"http://uncleremususa.com/"},
+  {name:"Baba's Famous Steak & Lemonade", category:"Sandwiches", address:"101 E 51st St, Chicago, IL 60615", phone:"+1 872-244-8184", placeId:"ChIJsxEto-4vDogR_z47TELb3yM", lat:41.8016931, lng:-87.6223965, website:"http://babasfamoussteak.com/"},
+  {name:"Herbachi", category:"Asian Fusion", address:"522 E 79th St, Chicago, IL 60619", phone:"+1 872-303-3100", placeId:"ChIJ9VmkIMopDogR33WnxSBh6qc", lat:41.7513041, lng:-87.6115918, website:"https://herbachi.com/"},
 ];
 
 async function enrichAddresses(){
@@ -3450,6 +3469,21 @@ async function removeClosedPlaces(){
   await saveVisits();
 }
 
+/* A spot with a specific dessert subtag (Ice Cream / Bakery / Frozen
+   Yogurt) files under the Desserts group through it — the plain Desserts
+   tag would double up next to it, so strip it. Safe to re-run. */
+const DESSERT_SUBTAGS = ['Ice Cream', 'Bakery', 'Frozen Yogurt'];
+async function stripParentDessertTag(){
+  let changed = false;
+  restaurants.forEach(r=>{
+    if(r.categories && r.categories.includes('Desserts') && r.categories.some(c => DESSERT_SUBTAGS.includes(c))){
+      r.categories = r.categories.filter(c => c !== 'Desserts');
+      changed = true;
+    }
+  });
+  if(changed) await saveRestaurants();
+}
+
 /* Cuisine tags dropped their redundant "Cuisine" suffix for a cleaner tag
    bar (e.g. "Italian Cuisine" -> "Italian"). Rename any already-stored
    long-form tags to the short form. Safe to re-run — no-op once migrated. */
@@ -3464,12 +3498,9 @@ const CUISINE_RENAMES = {
   'Cheesesteak': 'Sandwiches',
   'Bagel': 'Sandwiches',
   'Wrap': 'Sandwiches',
-  // Same rule as sandwiches: bakeries and ice cream shops are still
-  // desserts, and cocktail/tiki bars are still bars. Wine Bars and
-  // Sports Bars stay — those are real guides of Brianna's.
-  'Bakery': 'Desserts',
-  'Ice Cream': 'Desserts',
-  'Frozen Yogurt': 'Desserts',
+  // Cocktail/tiki bars fold into Bars and Pasta into Italian; Wine Bars
+  // and Sports Bars stay — those are real guides. Desserts keeps its
+  // Ice Cream / Bakery / Frozen Yogurt subtags per Brianna.
   'Pasta': 'Italian',
   'Cocktail Bars': 'Bars',
   'Tiki Bars': 'Bars',
@@ -3507,6 +3538,9 @@ const REMOVED_TAGS_BY_NAME = {
   // keeps Desserts to the nine spots actually in the dessert guide.
   "D'Amato's Bakery": ["Desserts"],
   "Goddess and the Baker": ["Desserts"],
+  // Gems curation: staples list is Brianna's call — these two are out.
+  "Watta Potato by Yogis Bistro": ["Chicago Gems"],
+  "Tastee Rolls": ["Chicago Gems"],
 };
 async function removeStrayTags(){
   let changed = false;
@@ -3539,7 +3573,9 @@ async function seedMenusFromVisits(){
    (Burp Catering was once on this list as "just a caterer", but it's in
    the sandwiches guide and Google confirms a storefront restaurant at
    154 W 95th St — so it's back in.) */
-const REMOVED_LISTING_NAMES = [];
+const REMOVED_LISTING_NAMES = [
+  "Harold's Chicken Hyde Park", // wrong Harold's — the gem is #88 at 124 E 35th St
+];
 async function removeRemovedListings(){
   const removeIds = new Set(
     restaurants.filter(r => REMOVED_LISTING_NAMES.some(n => n.toLowerCase() === r.name.toLowerCase())).map(r => r.id)
@@ -3558,6 +3594,7 @@ async function removeRemovedListings(){
   await enrichAddresses();
   await removeClosedPlaces();
   await renameCuisineTags();
+  await stripParentDessertTag();
   await removeStrayTags();
   await removeRemovedListings();
   await seedMenusFromVisits();
