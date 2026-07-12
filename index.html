@@ -84,8 +84,7 @@ h1{
   background: linear-gradient(180deg, var(--brick-panel), var(--brick-panel-hi));
   border: 1px solid var(--hairline);
   border-radius: 10px;
-  margin: 26px auto 30px;
-  max-width: 680px;
+  margin: 26px 0 30px;
   padding: 18px 10px;
   display:grid;
   grid-template-columns: repeat(4, 1fr);
@@ -115,15 +114,6 @@ h1{
 /* ---- Listings layout: cuisine rail + main column ---- */
 .listings-layout{ display:flex; gap:18px; align-items:flex-start; }
 .listings-main{ flex:1; min-width:0; }
-.controls{
-  display:flex; gap:10px; align-items:center;
-  flex-wrap: wrap; margin-bottom: 14px;
-  background: linear-gradient(160deg, var(--brick-panel-hi), var(--brick-panel));
-  border: 1px solid var(--hairline);
-  border-radius: 16px;
-  padding: 10px 12px;
-  box-shadow: 0 12px 28px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03);
-}
 
 /* The vertical guide list. Desktop: sticky rail beside the cards.
    Phone: off-canvas drawer that slides in from the left. */
@@ -441,6 +431,10 @@ h1{
 .area-group-label{
   font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:2px;
   text-transform:uppercase; color: var(--flag-blue); margin-bottom:10px;
+}
+.area-side-label{
+  font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:2px;
+  text-transform:uppercase; color: var(--ink-dim); margin: 4px 0 8px 2px;
 }
 .area-blocks{
   display:grid;
@@ -832,14 +826,8 @@ h1{
     <div class="rail-scrim" id="railScrim"></div>
     <aside class="cuisine-rail" id="cuisineRail"></aside>
     <div class="listings-main">
-      <div class="controls">
-        <button class="btn secondary small rail-toggle" id="railToggle">☰ Guides</button>
-        <div style="flex:1;"></div>
-        <button class="btn secondary" id="profileBtn">👤</button>
-        <button class="btn" id="addRestaurantBtn">+ New Listing</button>
-      </div>
-
       <div class="tools-row">
+        <button class="btn secondary small rail-toggle" id="railToggle">☰ Guides</button>
         <div class="search-wrap">
           <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M18 18L13.8 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <input type="text" id="searchBox" class="search-box" placeholder="Search your listings…">
@@ -864,6 +852,9 @@ h1{
             <button data-view="map">Map</button>
           </div>
         </div>
+        <div class="tools-divider"></div>
+        <button class="btn secondary" id="profileBtn">👤</button>
+        <button class="btn" id="addRestaurantBtn">+ New Listing</button>
       </div>
 
       <div id="content" class="loading">Pulling up your listings…</div>
@@ -1102,7 +1093,7 @@ function categories(){
 const PARENT_GROUPS = {
   // One Sandwiches sub-tag — hoagies, wraps, cheesesteaks, bagels are all
   // sandwiches. Brianna's guides define the granularity; don't split finer.
-  'American': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Hot Dogs', 'Seafood', 'Halal', 'Soul Food', 'Sandwiches'],
+  'American': ['Burgers', 'Chicken', 'Steakhouses', 'BBQ', 'Seafood', 'Soul Food', 'Sandwiches'],
   // Countries are main guides (all flags at one level); Ramen and Sushi
   // are kinds of Japanese food, so they nest under Japanese the way
   // Burgers nest under American. The old regional umbrellas (Asian,
@@ -1277,6 +1268,36 @@ function displayHoodName(name){ return HOOD_RENAME[name] || name; }
 /* Community areas that aren't dining neighborhoods (the airport) — left
    off the landing grid unless a listing ever actually lands there. */
 const HOOD_EXCLUDE = new Set(["O'Hare"]);
+
+/* Which side of the city each neighborhood belongs to — the territory
+   page groups Chicago into Downtown / North / West / South / East Side.
+   Keys are display names (post-HOOD_RENAME). Anything unmapped falls back
+   to a rough compass cut on its boundary centroid. */
+const CHI_SIDES = ['Downtown', 'North Side', 'West Side', 'South Side', 'East Side'];
+const HOOD_SIDE = {
+  'Downtown': ['Loop', 'South Loop', 'River North', 'Streeterville', 'Gold Coast', 'Old Town', 'Printers Row', 'West Loop', 'Greektown'],
+  'North Side': ['Albany Park', 'Andersonville', 'Avondale', 'Belmont Cragin', 'Boystown', 'Dunning', 'Edgewater', 'Edison Park', 'Hermosa', 'Irving Park', 'Jefferson Park', 'Lake View', 'Lincoln Park', 'Lincoln Square', 'Logan Square', 'Montclare', 'North Center', 'North Park', 'Norwood Park', 'Portage Park', 'Rogers Park', 'Sauganash,Forest Glen', 'Uptown', 'West Ridge', 'Wrigleyville'],
+  'West Side': ['Austin', 'Bucktown', 'East Village', 'Galewood', 'Garfield Park', 'Humboldt Park', 'Little Italy, UIC', 'Little Village', 'Near West Side', 'North Lawndale', 'Pilsen', 'Ukrainian Village', 'West Town', 'Wicker Park'],
+  'South Side': ['Archer Heights', 'Armour Square', 'Ashburn', 'Auburn Gresham', 'Avalon Park', 'Beverly', 'Bridgeport', 'Brighton Park', 'Bronzeville', 'Burnside', 'Calumet Heights', 'Chatham', 'Chicago Lawn', 'Chinatown', 'Clearing', 'Englewood', 'Fuller Park', 'Gage Park', 'Garfield Ridge', 'Grand Crossing', 'Hyde Park', 'Jackson Park', 'Kenwood', 'Mckinley Park', 'Morgan Park', 'Mount Greenwood', 'New City', 'Oakland', 'Pullman', 'Riverdale', 'Roseland', 'South Shore', 'Washington Heights', 'Washington Park', 'West Elsdon', 'West Lawn', 'West Pullman', 'Woodlawn'],
+  'East Side': ['East Side', 'Hegewisch', 'South Chicago', 'South Deering'],
+};
+const HOOD_SIDE_LOOKUP = {};
+Object.entries(HOOD_SIDE).forEach(([side, names]) => names.forEach(n => HOOD_SIDE_LOOKUP[n] = side));
+function sideForHood(name){
+  if(HOOD_SIDE_LOOKUP[name]) return HOOD_SIDE_LOOKUP[name];
+  const f = hoodGeo && (hoodGeo.features || []).find(x => displayHoodName(x.properties.pri_neigh) === name);
+  if(f){
+    let pts = [], stack = [f.geometry.coordinates];
+    while(stack.length){ const c = stack.pop(); if(typeof c[0] === 'number') pts.push(c); else c.forEach(x => stack.push(x)); }
+    const lat = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+    const lng = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+    if(lng > -87.565 && lat < 41.75) return 'East Side';
+    if(lat >= 41.90) return 'North Side';
+    if(lat <= 41.85) return 'South Side';
+    return 'West Side';
+  }
+  return 'South Side';
+}
 
 function parseTown(address){
   if(!address) return null;
@@ -1502,7 +1523,7 @@ function renderStats(){
   const allAvg = avgRating(scopedVisits);
   const el = $('#statsReceipt');
   el.innerHTML = `
-    <div class="receipt-row"><span class="receipt-label">Listings on File</span><span class="receipt-val">${total}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Listings</span><span class="receipt-val">${total}</span></div>
     <div class="receipt-row"><span class="receipt-label">Spots Visited</span><span class="receipt-val">${visitedCount}/${total}</span></div>
     <div class="receipt-row"><span class="receipt-label">Visits Logged</span><span class="receipt-val">${totalVisits}</span></div>
     <div class="receipt-row"><span class="receipt-label">Average Rating</span><span class="receipt-val${allAvg ? '' : ' muted'}">${allAvg ? allAvg.toFixed(1) + ' ★' : '—'}</span></div>
@@ -1571,13 +1592,17 @@ function renderCuisineRail(){
   $$('.rail-item', railEl).forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const cat = btn.dataset.cat;
+      let unfolding = false;
       if(btn.dataset.sub !== undefined){
         activeSubTag = btn.dataset.sub || null;
       } else {
         activeCategory = (activeCategory === cat && cat !== 'All') ? 'All' : cat;
         activeSubTag = null;
+        // Tapping a group that just unfolded its sub-guides keeps the
+        // phone drawer open — otherwise the subtags would be unreachable.
+        unfolding = isGroupLabel(cat) && activeCategory === cat;
       }
-      closeRail();
+      if(!unfolding) closeRail();
       renderCuisineRail();
       renderContent();
       syncHash();
@@ -1616,7 +1641,7 @@ const TAG_ICON = {
   'korean': '🇰🇷', 'asian fusion': '🥢', 'desserts': '🍰',
   'indian': '🇮🇳', 'dinner dates': '💕',
   'hoagie': '🥪', 'sandwich': '🥪', 'cheesesteak': '🧀', 'bagel': '🥯', 'wrap': '🌯',
-  'hot dogs': '🌭', 'pizza': '🍕', 'halal': '🕌',
+  'pizza': '🍕',
   'mexican': '🇲🇽', 'peruvian': '🇵🇪', 'swiss': '🇨🇭', 'seafood': '🦐',
   'breakfast': '🍳', 'brunch': '🥞', 'rooftop': '🏙️',
   'ice cream': '🍦', 'bakery': '🥐', 'frozen yogurt': '🍧',
@@ -2022,25 +2047,27 @@ function renderAreasPage(){
     const name = displayHoodName(f.properties.pri_neigh);
     if(!HOOD_EXCLUDE.has(name) && !hoods[name] && !ghostNames.includes(name)) ghostNames.push(name);
   });
-  // Stocked areas: biggest territory first (ties A–Z) — the landing reads
-  // as a scoreboard. The unexplored list is A–Z: it's a lookup list.
-  const byCountDesc = counts => (a, b) => (counts[b.name] || 0) - (counts[a.name] || 0) || a.name.localeCompare(b.name);
-  const stockedBlocks = Object.keys(hoods).map(name => ({ type:'neighborhood', name }))
-    .sort(byCountDesc(hoods))
-    .map(areaBlockHTML).join('')
-    + (unassigned ? areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' }) : '');
-  const ghostBlocks = showGhosts
-    ? ghostNames.sort((a, b) => a.localeCompare(b)).map(name => areaBlockHTML({ type:'neighborhood', name })).join('')
-    : '';
-  const chicagoSection = (stockedBlocks || ghostNames.length) ? `
+  // Chicago splits into its sides (Downtown / North / West / South / East),
+  // neighborhoods A–Z within each. Unexplored ones join their side when
+  // the ghost toggle is on, so the landing stays pure signal by default.
+  const az = (a, b) => a.localeCompare(b);
+  const sideStocked = {}, sideGhosts = {};
+  Object.keys(hoods).forEach(name => (sideStocked[sideForHood(name)] ||= []).push(name));
+  ghostNames.forEach(name => (sideGhosts[sideForHood(name)] ||= []).push(name));
+  const sideSections = CHI_SIDES.map(side=>{
+    const blocks = (sideStocked[side] || []).sort(az).map(name => areaBlockHTML({ type:'neighborhood', name })).join('')
+      + (showGhosts ? (sideGhosts[side] || []).sort(az).map(name => areaBlockHTML({ type:'neighborhood', name })).join('') : '');
+    if(!blocks) return '';
+    return `<div class="area-side-label">${escapeHtml(side)}</div><div class="area-blocks">${blocks}</div>`;
+  }).join('');
+  const elsewhereBlock = unassigned ? `<div class="area-blocks">${areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' })}</div>` : '';
+  const chicagoSection = (sideSections || ghostNames.length) ? `
     <div class="area-group-label">Chicago</div>
-    ${stockedBlocks ? `<div class="area-blocks">${stockedBlocks}</div>` : ''}
-    ${ghostNames.length ? `<button class="ghost-toggle" id="ghostToggle">${showGhosts ? 'Hide' : 'Show'} ${ghostNames.length} unexplored neighborhood${ghostNames.length===1?'':'s'} ${showGhosts ? '▴' : '▾'}</button>` : ''}
-    ${ghostBlocks ? `<div class="area-blocks">${ghostBlocks}</div>` : ''}` : '';
+    ${sideSections}
+    ${elsewhereBlock}
+    ${ghostNames.length ? `<button class="ghost-toggle" id="ghostToggle">${showGhosts ? 'Hide' : 'Show'} ${ghostNames.length} unexplored neighborhood${ghostNames.length===1?'':'s'} ${showGhosts ? '▴' : '▾'}</button>` : ''}` : '';
   const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
-    const blocks = Object.keys(townByRegion[region]).map(town => ({ type:'town', name: town }))
-      .sort(byCountDesc(townByRegion[region]))
-      .map(areaBlockHTML).join('');
+    const blocks = Object.keys(townByRegion[region]).sort(az).map(town => areaBlockHTML({ type:'town', name: town })).join('');
     return `<div class="area-group-label">${escapeHtml(region)}</div><div class="area-blocks">${blocks}</div>`;
   }).join('');
 
@@ -2900,12 +2927,9 @@ const SEED_RESTAURANTS = [
   {name:"Corey's NYC Bagel Deli", category:"Sandwiches", address:"Chicago, IL"},
   {name:"Simply Soups Salads and Sandwiches", category:"Sandwiches", address:"Chicago, IL"},
   {name:"D'Amato's Bakery", category:"Bakery", address:"Chicago, IL"},
-  {name:"NYC Halal Eats", category:"Halal", address:"Burbank, IL"},
   {name:"NYC Halal Eats", category:"Burgers", address:"Burbank, IL"},
   {name:"Philly's Best", category:"Pizza", address:"Chicago, IL"},
   {name:"Philly's Original Steak & Lemonade", category:"Sandwiches", address:"Chicago, IL"},
-  {name:"Devil Dawgs", category:"Hot Dogs", address:"Chicago, IL"},
-  {name:"Portillo's", category:"Hot Dogs", address:"Chicago, IL"},
   {name:"Home of the Hoagy", category:"Sandwiches", address:"Chicago, IL"},
   {name:"Wrap & Roll Cafe", category:"Sandwiches", address:"Chicago, IL"},
   {name:"Lemme get umm", category:"Sandwiches", address:"Chicago, IL"},
@@ -2947,13 +2971,11 @@ const SEED_RESTAURANTS = [
   {name:"Punch Bowl Social", category:"American", address:"Chicago, IL"},
   // Late Night Spots (4) — Chi Cafe already on file, just gains a tag
   {name:"Halal Smash Burger & Phillies", category:"Late Night", address:"Chicago, IL"},
-  {name:"Halal Smash Burger & Phillies", category:"Halal", address:"Chicago, IL"},
   {name:"Halal Smash Burger & Phillies", category:"Burgers", address:"Chicago, IL"},
   {name:"Chi Cafe", category:"Late Night", address:"Chicago, IL"},
   {name:"Big Wig", category:"Late Night", address:"Chicago, IL"},
   {name:"Big Wig", category:"Mexican", address:"Chicago, IL"},
   {name:"Maxwell Street Depot", category:"Late Night", address:"Chicago, IL"},
-  {name:"Maxwell Street Depot", category:"Hot Dogs", address:"Chicago, IL"},
   // Jamaican (3)
   {name:"Jamaican Gates Restaurant", category:"Jamaican", address:"Chicago, IL"},
   {name:"Exclusive Jerk Caribbean Restaurant", category:"Jamaican", address:"Chicago Heights, IL"},
@@ -3160,6 +3182,9 @@ const SEED_RESTAURANTS = [
   {name:"Watta Potato by Yogis Bistro", category:"American", address:"Chicago, IL"},
   {name:"Tastee Rolls", category:"Asian Fusion", address:"Chicago, IL"},
   {name:"Fred and Jack's", category:"Breakfast", address:"Chicago, IL"},
+  // Hot Dogs / Halal had no guides behind them — Maxwell Street Depot's
+  // claim to fame is the pork chop sandwich, so it files under Sandwiches.
+  {name:"Maxwell Street Depot", category:"Sandwiches", address:"Chicago, IL"},
 ];
 
 async function seedIfNeeded(){
@@ -3533,7 +3558,7 @@ const REMOVED_TAGS_BY_NAME = {
   "Peach's Restaurant": ["Soul Food"], // breakfast spot — not in the soul guide
   "Prime 57 Restaurant & Lounge": ["Jamaican"], // upscale American lounge — mis-tagged in the original upload
   "Philly's Best": ["Pizza"], // cheesesteak shop — it's in the sandwiches guide, not the pizza guide
-  "NYC Halal Eats": ["Burgers"], // sandwiches-guide spot; Halal + Sandwiches cover it
+  "NYC Halal Eats": ["Burgers", "Halal"], // sandwiches-guide spot; Sandwiches covers it
   // Bakeries by trade, but they live in the sandwiches / breakfast guides —
   // keeps Desserts to the nine spots actually in the dessert guide.
   "D'Amato's Bakery": ["Desserts"],
@@ -3541,6 +3566,11 @@ const REMOVED_TAGS_BY_NAME = {
   // Gems curation: staples list is Brianna's call — these two are out.
   "Watta Potato by Yogis Bistro": ["Chicago Gems"],
   "Tastee Rolls": ["Chicago Gems"],
+  // Hot Dogs / Halal never came from a guide — retired as categories.
+  "Portillo's": ["Hot Dogs"],
+  "Devil Dawgs": ["Hot Dogs"],
+  "Maxwell Street Depot": ["Hot Dogs"],
+  "Halal Smash Burger & Phillies": ["Halal"],
 };
 async function removeStrayTags(){
   let changed = false;
