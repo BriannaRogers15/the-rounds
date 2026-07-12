@@ -3626,6 +3626,77 @@ async function seedMenusFromVisits(){
   if(changed) await saveRestaurants();
 }
 
+/* Real dishes pulled from each spot's own menu (website / posted menu),
+   so logging a visit offers checkboxes instead of an empty box. Applied
+   once per listing (menuSeeded flag): a dish you delete stays deleted,
+   and dishes you add on top are yours. Curated in batches — guide by
+   guide — alongside the website/Yelp research. */
+const MENU_LOOKUP = [
+  {name:"Qing Xiang Yuan Dumplings", dishes:["Kurobuta Pork & Cabbage Dumplings","Kurobuta Pork & Pickled Cabbage Dumplings","Shrimp, Pork & Leek Dumplings","Lamb & Coriander Dumplings","Lamb & Dill Dumplings","Wagyu Beef & Onion Dumplings","Wagyu Beef & Coriander Dumplings","Chicken & Mushroom Dumplings","Chicken & Cabbage Dumplings","Tomato & Egg Dumplings","Green Pepper & Egg Dumplings","Leek, Egg & Shrimp Dumplings","Crab Roe & Kurobuta Pork Dumplings","Lobster & Pork Dumplings","Truffle & Wagyu Beef Dumplings","Sea Cucumber Dumplings"]},
+  {name:"Shrimp Stop", dishes:["Jumbo Shrimp (1 lb)","Jumbo Shrimp (1/2 lb)","Catfish Strips","Fish & Chips","Fried Oysters","Hush Puppies","Spicy Cocktail Sauce Shrimp","Fries"]},
+  {name:"Roc & Ro BBQ", dishes:["Pork Rib Tips","Turkey Rib Tips","Rib Tip Dinner","Bucket of Tips","Smash Burger","Fried Catfish","Fried Chicken","Hot Links","Coleslaw","Fries"]},
+  {name:"Chixter", dishes:["Smoked Wings","Traditional Bone-In Wings","Boneless Wings","Chicken Sandwich","Chicken Tenders","Party Pack","Potato Wedges","Waffle Fries"]},
+  {name:"Antique Taco Bridgeport", dishes:["Al Pastor Chicken Taco","Potato & Poblano Taco","Crispy Fish Taco","Garlic Shrimp Taco","Tamarind BBQ Pork Taco","Crunchy Ground Beef Taco","Fried Chicken Burrito","Smoked Brisket Burrito","Antique Taco Salad","Elote","Horchata Milkshake","Margarita"]},
+  {name:"Bar Tabu", dishes:["Charred Octopus Tacos","Lobster Flautas","Birria Dip","Cochinita Benedict","Tandoori-Spiced Chicken","Esquite Fritters","Smoked Piña Colada"]},
+  {name:"Big Wig", dishes:["Barbacoa Taco","Chorizo Taco","Skirt Steak Taco","Chicken Taco","Avocado Taco","Mahi Mahi Taco","Steak Burrito","Barbacoa Burrito","Torta","Chips & Guacamole"]},
+  {name:"Birrieria Zaragoza", dishes:["Birria Tatemada Plate","Goat Taco","Goat Quesadilla","Consomé","Hand-Pressed Tortillas"]},
+  {name:"El G-Fe", dishes:["Birria Tacos","Quesabirria Taco Combo","Consomé","Shrimp Tacos","Fish Taco Dinner","Ceviche","Horchata"]},
+  {name:"Flaco's Tacos", dishes:["Ancho Chicken Taco","Street Corn Chicken Taco","Steak Taco","Al Pastor Taco","Grilled Fish Taco","Grilled Shrimp Taco","Steak Quesadilla","Bean & Cheese Burrito","Rajas Poblano Taco","Horchata","Jamaica Agua Fresca","Margarita"]},
+  {name:"Fuerte Tacos & Ice Cream", dishes:["Street Tacos","Quesabirria","Burritos","Homemade Ice Cream"]},
+  {name:"La Cabaña Midlothian", dishes:["Quesabirria Tacos","Birria con Queso","Chile Relleno Taco Dinner","Al Pastor Fries","Carne a la Tampiqueña","Torta","Pozole","Menudo","Fajitas","Tamales","Carne Asada"]},
+  {name:"La Catrina Restaurant", dishes:["Quesabirria Tacos","Birria Tacos","Al Pastor Tacos","Chilaquiles","Enchiladas","Fajitas","Chimichanga","Steak Burrito","Queso Fundido con Chorizo","Mole Dinner","Churros"]},
+  {name:"La Mejikana", dishes:["Carne Asada Taquitos","Al Pastor Tacos","Aguachiles Verdes","Ceviche de Camarón","Ceviche de Pescado","Alita Wings (Al Pastor)","Langostinos","Pulpito Asado","Una Hamburgesa Chida","Guacamole Tradicional"]},
+  {name:"La Mexicana Grill", dishes:["Steak Tacos","Shrimp Tacos","Tilapia Tacos","Chicken Fajitas","Beef Enchiladas","Carnitas","Flautas","Chimichanga","Burrito Bowl","Tamales","Torta","Tres Leches Cake"]},
+  {name:"La Pasadita", dishes:["Carne Asada Taco","Pollo Taco","Barbacoa Taco","Lengua Taco","Lomo Taco","Chorizo Taco","Carne Asada Burrito","Super Burrito","Chile Relleno Burrito","Quesadilla"]},
+  {name:"Los Tacos & Desserts", dishes:["Chicken Quesabirria","Steak Tacos","Birria Tamales","Birria Ramen","Char-Broil Tacos","Cheesy Crusted Burrito","Epic Nachos","Grilled Chicken Burrito"]},
+  {name:"Martinez Mexican Bar & Grill", dishes:["Big Baby Burrito","Baby Burrito","Taco Tuesday 3-Pack","Barbacoa (Saturdays)","Carnitas (Sundays)","Quesadilla","Guacamole & Chips"]},
+  {name:"Mercadito", dishes:["Brisket Tacos","Fish Tacos","Carne Asada Tacos","Signature Guacamoles","Margarita","Mezcal Flight"]},
+  {name:"Mi Tierra En La Villita", dishes:["Chilaquiles","Shrimp Ceviche","Fajitas","Enchiladas","Carne Asada","Tacos","Burritos","Churros","Crepas","Flan","Margarita"]},
+  {name:"MiMi's Craft Kitchen", dishes:["Jerk Chicken Birria Tacos","Hot Honey Catfish","Shrimp & Grits","Craft Burger","Fried Chicken","Mac & Cheese","Collard Greens","Jambalaya","Pasta Primavera","Chocolate Lava Cake"]},
+  {name:"Migos Fine Food", dishes:["Spit-Roasted Chicken Taco","Braised Lamb Taco","Beef Shoulder Taco","Hand-Battered Tenders & Biscuit","Fried Chicken Wings & Biscuit","Elotes","Potato & Poblano Empanadas","Guacamole & Chips","Hummingbird Cake","7-Flavor Pound Cake"]},
+  {name:"Pearls & Roses", dishes:["Wings","Fried Shrimp","$2 Tuesday Tacos","Nachos","Burgers"]},
+  {name:"QuesaBirria Jalisco Pilsen", dishes:["Beef Quesabirria Tacos","Shrimp Quesabirria Tacos","Chicken Quesabirria Tacos","Veggie Quesabirria Tacos","Consomé"]},
+  {name:"Taco Max Mexican Grill", dishes:["Arrachera Taco","Al Pastor Taco","Tilapia Fish Taco","Carnitas Taco","Arrachera Burrito","Arrachera Torta","Breakfast Burrito","Chilaquiles","Enchiladas"]},
+  {name:"Tacos El Rey", dishes:["Al Pastor Tacos","Taco Perron","Mulitas Tijuana Style","Burrito Tijuana Style","Carnitas Dinner","Handmade Tortillas"]},
+  {name:"Tacotlan", dishes:["Birria Tacos","Quesabirria Tacos","Birria Taco Dinner","Consomé","Shrimp Tacos","Skirt Steak Taco","Chicken Fajita Taco"]},
+  {name:"Taqueria El Milagro", dishes:["Build-Your-Own Tacos","Build-Your-Own Burrito","Torta","Chicken Flautas","Quesadilla","Tamales","Sopa de Fideo"]},
+  {name:"Taqueria Varitas", dishes:["Tacos al Pastor","Carne Asada Tacos","Quesabirria Tacos","Chiles Rellenos","Enchiladas Verdes","Fajitas","Burritos","Horchata","Agua Fresca"]},
+  {name:"Tequila CJ Cantina Grill", dishes:["Carne Asada","Mexcalazo","NY Steak Tampiqueña","Chilaquiles","Choriqueso","Queso Panela Asado","Ceviche Mixto","Frijoles Tapatíos","Citrus Grilled Margarita"]},
+  {name:"Tastee Rolls", dishes:["Philly Cheesesteak Tastee Roll","Philly Chicken Roll","Jerk Chicken Roll","Obama Egg Roll","Italian Beef Tastee Roll","Veggie Egg Roll","Peach Cobbler Egg Roll","Rice Bowl"]},
+  {name:"Watta Potato by Yogis Bistro", dishes:["Seafood Sensation Loaded Potato","Surf & Turf Potato","Italian Beef Potato","Chicken Philly Potato","Salmon Alfredo","Build-Your-Own Loaded Potato","Loaded Fries"]},
+  {name:"Chicago Wingz Around The World", dishes:["Jerk Wings","Korean BBQ Wings","Honey-Lemon Pepper Wings","Buffalo Wings","Straw-Q Wings","Fried Shrimp","Fried Fish","Fries"]},
+  {name:"Fred and Jack's", dishes:["Breakfast Burrito","Steak Breakfast Burrito","Omelette","Breakfast Croissant","French Toast Breakfast","Steak & Eggs","Pancakes"]},
+  {name:"Italian Fiesta Pizzeria", dishes:["Thin Crust Sausage Pizza","Thin Crust Pepperoni Pizza","Baked Lasagna","Spaghetti Bolognese","Mostaccioli","Italian Beef Sandwich","Chicken Parmesan","Spicy Wings","Pizza Bread"]},
+  {name:"Beggars Pizza", dishes:["Thin Crust Pizza","Pan Pizza","Stuffed Pizza","Italian Beef","Wings","Mozzarella Sticks"]},
+  {name:"Hienie's Shrimp House", dishes:["Fried Shrimp","Fried Chicken","Chicken Tenders","Gizzards","Perch & Zucchini Sticks","Fish Sandwich","Italian Beef","Cheese & Sausage Pizza","Fried Zucchini"]},
+  {name:"Sharks Fish & Chicken", dishes:["Fried Catfish","Perch","Jumbo Shrimp","Snow Crab Legs","Chicken Wings","Hush Puppies"]},
+  {name:"Union Submarine Shop", dishes:["Submarine Sandwich","Philly Steak","Chicken Wings","Burger","Fried Shrimp","Fries"]},
+  {name:"Tony's Original Phillysteak", dishes:["Philly Steak","Chicken Philly","Wings","Fried Shrimp","Catfish","Fries"]},
+  {name:"Portillo's", dishes:["Chicago-Style Hot Dog","Italian Beef","Char-Grilled Burger","Cheese Fries","Chopped Salad","Chocolate Cake Shake","Polish Sausage","Tamale"]},
+  {name:"LEM'S Bar-B-Q", dishes:["Rib Tips","Spare Ribs","Hot Links","Tip & Link Combo","Fried Chicken","Fries"]},
+  {name:"Maxwell Street Depot", dishes:["Pork Chop Sandwich","Maxwell Street Polish","Hot Dog","Hamburger","Grilled Onions","Fries"]},
+  {name:"Harold's Chicken #88", dishes:["6-Wing Dinner","Half Dark Dinner","Half White Dinner","Catfish","Perch","Mild Sauce","Fries & Coleslaw"]},
+  {name:"J&J Fish & Chicken", dishes:["Catfish Dinner","Perch Dinner","Chicken Wings","Fried Shrimp","Pizza Puff","Fries"]},
+  {name:"Uncle Remus Saucy Fried Chicken", dishes:["Saucy Fried Chicken","Wings with Mild Sauce","Chicken Dinner","Fried Okra","Fish Dinner","Fries"]},
+  {name:"Baba's Famous Steak & Lemonade", dishes:["Philly Steak Sandwich","Chicken Philly","Gyros","Wings","Fresh-Squeezed Lemonade","Fries"]},
+  {name:"Home of the Hoagy", dishes:["Sweet Steak","Steak Hoagy","Original Hoth Hoagy","Turkey Steak Sandwich","Impossible Steak Sandwich"]},
+];
+async function seedCuratedMenus(){
+  let changed = false;
+  MENU_LOOKUP.forEach(entry=>{
+    const r = restaurants.find(x => x.name.toLowerCase() === entry.name.toLowerCase());
+    if(!r || r.menuSeeded) return;
+    if(!r.menu) r.menu = [];
+    entry.dishes.forEach(d=>{
+      if(!r.menu.some(x => x.toLowerCase() === d.toLowerCase())) r.menu.push(d);
+    });
+    r.menu.sort((a,b)=> a.localeCompare(b));
+    r.menuSeeded = true;
+    changed = true;
+  });
+  if(changed) await saveRestaurants();
+}
+
 /* One-time removal of listings that no longer belong (e.g. not an actual
    restaurant). Safe to re-run — no-op once already removed.
    (Burp Catering was once on this list as "just a caterer", but it's in
@@ -3656,6 +3727,7 @@ async function removeRemovedListings(){
   await removeStrayTags();
   await removeRemovedListings();
   await seedMenusFromVisits();
+  await seedCuratedMenus();
   await assignAreas();
   applyHash(); // restores the view from the address (empty hash = landing)
   // Boundary data (city neighborhoods + suburb towns) loads in the
