@@ -566,7 +566,10 @@ h1{
 }
 .modal .close:hover{ color: var(--flag-blue-bright); }
 .field{ margin-top:15px; }
-.field label{
+/* Direct children only: the dish checkboxes inside the "what did you eat"
+   field are also <label>s, and this blanket style was overriding their
+   flex layout (checkbox overlapping its text) and uppercasing dish names. */
+.field > label{
   display:block; font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
   color: var(--flag-blue); margin-bottom:6px; font-family:'IBM Plex Mono', monospace;
 }
