@@ -1,4 +1,4 @@
-const CACHE_NAME = 'the-rounds-v33';
+const CACHE_NAME = 'the-rounds-v34';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
