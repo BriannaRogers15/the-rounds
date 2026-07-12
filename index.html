@@ -689,7 +689,14 @@ h1{
 
 /* ---- Per-restaurant menu ---- */
 .menu-section{ margin-top:18px; border-top: 1px solid var(--hairline); padding-top:14px; }
-.menu-chips{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+/* Two rows that scroll sideways: full menus are long, and two rows keep
+   the section compact without hiding anything behind a "show more". */
+.menu-chips{
+  display:grid; grid-auto-flow:column; grid-template-rows:repeat(2, auto);
+  gap:6px; justify-content:start; align-items:center;
+  overflow-x:auto; padding-bottom:6px;
+}
+.menu-chips .no-menu{ grid-row: span 2; }
 .menu-chip{
   display:inline-flex; align-items:center; gap:5px;
   font-size:12px; font-weight:600;
@@ -733,11 +740,12 @@ h1{
 
 /* ---- Dish checklist in Log a Visit ---- */
 .dish-checklist{
-  max-height: 190px; overflow-y:auto;
+  max-height: 230px; overflow-y:auto;
   border: 1px solid var(--hairline); border-radius: 8px;
   background: var(--brick-deep);
   padding: 5px; margin-bottom: 8px;
-  display:flex; flex-direction:column; gap:2px;
+  /* Two columns so a complete menu stays scannable in the modal. */
+  display:grid; grid-template-columns:1fr 1fr; gap:2px 6px;
 }
 .dish-check{
   display:flex; align-items:center; gap:9px;
@@ -3644,7 +3652,7 @@ const MENU_LOOKUP = [
   {name:"Qing Xiang Yuan Dumplings", dishes:["Kurobuta Pork & Cabbage Dumplings","Kurobuta Pork & Pickled Cabbage Dumplings","Shrimp, Pork & Leek Dumplings","Lamb & Coriander Dumplings","Lamb & Dill Dumplings","Wagyu Beef & Onion Dumplings","Wagyu Beef & Coriander Dumplings","Chicken & Mushroom Dumplings","Chicken & Cabbage Dumplings","Tomato & Egg Dumplings","Green Pepper & Egg Dumplings","Leek, Egg & Shrimp Dumplings","Crab Roe & Kurobuta Pork Dumplings","Lobster & Pork Dumplings","Truffle & Wagyu Beef Dumplings","Sea Cucumber Dumplings"]},
   {name:"Shrimp Stop", dishes:["Jumbo Shrimp (1 lb)","Jumbo Shrimp (1/2 lb)","Catfish Strips","Fish & Chips","Fried Oysters","Hush Puppies","Spicy Cocktail Sauce Shrimp","Fries"]},
   {name:"Shrimp Stop 2", dishes:["Jumbo Shrimp (1 lb)","Jumbo Shrimp (1/2 lb)","Catfish Strips","Fish & Chips","Fried Oysters","Hush Puppies","Spicy Cocktail Sauce Shrimp","Fries"]},
-  {name:"Captain Hooks", dishes:["Fried Catfish","Perch","Jumbo Shrimp","Chicken Wings","Fish & Chicken Combo","Hush Puppies","Fresh-Squeezed Lemonade"]},
+  {name:"Captain Hooks", v:2, retire:["Fried Catfish","Perch","Jumbo Shrimp","Chicken Wings","Fish & Chicken Combo","Hush Puppies","Fresh-Squeezed Lemonade"], dishes:["Catfish Filet w/ Fries","Tilapia Fillet w/ Fries","Perch Fillets w/ Fries","Catfish Nuggets","Fish Po Boy","Wings w/ Fries","Buffalo Wings","Chicken Tenders","Legs & Thighs","Chicken Po Boy","Grilled Chicken Sandwich","Philly Chicken","Crispy Philly Chicken","Medium Shrimp w/ Fries","Philly Steak","Crispy Philly Steak","Italian Beef","Gyro Sandwich","Gyro Plate","Fresh Cut Fries","Cheese Fries","Loaded Fries","Onion Rings","Cheese Sticks","Salad","Pizza Puff","Fried Okra","Banana Pudding","Cheesecake","Butter Cookies","Sliced Cake","Taffy Grapes","Frozen Lemonade","Obama Tea"]},
   {name:"Roc & Ro BBQ", dishes:["Pork Rib Tips","Turkey Rib Tips","Rib Tip Dinner","Bucket of Tips","Smash Burger","Fried Catfish","Fried Chicken","Hot Links","Coleslaw","Fries"]},
   {name:"Chixter", dishes:["Smoked Wings","Traditional Bone-In Wings","Boneless Wings","Chicken Sandwich","Chicken Tenders","Party Pack","Potato Wedges","Waffle Fries"]},
   {name:"Antique Taco Bridgeport", dishes:["Al Pastor Chicken Taco","Potato & Poblano Taco","Crispy Fish Taco","Garlic Shrimp Taco","Tamarind BBQ Pork Taco","Crunchy Ground Beef Taco","Fried Chicken Burrito","Smoked Brisket Burrito","Antique Taco Salad","Elote","Horchata Milkshake","Margarita"]},
@@ -3767,13 +3775,23 @@ async function seedCuratedMenus(){
   let changed = false;
   MENU_LOOKUP.forEach(entry=>{
     const r = restaurants.find(x => x.name.toLowerCase() === entry.name.toLowerCase());
-    if(!r || r.menuSeeded) return;
+    if(!r) return;
+    // Entries are versioned: bumping `v` re-applies a corrected menu on
+    // devices that already seeded an older one. `retire` names seed dishes
+    // the correction removes — user-added dishes are never touched.
+    const ver = entry.v || 1;
+    const seeded = r.menuSeeded === true ? 1 : (r.menuSeeded || 0);
+    if(seeded >= ver) return;
     if(!r.menu) r.menu = [];
+    (entry.retire || []).forEach(d=>{
+      const i = r.menu.findIndex(x => x.toLowerCase() === d.toLowerCase());
+      if(i !== -1) r.menu.splice(i, 1);
+    });
     entry.dishes.forEach(d=>{
       if(!r.menu.some(x => x.toLowerCase() === d.toLowerCase())) r.menu.push(d);
     });
     r.menu.sort((a,b)=> a.localeCompare(b));
-    r.menuSeeded = true;
+    r.menuSeeded = ver;
     changed = true;
   });
   if(changed) await saveRestaurants();
