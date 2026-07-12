@@ -524,27 +524,6 @@ h1{
   border-radius: 999px; padding: 3px 9px;
 }
 
-/* ---- In-app website popup ---- */
-.overlay.site-overlay{ align-items:center; padding: 24px 16px; z-index: 60; }
-/* Doubled class so this outranks the base .modal max-width (520px), which
-   is declared later in the sheet and was silently clamping the popup. */
-.modal.site-modal{
-  max-width: min(1400px, 94vw); width: 100%; height: 90vh;
-  display:flex; flex-direction:column;
-  padding: 14px 16px 16px;
-}
-.site-modal-head{
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
-  margin-bottom: 10px; flex-wrap:wrap;
-}
-.site-modal-name{ font-family:'Oswald', sans-serif; font-weight:700; font-size:18px; color: var(--cream); }
-.site-modal-actions{ display:flex; align-items:center; gap:10px; margin-left:auto; }
-.site-modal-hint{ flex-basis:100%; font-size:10.5px; color: var(--cream-dim); margin-top:-4px; }
-.site-frame{
-  flex:1; width:100%; border:1px solid var(--hairline); border-radius:10px;
-  background:#fff;
-}
-
 .gem-badge{
   position:absolute; top:8px; left:10px;
   font-size:14px; z-index:2;
@@ -863,7 +842,6 @@ h1{
 </div>
 
 <div id="modalRoot"></div>
-<div id="siteRoot"></div>
 
 <script>
 let restaurants = [];
@@ -1652,16 +1630,23 @@ const TAG_ICON = {
   'asian': '🥢', 'caribbean': '🏝️', 'european': '🇪🇺', 'latin american': '🌮',
   'sandwiches': '🥪', 'special events': '🎉', 'chicago gems': '💎',
   'wine bars': '🍷',
-  'thai': '🇹🇭', 'vietnamese': '🇻🇳',
+  'thai': '🇹🇭', 'vietnamese': '🇻🇳', 'indonesian': '🇮🇩', 'afghan': '🇦🇫',
+  'brazilian': '🇧🇷', 'spanish': '🇪🇸', 'french': '🇫🇷', 'greek': '🇬🇷',
+  'mediterranean': '🫒', 'middle eastern': '🧆', 'lebanese': '🇱🇧',
+  'turkish': '🇹🇷', 'african': '🌍', 'vegan': '🥦', 'cafes': '☕',
 };
 function tagIcon(tag){
   return TAG_ICON[tag.toLowerCase()] || '🍴';
 }
 
 /* Google Places types -> guide tags, so a new listing's categories fill in
-   automatically on selection. Unmapped types (cafe, meal_takeaway...) are
-   simply skipped — the field stays editable for personal guides. */
+   automatically on selection. Covers Google's whole food-and-drink type
+   table; only the truly generic types (restaurant, food_court, meal_takeaway,
+   meal_delivery, fast_food_restaurant, cafeteria, buffet_restaurant) stay
+   unmapped — they say nothing about the food, and the Filing-under chips in
+   the add modal let you set the guide by hand before saving. */
 const GOOGLE_TYPE_TAG = {
+  // Cuisines
   pizza_restaurant: 'Pizza',
   italian_restaurant: 'Italian',
   japanese_restaurant: 'Japanese',
@@ -1670,21 +1655,55 @@ const GOOGLE_TYPE_TAG = {
   chinese_restaurant: 'Chinese',
   korean_restaurant: 'Korean',
   asian_restaurant: 'Asian Fusion',
-  mexican_restaurant: 'Mexican',
+  thai_restaurant: 'Thai',
+  vietnamese_restaurant: 'Vietnamese',
+  indonesian_restaurant: 'Indonesian',
   indian_restaurant: 'Indian',
+  afghani_restaurant: 'Afghan',
+  mexican_restaurant: 'Mexican',
+  brazilian_restaurant: 'Brazilian',
+  spanish_restaurant: 'Spanish',
+  french_restaurant: 'French',
+  greek_restaurant: 'Greek',
+  mediterranean_restaurant: 'Mediterranean',
+  middle_eastern_restaurant: 'Middle Eastern',
+  lebanese_restaurant: 'Lebanese',
+  turkish_restaurant: 'Turkish',
+  african_restaurant: 'African',
+  american_restaurant: 'American',
+  // Formats
   steak_house: 'Steakhouses',
   hamburger_restaurant: 'Burgers',
   barbecue_restaurant: 'BBQ',
   seafood_restaurant: 'Seafood',
-  american_restaurant: 'American',
   breakfast_restaurant: 'Breakfast',
   brunch_restaurant: 'Brunch',
+  diner: 'Breakfast',
+  vegan_restaurant: 'Vegan',
+  vegetarian_restaurant: 'Vegan',
+  // Sweets
   bakery: 'Bakery',
+  donut_shop: 'Bakery',
   ice_cream_shop: 'Ice Cream',
   dessert_shop: 'Desserts',
   dessert_restaurant: 'Desserts',
+  candy_store: 'Desserts',
+  chocolate_shop: 'Desserts',
+  chocolate_factory: 'Desserts',
+  confectionery: 'Desserts',
+  acai_shop: 'Desserts',
+  juice_shop: 'Desserts',
+  // Sandwiches & counters
   sandwich_shop: 'Sandwiches',
   bagel_shop: 'Sandwiches',
+  deli: 'Sandwiches',
+  // Cafes
+  cafe: 'Cafes',
+  coffee_shop: 'Cafes',
+  tea_house: 'Cafes',
+  cat_cafe: 'Cafes',
+  dog_cafe: 'Cafes',
+  // Bars & nightlife
   bar: 'Bars',
   pub: 'Bars',
   wine_bar: 'Wine Bars',
@@ -1746,9 +1765,7 @@ function renderContent(){
         ${isGem(r) ? `<div class="gem-badge" title="Chicago Gem">💎</div>` : ''}
         ${visited ? `<div class="stamp"><svg viewBox="-4 -4 8 8" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/></svg>VISITED</div>` : ''}
         <div class="ticket-tags">${tags.map(t=>`<span class="card-tag">${tagIcon(t)} ${escapeHtml(singularizeTag(t))}</span>`).join('')}</div>
-        <div class="ticket-name">${r.website
-          ? `<a href="${escapeHtml(r.website)}" class="name-link" onclick="event.stopPropagation();event.preventDefault();openSiteById('${r.id}')">${escapeHtml(r.name)}</a>`
-          : `<a href="https://www.google.com/search?q=${encodeURIComponent(r.name + ' ' + (r.address||'') + ' official website')}" target="_blank" rel="noopener" class="name-link" onclick="event.stopPropagation()">${escapeHtml(r.name)}</a>`}</div>
+        <div class="ticket-name">${nameLinkHtml(r, true)}</div>
         ${r.address ? `<div class="ticket-addr"><a href="${r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + r.address))}" target="_blank" rel="noopener" class="addr-link" onclick="event.stopPropagation()">${escapeHtml(r.address)}</a></div>` : ''}
         <div class="ticket-meta">
           <span>${vs.length} visit${vs.length===1?'':'s'}${distTxt ? ` &nbsp;·&nbsp; <span class="dist-badge">${distTxt}</span>` : ''}</span>
@@ -1844,7 +1861,8 @@ function renderLeafletMap(el, withCoords, noteHtml, myToken){
       <div class="map-popup-name">${escapeHtml(r.name)}</div>
       <div style="font-size:11px;">${vs.length} visit${vs.length===1?'':'s'}${avg ? ' · ' + starString(avg) : ''}</div>
       <a class="map-popup-link" href="${mapsHref}" target="_blank" rel="noopener">📍 Maps</a>
-      ${r.website ? `<a class="map-popup-link" href="javascript:void(0)" onclick="openSiteById('${r.id}')">🌐 Website</a>` : ''}
+      ${r.website ? `<a class="map-popup-link" href="${escapeHtml(r.website)}" target="_blank" rel="noopener">🌐 Website</a>` : ''}
+      ${r.yelp ? `<a class="map-popup-link" href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener">⭐ Yelp</a>` : ''}
       <a class="map-popup-link" href="javascript:void(0)" onclick="openDetail('${r.id}')">View details</a>
     `);
     marker.on('mouseover', ()=> marker.openPopup());
@@ -1920,7 +1938,8 @@ function showMapPopup(mapEl, pinEl){
     <div class="map-popup-name">${escapeHtml(r.name)}</div>
     <div style="font-size:11px;color:var(--cream-dim);">${vs.length} visit${vs.length===1?'':'s'}${avg ? ' · ' + starString(avg) : ''}</div>
     <a class="map-popup-link" href="${mapsHref}" target="_blank" rel="noopener">📍 Maps</a>
-    ${r.website ? `<a class="map-popup-link" href="javascript:void(0)" onclick="openSiteById('${id}')">🌐 Website</a>` : ''}
+    ${r.website ? `<a class="map-popup-link" href="${escapeHtml(r.website)}" target="_blank" rel="noopener">🌐 Website</a>` : ''}
+    ${r.yelp ? `<a class="map-popup-link" href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener">⭐ Yelp</a>` : ''}
     <a class="map-popup-link" href="javascript:void(0)" data-detail="${id}">View details</a>
   `;
   mapEl.appendChild(popup);
@@ -2156,34 +2175,14 @@ function renderAll(){
 /* ---------- Modals ---------- */
 function closeModal(){ $('#modalRoot').innerHTML = ''; }
 
-/* In-app website popup. Lives in its own root (above #modalRoot) so it can
-   layer on top of the detail modal. Some sites forbid being embedded in a
-   frame (X-Frame-Options / CSP) and just render blank — browsers don't let
-   us detect that cross-origin, so the "Open in new tab" escape hatch stays
-   visible at all times. */
-function closeSitePopup(){ $('#siteRoot').innerHTML = ''; }
-function openSitePopup(url, name){
-  $('#siteRoot').innerHTML = `
-    <div class="overlay site-overlay" id="siteOv">
-      <div class="modal site-modal">
-        <div class="site-modal-head">
-          <span class="site-modal-name">${escapeHtml(name)}</span>
-          <div class="site-modal-actions">
-            <a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="link-pill">Open in new tab ↗</a>
-            <button class="close" id="closeSite">×</button>
-          </div>
-          <span class="site-modal-hint">Page staying blank? That site doesn't allow embedding — use "Open in new tab".</span>
-        </div>
-        <iframe class="site-frame" src="${escapeHtml(url)}" referrerpolicy="no-referrer-when-downgrade"></iframe>
-      </div>
-    </div>
-  `;
-  $('#closeSite').addEventListener('click', closeSitePopup);
-  $('#siteOv').addEventListener('click', (e)=>{ if(e.target.id==='siteOv') closeSitePopup(); });
-}
-function openSiteById(id){
-  const r = restaurants.find(x=>x.id===id);
-  if(r && r.website) openSitePopup(r.website, r.name);
+/* External pages always open in a real new tab. The old in-app iframe popup
+   is gone for good reason: Facebook, Yelp, and most ordering platforms send
+   X-Frame-Options / frame-ancestors and render silently blank in a frame,
+   and browsers give no cross-origin way to detect it. */
+function nameLinkHtml(r, stopProp){
+  const url = r.website || r.yelp;
+  if(!url) return escapeHtml(r.name);
+  return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="name-link"${stopProp ? ' onclick="event.stopPropagation()"' : ''}>${escapeHtml(r.name)}</a>`;
 }
 
 /* ---------- Reviewer profiles (device-local usernames) ---------- */
@@ -2297,14 +2296,46 @@ function openAddRestaurant(){
 
   let selectedPlace = null;
   let manualMode = false;
+  let pendingTags = [];
+  /* Editable guide chips, live in the modal before saving. Google's
+     suggestions land here first, but the final say is the user's — so a
+     spot never has to be saved untagged, manual mode included. */
+  function renderFilingUnder(){
+    const fu = $('#filingUnder');
+    if(!fu) return;
+    fu.style.display = '';
+    const datalist = categories().map(c=>`<option value="${escapeHtml(c)}">`).join('');
+    fu.innerHTML = `Filing under:
+      ${pendingTags.map(t=>`<span class="tag-pill">${tagIcon(t)} ${escapeHtml(t)}<button class="tag-x" data-tag="${escapeHtml(t)}">×</button></span>`).join('')}
+      <input type="text" id="addTagInput" class="tag-add" list="addTagList" placeholder="+ add guide">
+      <datalist id="addTagList">${datalist}</datalist>`;
+    $$('#filingUnder .tag-x').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        pendingTags = pendingTags.filter(t => t !== btn.dataset.tag);
+        renderFilingUnder();
+      });
+    });
+    const inp = $('#addTagInput');
+    const commitTag = (refocus)=>{
+      const val = inp.value.trim();
+      if(!val) return;
+      if(!pendingTags.some(t => t.toLowerCase() === val.toLowerCase())) pendingTags.push(val);
+      renderFilingUnder();
+      if(refocus) $('#addTagInput').focus();
+    };
+    inp.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); commitTag(true); } });
+    inp.addEventListener('blur', ()=> commitTag(false));
+  }
   function enableManualMode(){
     manualMode = true;
     selectedPlace = null;
+    pendingTags = [];
     $('#nameAutocompleteContainer').style.display = 'none';
     $('#rName').style.display = '';
     $('#rName').focus();
     $('#manualAddrField').style.display = '';
     $('#manualToggle').style.display = 'none';
+    renderFilingUnder();
   }
   $('#manualToggle').addEventListener('click', (ev)=>{ ev.preventDefault(); enableManualMode(); });
 
@@ -2320,9 +2351,8 @@ function openAddRestaurant(){
       pac.addEventListener('gmp-select', async ({ placePrediction })=>{
         const place = placePrediction.toPlace();
         await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType'] });
-        // Cuisines map themselves from Google's classification — there is
-        // no categories field. Anything Google can't classify gets tagged
-        // during the next curation sweep instead of blocking the add.
+        // Cuisines map themselves from Google's classification, then land
+        // in the Filing-under chips where they can be adjusted before saving.
         const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
         const tags = [];
         types.forEach(t=>{
@@ -2337,15 +2367,9 @@ function openAddRestaurant(){
           phone: place.internationalPhoneNumber || null,
           website: place.websiteURI || null,
           placeId: place.id || null,
-          tags,
         };
-        const fu = $('#filingUnder');
-        if(fu){
-          fu.style.display = '';
-          fu.innerHTML = tags.length
-            ? `Filing under: ${tags.map(t=>`<span class="card-tag">${tagIcon(t)} ${escapeHtml(t)}</span>`).join(' ')}`
-            : `Google didn't specify a cuisine — it'll be added untagged and tagged on the next sweep.`;
-        }
+        pendingTags = tags;
+        renderFilingUnder();
       });
       // Probe one real request: a referrer-blocked or misconfigured API key
       // renders the widget fine but 403s every suggestion, which looks like
@@ -2373,8 +2397,7 @@ function openAddRestaurant(){
       alert(manualMode ? 'Name and address are required. (If it\'s not on Google Maps, the full address is on you.)' : 'Search and select a restaurant, or switch to manual entry.');
       return;
     }
-    const categoriesList = (!manualMode && selectedPlace && selectedPlace.tags) ? selectedPlace.tags : [];
-    const record = { id: uid(), name, categories: categoriesList, address, createdAt: Date.now() };
+    const record = { id: uid(), name, categories: [...pendingTags], address, createdAt: Date.now() };
     if(selectedPlace && !manualMode){
       if(selectedPlace.lat != null) record.lat = selectedPlace.lat;
       if(selectedPlace.lng != null) record.lng = selectedPlace.lng;
@@ -2409,12 +2432,11 @@ function openDetail(id){
               <input type="text" id="newTag" class="tag-add" list="tagList" placeholder="+ add guide">
               <datalist id="tagList">${datalist}</datalist>
             </div>
-            <div class="detail-name">${r.website
-              ? `<a href="${escapeHtml(r.website)}" class="name-link" onclick="event.preventDefault();openSiteById('${r.id}')">${escapeHtml(r.name)}</a>`
-              : `<a href="https://www.google.com/search?q=${encodeURIComponent(r.name + ' ' + (r.address||'') + ' official website')}" target="_blank" rel="noopener" class="name-link">${escapeHtml(r.name)}</a>`}</div>
+            <div class="detail-name">${nameLinkHtml(r)}</div>
             ${r.address ? `<div class="detail-addr">${escapeHtml(r.address)}</div>` : ''}
             <div class="detail-links">
               ${r.mapsUrl ? `<a href="${r.mapsUrl}" target="_blank" rel="noopener" class="link-pill">📍 Open in Google Maps</a>` : (r.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + r.address)}" target="_blank" rel="noopener" class="link-pill">📍 Open in Google Maps</a>` : '')}
+              ${r.yelp ? `<a href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener" class="link-pill">⭐ Yelp</a>` : ''}
               ${r.phone ? `<a href="tel:${r.phone.replace(/[^+\d]/g,'')}" class="link-pill">📞 ${escapeHtml(r.phone)}</a>` : ''}
             </div>
           </div>
@@ -3463,21 +3485,21 @@ async function enrichAddresses(){
   let changed = false;
   ADDRESS_LOOKUP.forEach(entry=>{
     const r = restaurants.find(x => x.name.toLowerCase() === entry.name.toLowerCase());
-    if(r){
-      const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${entry.placeId}`;
-      const closedFlag = !!entry.permanentlyClosed;
-      const website = entry.website || null;
-      if(r.address !== entry.address || r.phone !== entry.phone || r.mapsUrl !== mapsUrl || r.lat !== entry.lat || r.lng !== entry.lng || r.permanentlyClosed !== closedFlag || (website && r.website !== website)){
-        r.address = entry.address;
-        r.phone = entry.phone;
-        r.mapsUrl = mapsUrl;
-        r.lat = entry.lat;
-        r.lng = entry.lng;
-        r.permanentlyClosed = closedFlag;
-        if(website) r.website = website;
-        changed = true;
-      }
-    }
+    if(!r) return;
+    // Entries may be partial (e.g. just a verified yelp URL for a listing
+    // added in-app) — only the fields an entry actually carries are applied,
+    // so curated data never wipes out what Google filled in at add time.
+    const updates = {};
+    if(entry.address !== undefined) updates.address = entry.address;
+    if(entry.phone !== undefined) updates.phone = entry.phone;
+    if(entry.placeId) updates.mapsUrl = `https://www.google.com/maps/place/?q=place_id:${entry.placeId}`;
+    if(entry.lat !== undefined){ updates.lat = entry.lat; updates.lng = entry.lng; }
+    if(entry.permanentlyClosed !== undefined) updates.permanentlyClosed = entry.permanentlyClosed;
+    if(entry.website) updates.website = entry.website;
+    if(entry.yelp) updates.yelp = entry.yelp;
+    Object.entries(updates).forEach(([field, value])=>{
+      if(r[field] !== value){ r[field] = value; changed = true; }
+    });
   });
   if(changed) await saveRestaurants();
 }
