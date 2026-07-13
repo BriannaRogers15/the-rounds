@@ -692,14 +692,24 @@ h1{
 
 /* ---- Per-restaurant menu ---- */
 .menu-section{ margin-top:18px; border-top: 1px solid var(--hairline); padding-top:14px; }
-/* Two rows that scroll sideways: full menus are long, and two rows keep
-   the section compact without hiding anything behind a "show more". */
-.menu-chips{
-  display:grid; grid-auto-flow:column; grid-template-rows:repeat(2, auto);
-  gap:6px; justify-content:start; align-items:center;
-  overflow-x:auto; padding-bottom:6px;
+/* The menu reads top-to-bottom in columns like a printed card: two
+   columns normally, three when the menu is big. Sections (Appetizers,
+   Entrees, ...) come from the curated menu data when available. */
+.menu-groups{ columns:2; column-gap:22px; }
+.menu-groups.cols3{ columns:3; }
+.menu-group{ margin-bottom:10px; }
+.menu-group-title{
+  font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:1.2px;
+  text-transform:uppercase; color:var(--flag-blue); margin:2px 0 4px;
+  break-after:avoid;
 }
-.menu-chips .no-menu{ grid-row: span 2; }
+.menu-row{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  font-size:12.5px; color:var(--cream); padding:3px 7px; border-radius:6px;
+  break-inside:avoid;
+}
+.menu-row:hover{ background: rgba(243,237,224,0.05); }
+.menu-row .tag-x{ flex-shrink:0; }
 .menu-chip{
   display:inline-flex; align-items:center; gap:5px;
   font-size:12px; font-weight:600;
@@ -743,12 +753,19 @@ h1{
 
 /* ---- Dish checklist in Log a Visit ---- */
 .dish-checklist{
-  max-height: 230px; overflow-y:auto;
+  max-height: 260px; overflow-y:auto;
   border: 1px solid var(--hairline); border-radius: 8px;
   background: var(--brick-deep);
   padding: 5px; margin-bottom: 8px;
-  /* Two columns so a complete menu stays scannable in the modal. */
+  /* Two columns so a complete menu stays scannable; three when big. */
   display:grid; grid-template-columns:1fr 1fr; gap:2px 6px;
+}
+.dish-checklist.cols3{ grid-template-columns:1fr 1fr 1fr; }
+.dish-group-title{
+  grid-column: 1 / -1;
+  font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:1.2px;
+  text-transform:uppercase; color:var(--flag-blue);
+  padding: 7px 9px 2px;
 }
 .dish-check{
   display:flex; align-items:center; gap:9px;
@@ -1175,6 +1192,38 @@ function ateList(v){
   return v.ate ? [v.ate] : [];
 }
 function menuOf(r){ return r.menu || []; }
+/* Groups a spot's stored dishes under the curated section headers
+   (Appetizers, Entrees, Drinks...) from MENU_LOOKUP. Grouping happens at
+   render time, so stored menus never need migrating: dishes the curation
+   doesn't know (user-added) land under "More", and spots without curated
+   sections render as one unnamed group. */
+function menuGroupsFor(r){
+  const menu = menuOf(r);
+  if(!menu.length) return [];
+  const entry = MENU_LOOKUP.find(e => e.name.toLowerCase() === r.name.toLowerCase());
+  if(!entry || !entry.sections) return [{title:null, dishes:menu}];
+  const dishSection = {};
+  Object.entries(entry.sections).forEach(([sec, ds])=> ds.forEach(d => dishSection[d.toLowerCase()] = sec));
+  const grouped = {};
+  const extra = [];
+  menu.forEach(d=>{
+    const sec = dishSection[d.toLowerCase()];
+    if(sec) (grouped[sec] = grouped[sec] || []).push(d);
+    else extra.push(d);
+  });
+  const out = Object.keys(entry.sections).filter(s=>grouped[s]).map(s=>({title:s, dishes:grouped[s]}));
+  if(extra.length) out.push({title:'More', dishes:extra});
+  return out;
+}
+/* Shared renderer for the log-visit checklist: section headers + checkbox
+   rows, 2 columns (3 for big menus). */
+function dishChecklistHtml(r){
+  const menu = menuOf(r);
+  const groups = menuGroupsFor(r);
+  return `<div class="dish-checklist ${menu.length > 40 ? 'cols3' : ''}">${groups.map(g=>`
+    ${g.title ? `<div class="dish-group-title">${escapeHtml(g.title)}</div>` : ''}
+    ${g.dishes.map(d=>`<label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"><span>${escapeHtml(d)}</span></label>`).join('')}`).join('')}</div>`;
+}
 function addDishToMenu(restaurantId, dish){
   const r = restaurants.find(x=>x.id===restaurantId);
   if(!r) return false;
@@ -2458,8 +2507,11 @@ function openDetail(id){
         </div>
         <div class="menu-section">
           <h3>Menu</h3>
-          <div class="menu-chips" id="menuChips">
-            ${menuOf(r).map((d,i)=>`<span class="menu-chip">${escapeHtml(d)}<button class="tag-x" data-dish-i="${i}">×</button></span>`).join('')
+          <div class="menu-groups ${menuOf(r).length > 40 ? 'cols3' : ''}" id="menuChips">
+            ${menuGroupsFor(r).map(g=>`<div class="menu-group">
+                ${g.title ? `<div class="menu-group-title">${escapeHtml(g.title)}</div>` : ''}
+                ${g.dishes.map(d=>`<div class="menu-row"><span>${escapeHtml(d)}</span><button class="tag-x" data-dish="${escapeHtml(d)}">×</button></div>`).join('')}
+              </div>`).join('')
               || '<span class="no-menu">No dishes on file yet — add them here, or they\'ll collect as you log visits.</span>'}
           </div>
           <div class="menu-add-row">
@@ -2533,7 +2585,7 @@ function openDetail(id){
   newTagInput.addEventListener('blur', commitTag);
   $$('#menuChips .tag-x').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      removeDishFromMenu(id, menuOf(r)[parseInt(btn.dataset.dishI)]);
+      removeDishFromMenu(id, btn.dataset.dish);
       await saveRestaurants();
       openDetail(id);
     });
@@ -2618,8 +2670,7 @@ function openLogVisit(restaurantId){
         <div class="field">
           <label>What did you eat? <span style="text-transform:none;">(check everything you had)</span></label>
           <div id="dishArea">
-            ${menu.length ? `<div class="dish-checklist">${menu.map(d=>`
-              <label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"><span>${escapeHtml(d)}</span></label>`).join('')}</div>`
+            ${menu.length ? dishChecklistHtml(rest)
             : `<div class="menu-bootstrap">
                 <div class="menu-bootstrap-hint">No menu on file for this spot yet — paste it once (one dish per line) and you'll check dishes off here from now on.</div>
                 <textarea id="logPasteMenu" placeholder="Italian beef&#10;Cheese fries&#10;Peach cobbler"></textarea>
@@ -2745,9 +2796,7 @@ function openLogVisit(restaurantId){
     lines.forEach(l=>{ if(addDishToMenu(restaurantId, l)) added++; });
     if(!added) return;
     await saveRestaurants();
-    const m = rest ? menuOf(rest) : [];
-    $('#dishArea').innerHTML = `<div class="dish-checklist">${m.map(d=>`
-      <label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"><span>${escapeHtml(d)}</span></label>`).join('')}</div>`;
+    $('#dishArea').innerHTML = dishChecklistHtml(rest);
   });
 
   $('#saveLog').addEventListener('click', async (e)=>{
@@ -3656,7 +3705,7 @@ const MENU_LOOKUP = [
   {name:"Qing Xiang Yuan Dumplings", dishes:["Kurobuta Pork & Cabbage Dumplings","Kurobuta Pork & Pickled Cabbage Dumplings","Shrimp, Pork & Leek Dumplings","Lamb & Coriander Dumplings","Lamb & Dill Dumplings","Wagyu Beef & Onion Dumplings","Wagyu Beef & Coriander Dumplings","Chicken & Mushroom Dumplings","Chicken & Cabbage Dumplings","Tomato & Egg Dumplings","Green Pepper & Egg Dumplings","Leek, Egg & Shrimp Dumplings","Crab Roe & Kurobuta Pork Dumplings","Lobster & Pork Dumplings","Truffle & Wagyu Beef Dumplings","Sea Cucumber Dumplings"]},
   {name:"Shrimp Stop", dishes:["Jumbo Shrimp (1 lb)","Jumbo Shrimp (1/2 lb)","Catfish Strips","Fish & Chips","Fried Oysters","Hush Puppies","Spicy Cocktail Sauce Shrimp","Fries"]},
   {name:"Shrimp Stop 2", dishes:["Jumbo Shrimp (1 lb)","Jumbo Shrimp (1/2 lb)","Catfish Strips","Fish & Chips","Fried Oysters","Hush Puppies","Spicy Cocktail Sauce Shrimp","Fries"]},
-  {name:"Captain Hooks", v:2, retire:["Fried Catfish","Perch","Jumbo Shrimp","Chicken Wings","Fish & Chicken Combo","Hush Puppies","Fresh-Squeezed Lemonade"], dishes:["Catfish Filet w/ Fries","Tilapia Fillet w/ Fries","Perch Fillets w/ Fries","Catfish Nuggets","Fish Po Boy","Wings w/ Fries","Buffalo Wings","Chicken Tenders","Legs & Thighs","Chicken Po Boy","Grilled Chicken Sandwich","Philly Chicken","Crispy Philly Chicken","Medium Shrimp w/ Fries","Philly Steak","Crispy Philly Steak","Italian Beef","Gyro Sandwich","Gyro Plate","Fresh Cut Fries","Cheese Fries","Loaded Fries","Onion Rings","Cheese Sticks","Salad","Pizza Puff","Fried Okra","Banana Pudding","Cheesecake","Butter Cookies","Sliced Cake","Taffy Grapes","Frozen Lemonade","Obama Tea"]},
+  {name:"Captain Hooks", v:2, retire:["Fried Catfish","Perch","Jumbo Shrimp","Chicken Wings","Fish & Chicken Combo","Hush Puppies","Fresh-Squeezed Lemonade"], sections:{"Fish Dinners":["Catfish Filet w/ Fries","Tilapia Fillet w/ Fries","Perch Fillets w/ Fries","Catfish Nuggets","Fish Po Boy"],"Chicken":["Wings w/ Fries","Buffalo Wings","Chicken Tenders","Legs & Thighs","Chicken Po Boy","Grilled Chicken Sandwich","Philly Chicken","Crispy Philly Chicken"],"Shrimp":["Medium Shrimp w/ Fries"],"Sandwiches":["Philly Steak","Crispy Philly Steak","Italian Beef","Gyro Sandwich","Gyro Plate"],"Sides":["Fresh Cut Fries","Cheese Fries","Loaded Fries","Onion Rings","Cheese Sticks","Salad","Pizza Puff","Fried Okra"],"Desserts":["Banana Pudding","Cheesecake","Butter Cookies","Sliced Cake","Taffy Grapes"],"Drinks":["Frozen Lemonade","Obama Tea"]}},
   {name:"Roc & Ro BBQ", dishes:["Pork Rib Tips","Turkey Rib Tips","Rib Tip Dinner","Bucket of Tips","Smash Burger","Fried Catfish","Fried Chicken","Hot Links","Coleslaw","Fries"]},
   {name:"Chixter - 95th & Jeffery", dishes:["Smoked Wings","Traditional Bone-In Wings","Boneless Wings","Chicken Sandwich","Chicken Tenders","Party Pack","Potato Wedges","Waffle Fries"]},
   {name:"Antique Taco Bridgeport", dishes:["Al Pastor Chicken Taco","Potato & Poblano Taco","Crispy Fish Taco","Garlic Shrimp Taco","Tamarind BBQ Pork Taco","Crunchy Ground Beef Taco","Fried Chicken Burrito","Smoked Brisket Burrito","Antique Taco Salad","Elote","Horchata Milkshake","Margarita"]},
@@ -3807,16 +3856,14 @@ const MENU_LOOKUP = [
   {name:"Griddle 24", v:2, retire:["Breakfast Skillets","Burgers","Chilaquiles","French Toast","Irish Car Bomb Shake","Nutella-Banana Shake","Omelettes","Pancakes","Paninis","Salads","Waffles","White Russian Boozy Shake","Wraps"], dishes:["2222 Breakfast","Continental Breakfast","Chicken & Waffle","Belgian Waffles","Breakfast Skillet","Countryside Skillet","Biscuits & Gravy","Original Buttermilk Pancakes","Berry Heaven Pancakes","Lemon Ricotta Pancakes","Gluten Free Pancakes","Crazy Monkey Pancakes","Banana Crunch Pancakes","Old-Fashioned French Toast","The French Connection","Banana Nutella Crepes","Classic Crepes","Veggie Supreme Crepes","Caramelized Apple & Pecan Crepes","Club House","B.L.T.","Monte Cristo","California Club","Grilled Buffalo Chicken","French Dip","Corned Beef Sandwich","The River North","Cheesy Egg Sandwich","The Parm","Fried Chicken Sandwich","Char-Grilled Chicken Breast","Chicken Shish Kabob Sandwich","Big Baller","Supreme Grilled Cheese","Pastrami Sandwich","Nova Bagel","The B.L.A.S.T.","Roasted Turkey Cobb Sandwich","Tuna Melt","Hot Turkey","Hot Meat Loaf","Hash Browns","Mozzarella Sticks","Milk Shakes","Fresh-Squeezed Orange Juice"]},
   {name:"Egg Harbor Cafe", v:2, retire:["Benedicts","Breakfast Sandwiches","Buttermilk Pancakes","Fair Trade Coffee","Omelettes","Salads","Signature Skillets"], dishes:["Traditional Breakfast","Breakfast Wrap","Scrambler","Breakfast Skillet","Omelet","Barrington Benedict","Farmer's Market Benedict","Eggs Arlington","Smoked Salmon Benedict","Caprese Avocado Toast","Cherrywood Avocado Toast","Smoked Salmon Avocado Toast","Cassie's Cr\u00eape","Down Home Biscuits + Gravy","Geneva Rosti","Habanero Hash + Eggs","Lobster Scrambler","Shakshuka","Gluten-Free Pot Roast Skillet","Chorizo Chilaquiles","Pancakes","Cr\u00eapes","French Toast","Waffle","Banana Bread French Toast","Cinnamon Roll French Toast","Strawberry Crunch French Toast","Winter in Italy French Toast","Shawna's Sun-Up","Berry-Ola Oatmeal","Old Fashioned Oatmeal","Chicken Pecan Dijon Salad","Door County Chicken Salad","Harbor Cobb Salad","Sanibel Salad","California Club","Door County Melt","Egg Salad Melt","Tuna-Cado Melt","Chicken + Avocado Wrap","Mike's Cheeseburger","Pot Roast Sandwich","Loaded Harbor Potatoes","Maple Bourbon Bacon","Cinnamon Roll","Strawberry Orange Juice","Barista Coffee Drinks"]},
   {name:"The Original Pancake House", dishes:["Dutch Baby","Apple Pancake","Buttermilk Pancakes","49er Flapjacks","Swedish Crepes","Omelettes","Bacon & Eggs","Corned Beef Hash"]},
-  // v2: full card transcribed from Peach's own in-store menu PDF, plus
-  // currently-attested newer dishes (Soul Queen, Chicken & Toast, Bayou Bowl).
-  {name:"Peach's Restaurant", v:2, retire:["Shrimp & Grits","Salmon Croquettes","The Bayou"], dishes:["Full Stack Pancakes","Short Stack Pancakes","Gluten-Free Pancakes","Peach Bourbon French Toast","French Toast","Waffle","Shrimp & Cheese Grits","Catfish, Greens & Grits","Grilled Steak & Eggs","Salmon Croquettes & Cheese Grits","Fried Chicken Wings & Cinnamon French Toast","Peach's Special (2 Eggs & Meat)","Fish & Chips","Southern Benedict","Duck Bowl","Bayou Bowl","Biscuits & Gravy","Peach's Biscuit Slider","Chicken & Toast","Peach's House Omelette","The Goodfella Omelette","The Fresh Prince Omelette","The Healthy Start Omelette","Salmon Omelette (The Soul Queen)","Duck Bacon","Salmon Croquette (Side)","Chicken Patties","Apple-Smoked Pork Bacon","Turkey Bacon","Pork Links","Cheese Grits","House Potatoes","Collard Greens","Biscuit","Fresh Fruit Cup","Peach Palmer","Peach's House Blend Coffee"]},
+  {name:"Peach's Restaurant", v:2, retire:["Shrimp & Grits","Salmon Croquettes","The Bayou"], sections:{"Pancakes, Waffles & French Toast":["Full Stack Pancakes","Short Stack Pancakes","Gluten-Free Pancakes","Peach Bourbon French Toast","French Toast","Waffle"],"Entrees":["Shrimp & Cheese Grits","Catfish, Greens & Grits","Grilled Steak & Eggs","Salmon Croquettes & Cheese Grits","Fried Chicken Wings & Cinnamon French Toast","Peach's Special (2 Eggs & Meat)","Fish & Chips"],"Favorites":["Southern Benedict","Duck Bowl","Bayou Bowl","Biscuits & Gravy","Peach's Biscuit Slider","Chicken & Toast"],"Omelettes":["Peach's House Omelette","The Goodfella Omelette","The Fresh Prince Omelette","The Healthy Start Omelette","Salmon Omelette (The Soul Queen)"],"Sides & Extras":["Duck Bacon","Salmon Croquette (Side)","Chicken Patties","Apple-Smoked Pork Bacon","Turkey Bacon","Pork Links","Cheese Grits","House Potatoes","Collard Greens","Biscuit","Fresh Fruit Cup"],"Drinks":["Peach Palmer","Peach's House Blend Coffee"]}},
   {name:"Goddess and the Baker", v:2, retire:["Breakfast Sandwiches","Coffee & Espresso","Egg Bowls","Pastries","Salads","Sandwiches"], dishes:["Yogurt Parfait","Honeycomb Greek Yogurt","Blueberry Chia Rice Pudding","Crunchy Berry Oatmeal","Morning Sandwich","Turkey Bacon & Egg Croissant","Egg Ham & Cheddar Biscuit","Impossible Breakfast Sandwich","Sunrise Burrito","Bagel Mash Up Sandwich","Bagel & Schmear","Creme Fraiche Scrambled Eggs","Bacon Avocado Omelette","Iron Man Scramble","Chili Crisp Egg Bowl","Huevos Rancheros Tostadas","Protein Bowl Barbacoa & Eggs","Avocado Toast","Tropical Acai Bowl","Chicken Shawarma Bowl","Baker's Chopped Salad","Southwest Salad","Chicken Gyro Greek Salad","Kale Crunch Salad","Little Gem Chicken Caesar","Santa Monica Turkey Sandwich","Chicken Caprese Sandwich","Chicken Club","Greek Chicken Naanwich","Chipotle Ranch Wrap","Tuna Croissant Melt","Garden Goddess Wrap","Soup Bowl","Rainbow Cake","Shaken Iced Espresso","Goddess Sweet Cream Cold Brew","Lavender Vanilla Latte","Nutella Oat Latte"]},
   {name:"Cork + Oak", dishes:["Oysters","Wings","New Orleans BBQ Shrimp","Tomahawk Steak","Cajun Pasta","Burgers","Smoked Mac & Cheese","Bread Pudding","Wine & Whiskey Flights"]},
   {name:"Bronzeville Winery", dishes:["Shrimp Shareable","Brussels Sprouts","Chef's Daily Hummus","Chips + Dip","Cava & Caviar","Cheese Board","Green Salad","Endive Salad","Brick Oven Mac & Cheese","White Cheddar Grits","Lobster Pomme Puree","Buttermilk Biscuit","Nearest Island Sidecar","Uncle Yam's Old Fashioned","Southside Sling","Cottage Grove Royale","Espresso Martini","Watermelon Nojito"]},
   {name:"Chicago Winery", dishes:["Wine Tastings","Winemaker's Flight","Seasonal Flight","Cheese & Charcuterie Boards","LIVA Restaurant Menu"]},
   {name:"City Winery Chicago Riverwalk", dishes:["Tap Wine","Wine Flights","Fros\u00e9","Cheese Boards","New American Plates","Riverwalk Cocktails"]},
   {name:"S.L Wine Bar", dishes:["Wine Flights","Charcuterie Boards","Artisanal Cheeses","Bruschetta","Small Plates","Cocktails"]},
-  {name:"Cooper's Hawk Winery & Restaurant", v:2, retire:["Burgers","Chicken Giardiniera","Dinner Salads","Pretzel Bread","Short Rib Risotto","Surf & Turf"], dishes:["Asian Ahi Tuna Sashimi","Drunken Shrimp","Thai Lettuce Wraps","Crispy Brussels Sprouts","Classic Tomato Bruschetta","Tortilla Soup","Caesar Salad","Plain Ol' House Salad","Chopped Wedge","BBQ Ranch Chicken Salad","Napa Chicken Salad","Blackened Bleu Prime Skirt Steak Salad","Chicken Caesar","Prime Churrasco Grilled Steak","Grilled Tenderloin Medallions","Filet Mignon","Red Wine Braised Short Ribs","Soy Ginger Atlantic Salmon","Broiled Grouper","Blackened Ahi Tuna","Lemon-Herb Glazed Salmon","Dana's Parmesan-Crusted Chicken","Tim's Favorite Chicken Giardiniera","Ellie's Chicken Piccata","Chicken Madeira","Country Gnocchi","Gnocchi Carbonara","Gnocchi alla Vodka","Gnocchi with Roasted Butternut Squash","Braised Short Rib Risotto","Roasted Chicken Risotto","Sweet Corn & Tomato Risotto","Shrimp & Scallop Risotto","Classic Cheeseburger","Bleu Cheeseburger","Chicken Burger","The Leonard Burger","Grilled Mahi Sandwich","The Prime Sandwich","Cilantro Ranch Chicken Sandwich","Mary's Potatoes","Wasabi-Buttered Mashed Potatoes","Roasted Broccolini","Fingerling Potato & French Onion Gratin","Candied Bacon","S'more Budino","Salted Caramel Cr\u00e8me Br\u00fbl\u00e9e","Flourless Chocolate Torte","House-Made Truffles","Wine & Chocolates Flight","Wine Tasting Flight"]},
+  {name:"Cooper's Hawk Winery & Restaurant", v:2, retire:["Wine Tasting Flight","Drunken Shrimp","Chicken Giardiniera","Short Rib Risotto","Surf & Turf","Dinner Salads","Burgers","Pretzel Bread"], sections:{"Appetizers":["Asian Ahi Tuna Sashimi","Drunken Shrimp","Thai Lettuce Wraps","Crispy Brussels Sprouts","Classic Tomato Bruschetta"],"Soups & Salads":["Tortilla Soup","Caesar Salad","Plain Ol' House Salad","Chopped Wedge","BBQ Ranch Chicken Salad","Napa Chicken Salad","Blackened Bleu Prime Skirt Steak Salad","Chicken Caesar"],"Steak":["Prime Churrasco Grilled Steak","Grilled Tenderloin Medallions","Filet Mignon","Red Wine Braised Short Ribs"],"Seafood":["Soy Ginger Atlantic Salmon","Broiled Grouper","Blackened Ahi Tuna","Lemon-Herb Glazed Salmon"],"Chicken":["Dana's Parmesan-Crusted Chicken","Tim's Favorite Chicken Giardiniera","Ellie's Chicken Piccata","Chicken Madeira"],"Pasta & Risotto":["Country Gnocchi","Gnocchi Carbonara","Gnocchi alla Vodka","Gnocchi with Roasted Butternut Squash","Braised Short Rib Risotto","Roasted Chicken Risotto","Sweet Corn & Tomato Risotto","Shrimp & Scallop Risotto"],"Burgers & Sandwiches":["Classic Cheeseburger","Bleu Cheeseburger","Chicken Burger","The Leonard Burger","Grilled Mahi Sandwich","The Prime Sandwich","Cilantro Ranch Chicken Sandwich"],"Sides":["Mary's Potatoes","Wasabi-Buttered Mashed Potatoes","Roasted Broccolini","Fingerling Potato & French Onion Gratin","Candied Bacon"],"Desserts":["S'more Budino","Salted Caramel Cr\u00e8me Br\u00fbl\u00e9e","Flourless Chocolate Torte","House-Made Truffles","Wine & Chocolates Flight"]}},
   {name:"Bronzeville Hoagie & Panini", dishes:["35th Street Hoagie (Black Forest Turkey)","Southside Hoagie (Corned Beef)","Bronzeville Hoagie","Pam + Ann's Turkey Ham Hoagie","Ron's Turkey Pastrami Hoagie","The Hoagie Flight","Tiff's Italian Turkey","Yasmin's Italian Beef","Wagyu Beef Sausage","JR.'s Turkey Chili","Tuna Salad","Turkey Panini","Ashanti's Salmon Panini","Cam's Grilled Cheese","Corned Beef Panini","T's Tuna Melt","Claire's Chicken Panini","Giardiniera"]},
 ];
 async function seedCuratedMenus(){
@@ -3835,7 +3882,10 @@ async function seedCuratedMenus(){
       const i = r.menu.findIndex(x => x.toLowerCase() === d.toLowerCase());
       if(i !== -1) r.menu.splice(i, 1);
     });
-    entry.dishes.forEach(d=>{
+    // Sectioned entries store dishes grouped by menu section; flatten for
+    // seeding — grouping is re-derived at render time from the sections.
+    const entryDishes = entry.sections ? Object.values(entry.sections).flat() : entry.dishes;
+    entryDishes.forEach(d=>{
       if(!r.menu.some(x => x.toLowerCase() === d.toLowerCase())) r.menu.push(d);
     });
     r.menu.sort((a,b)=> a.localeCompare(b));
