@@ -921,10 +921,13 @@ function requestUserLocation(){
   );
 }
 
+function sortName(n){
+  return n.replace(/^the\s+/i, '');
+}
 function sortRestaurants(list){
   const arr = [...list];
   if(sortBy === 'name'){
-    arr.sort((a,b)=> a.name.localeCompare(b.name));
+    arr.sort((a,b)=> sortName(a.name).localeCompare(sortName(b.name)));
   } else if(sortBy === 'date'){
     arr.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
   } else if(sortBy === 'rating'){
