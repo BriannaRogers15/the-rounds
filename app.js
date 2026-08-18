@@ -1465,7 +1465,10 @@ function openAddRestaurant(){
         </div>
         <div class="field" id="manualAddrField" style="display:none;">
           <label>Address</label>
-          <input type="text" id="rAddr" placeholder="e.g. 123 Main St">
+          <div class="addr-autocomplete-wrap">
+            <input type="text" id="rAddr" placeholder="e.g. 123 Main St" autocomplete="off">
+            <ul id="addrSuggestions" class="addr-suggestions" style="display:none;"></ul>
+          </div>
         </div>
         <div class="filing-under" id="filingUnder" style="display:none;"></div>
         <div style="margin-top:10px;margin-bottom:4px;">
@@ -1485,6 +1488,10 @@ function openAddRestaurant(){
   let selectedPlace = null;
   let manualMode = false;
   let pendingTags = [];
+  let manualAddressPlace = null;
+  // Chicagoland metro bounding box (city + suburbs), so results outside the area don't show up.
+  // Shared by both the restaurant-name search below and the manual-mode address autocomplete.
+  const CHICAGOLAND = { north: 42.3, south: 41.2, east: -87.3, west: -88.4 };
   /* Editable guide chips, live in the modal before saving. Google's
      suggestions land here first, but the final say is the user's — so a
      spot never has to be saved untagged, manual mode included. */
@@ -1527,13 +1534,61 @@ function openAddRestaurant(){
   }
   $('#manualToggle').addEventListener('click', (ev)=>{ ev.preventDefault(); enableManualMode(); });
 
+  /* Address autocomplete for manual mode only — the Places-search path
+     already gets its address straight from the selected restaurant, so
+     #rAddr never even renders there. #rAddr stays the actual source of
+     truth (typing a freeform address and never picking a suggestion still
+     saves fine, same as before); suggestions are a layered enhancement
+     that additionally captures lat/lng, which manual entries never got
+     before and which the map view / neighborhood filing both need. */
+  let addrDebounce = null;
+  const addrList = $('#addrSuggestions');
+  function hideAddrSuggestions(){
+    addrList.style.display = 'none';
+    addrList.innerHTML = '';
+  }
+  $('#rAddr').addEventListener('input', ()=>{
+    manualAddressPlace = null; // any edit invalidates a previously picked match
+    clearTimeout(addrDebounce);
+    const q = $('#rAddr').value.trim();
+    if(q.length < 4){ hideAddrSuggestions(); return; }
+    addrDebounce = setTimeout(async ()=>{
+      try{
+        const { AutocompleteSuggestion } = await google.maps.importLibrary('places');
+        const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: q,
+          locationRestriction: CHICAGOLAND,
+          includedPrimaryTypes: ['geocode'],
+        });
+        if($('#rAddr').value.trim() !== q) return; // stale response, input moved on
+        if(!suggestions || !suggestions.length){ hideAddrSuggestions(); return; }
+        const picks = suggestions.slice(0, 6);
+        addrList.innerHTML = picks.map((s, i)=>`<li data-i="${i}">${escapeHtml(s.placePrediction.text.text)}</li>`).join('');
+        addrList.style.display = '';
+        $$('li', addrList).forEach((li, i)=>{
+          li.addEventListener('mousedown', async (ev)=>{
+            ev.preventDefault(); // fires before #rAddr's blur, so the pick isn't lost
+            const prediction = picks[i].placePrediction;
+            const place = prediction.toPlace();
+            await place.fetchFields({ fields: ['formattedAddress', 'location'] });
+            $('#rAddr').value = place.formattedAddress || prediction.text.text;
+            manualAddressPlace = place.location ? { lat: place.location.lat(), lng: place.location.lng() } : null;
+            hideAddrSuggestions();
+          });
+        });
+      }catch(err){
+        console.warn('Address autocomplete unavailable — manual typing still works.', err);
+        hideAddrSuggestions();
+      }
+    }, 300);
+  });
+  $('#rAddr').addEventListener('blur', ()=> setTimeout(hideAddrSuggestions, 150));
+
   (async ()=>{
     try{
       const { PlaceAutocompleteElement, AutocompleteSuggestion } = await google.maps.importLibrary('places');
-      const CHICAGOLAND = { north: 42.3, south: 41.2, east: -87.3, west: -88.4 };
       const pac = new PlaceAutocompleteElement();
       pac.includedPrimaryTypes = ['restaurant', 'cafe', 'bar', 'bakery', 'meal_takeaway'];
-      // Chicagoland metro bounding box (city + suburbs), so results outside the area don't show up.
       pac.locationRestriction = CHICAGOLAND;
       $('#nameAutocompleteContainer').appendChild(pac);
       pac.addEventListener('gmp-select', async ({ placePrediction })=>{
@@ -1596,6 +1651,10 @@ function openAddRestaurant(){
       if(selectedPlace.phone) record.phone = selectedPlace.phone;
       if(selectedPlace.website) record.website = selectedPlace.website;
       if(selectedPlace.placeId) record.mapsUrl = `https://www.google.com/maps/place/?q=place_id:${selectedPlace.placeId}`;
+    }
+    if(manualMode && manualAddressPlace){
+      record.lat = manualAddressPlace.lat;
+      record.lng = manualAddressPlace.lng;
     }
     assignAreaFields(record);
     restaurants.push(record);

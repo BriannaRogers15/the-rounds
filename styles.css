@@ -607,6 +607,21 @@ h1{
 .cal-cell.empty{ cursor:default; }
 .cal-cell:not(.empty):hover{ background: var(--brick-deep); border-color: var(--flag-blue-dim); }
 .cal-cell.today{ border-color: var(--flag-blue-dim); color: var(--flag-blue-bright); }
+
+/* ---- Manual-mode address autocomplete ---- */
+.addr-autocomplete-wrap{ position:relative; }
+.addr-suggestions{
+  position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:50;
+  margin:0; padding:4px; list-style:none;
+  background: var(--brick-panel-hi); border:1px solid var(--hairline); border-radius:10px;
+  box-shadow: 0 14px 30px rgba(0,0,0,0.4);
+  max-height:220px; overflow-y:auto;
+}
+.addr-suggestions li{
+  padding:8px 10px; border-radius:6px; cursor:pointer;
+  font-family:'Manrope', sans-serif; font-size:13px; color: var(--cream);
+}
+.addr-suggestions li:hover{ background: var(--brick-deep); }
 .cal-cell.selected{ background: var(--flag-blue); color: var(--brick-deep); font-weight:700; }
 
 .star-pick{ display:flex; gap:6px; font-size:26px; }
