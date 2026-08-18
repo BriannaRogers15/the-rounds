@@ -1,9 +1,11 @@
-const CACHE_NAME = 'the-rounds-v98';
+const CACHE_NAME = 'the-rounds-v99';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './firebase-init.js',
+  './auth-gate.js',
   './data/address-lookup.js',
   './data/menu-lookup.js',
   './manifest.json',
@@ -41,10 +43,13 @@ self.addEventListener('message', (event) => {
   if (event.data === 'skipWaiting') self.skipWaiting();
 });
 
-// Versioned CDN files (Leaflet) and fonts are immutable, so cache-first is
-// safe and makes the Map view + typography work offline. Map tiles and the
-// Google Maps API are deliberately NOT cached (unbounded / must be fresh).
-const CDN_HOSTS = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+// Versioned CDN files (Leaflet), fonts, and the Firebase SDK are immutable,
+// so cache-first is safe and makes the Map view, typography, and sign-in
+// screen work offline. Map tiles, the Google Maps API, and Firebase's own
+// Auth/Firestore endpoints are deliberately NOT cached (unbounded / must be
+// fresh) — they're cross-origin requests to hosts not in this list, so the
+// fetch handler below lets them pass straight through to the network.
+const CDN_HOSTS = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com'];
 
 // Cache-first + background revalidation (stale-while-revalidate) for the
 // app shell and cached CDN files: every load is instant from cache, and a

@@ -20,7 +20,42 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="wrap">
+<div id="authLoading" class="auth-loading">Loading…</div>
+
+<div id="authGate" class="auth-gate" style="display:none;">
+  <div class="auth-card">
+    <div class="eyebrow">A Chicagoland Dining Ledger</div>
+    <h1>The Rounds</h1>
+    <div class="sub" id="authSub">Sign in to see what the group's been eating.</div>
+
+    <button class="btn" id="googleSignInBtn" style="width:100%;">Sign in with Google</button>
+
+    <div class="auth-divider"><span>or</span></div>
+
+    <div class="field" id="authNameField" style="display:none;">
+      <label>Your name <span style="text-transform:none;">(shown on your reviews)</span></label>
+      <input type="text" id="authName" placeholder="e.g. Bri">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="authEmail" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="authPassword" placeholder="••••••••">
+    </div>
+
+    <button class="btn secondary" id="authSubmitBtn" style="width:100%;">Sign In</button>
+
+    <div class="auth-links">
+      <a href="#" id="authModeToggle">New here? Create an account</a>
+      <a href="#" id="authForgotLink">Forgot password?</a>
+    </div>
+    <div class="auth-error" id="authError" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="wrap" style="display:none;">
   <header>
     <svg class="emblem" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="64" height="40" rx="3" fill="#F3EDE0"/>
@@ -88,6 +123,8 @@
 
 <div id="modalRoot"></div>
 
+<script type="module" src="firebase-init.js"></script>
+<script src="auth-gate.js"></script>
 <script src="data/address-lookup.js"></script>
 <script src="data/menu-lookup.js"></script>
 <script src="app.js"></script>
