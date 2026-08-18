@@ -895,6 +895,13 @@ const GOOGLE_TYPE_TAG = {
   bar_and_grill: 'Bars',
   night_club: 'Late Night',
 };
+/* Places API (New) caps includedPrimaryTypes at 5 exact-match values, so
+   the search box can't just list every type GOOGLE_TYPE_TAG knows about
+   (60+ of them) as a server-side filter. Instead the name search below
+   queries with no type restriction, then filters results client-side
+   against this set — full coverage of every type this app can tag, still
+   strictly food/drink (no arbitrary businesses), no 5-value ceiling. */
+const FOOD_DRINK_TYPES = new Set([...Object.keys(GOOGLE_TYPE_TAG), 'restaurant', 'food', 'meal_takeaway', 'meal_delivery']);
 
 /* Escapes &, <, > via the DOM, then quotes by hand — this output is used
    inside double- and single-quoted HTML attributes throughout, so an
@@ -1460,8 +1467,10 @@ function openAddRestaurant(){
         </div>
         <div class="field">
           <label>Name <span style="text-transform:none;">(search for the restaurant)</span></label>
-          <div id="nameAutocompleteContainer"></div>
-          <input type="text" id="rName" placeholder="e.g. The Anchor Room" style="display:none;">
+          <div class="addr-autocomplete-wrap">
+            <input type="text" id="rName" placeholder="e.g. The Anchor Room" autocomplete="off">
+            <ul id="nameSuggestions" class="addr-suggestions" style="display:none;"></ul>
+          </div>
         </div>
         <div class="field" id="manualAddrField" style="display:none;">
           <label>Address</label>
@@ -1525,14 +1534,113 @@ function openAddRestaurant(){
     manualMode = true;
     selectedPlace = null;
     pendingTags = [];
-    $('#nameAutocompleteContainer').style.display = 'none';
-    $('#rName').style.display = '';
+    $('#nameSuggestions').style.display = 'none';
+    $('#nameSuggestions').innerHTML = '';
     $('#rName').focus();
     $('#manualAddrField').style.display = '';
     $('#manualToggle').style.display = 'none';
     renderFilingUnder();
   }
   $('#manualToggle').addEventListener('click', (ev)=>{ ev.preventDefault(); enableManualMode(); });
+
+  /* Restaurant-name search — a custom dropdown, not Google's auto-
+     rendering PlaceAutocompleteElement widget, because the widget can't
+     be filtered per-result. Queried with no server-side type restriction
+     (Places API (New) caps includedPrimaryTypes at 5 exact-match values —
+     nowhere near enough to cover the 60+ types GOOGLE_TYPE_TAG knows
+     about), then filtered client-side against FOOD_DRINK_TYPES so results
+     stay restaurant/food-scoped without a 5-type ceiling silently
+     excluding real businesses (ice cream shops, steakhouses, etc.) and
+     force-routing them into manual mode with no website/phone/coordinates. */
+  let nameDebounce = null;
+  let placesBlocked = false;
+  const nameList = $('#nameSuggestions');
+  function hideNameSuggestions(){
+    nameList.style.display = 'none';
+    nameList.innerHTML = '';
+  }
+  async function selectPlace(prediction){
+    const place = prediction.toPlace();
+    await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType'] });
+    // Cuisines map themselves from Google's classification, then land
+    // in the Filing-under chips where they can be adjusted before saving.
+    const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
+    const tags = [];
+    types.forEach(t=>{
+      const tag = GOOGLE_TYPE_TAG[t];
+      if(tag && !tags.includes(tag)) tags.push(tag);
+    });
+    selectedPlace = {
+      name: place.displayName || '',
+      address: place.formattedAddress || '',
+      lat: place.location ? place.location.lat() : null,
+      lng: place.location ? place.location.lng() : null,
+      phone: place.internationalPhoneNumber || null,
+      website: place.websiteURI || null,
+      placeId: place.id || null,
+    };
+    $('#rName').value = selectedPlace.name;
+    pendingTags = tags;
+    renderFilingUnder();
+    hideNameSuggestions();
+  }
+  $('#rName').addEventListener('input', ()=>{
+    selectedPlace = null; // any edit invalidates a previously picked match
+    clearTimeout(nameDebounce);
+    const q = $('#rName').value.trim();
+    if(manualMode || placesBlocked || q.length < 3){ hideNameSuggestions(); return; }
+    nameDebounce = setTimeout(async ()=>{
+      try{
+        const { AutocompleteSuggestion } = await google.maps.importLibrary('places');
+        const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: q,
+          locationRestriction: CHICAGOLAND,
+        });
+        if($('#rName').value.trim() !== q) return; // stale response, input moved on
+        const picks = (suggestions || [])
+          .filter(s => (s.placePrediction.types || []).some(t => FOOD_DRINK_TYPES.has(t)))
+          .slice(0, 6);
+        if(!picks.length){ hideNameSuggestions(); return; }
+        nameList.innerHTML = picks.map((s, i)=>`<li data-i="${i}">${escapeHtml(s.placePrediction.text.text)}</li>`).join('');
+        nameList.style.display = '';
+        $$('li', nameList).forEach((li, i)=>{
+          li.addEventListener('mousedown', (ev)=>{
+            ev.preventDefault(); // fires before #rName's blur, so the pick isn't lost
+            selectPlace(picks[i].placePrediction);
+          });
+        });
+      }catch(err){
+        console.warn('Restaurant search unavailable — manual entry still works.', err);
+        hideNameSuggestions();
+      }
+    }, 300);
+  });
+  $('#rName').addEventListener('blur', ()=> setTimeout(hideNameSuggestions, 150));
+
+  // Probe one real request up front: a referrer-blocked or misconfigured
+  // API key fails every suggestion, which would otherwise look like a
+  // dead search box only after someone starts typing. Surface it loudly
+  // and open manual entry right away instead.
+  (async ()=>{
+    try{
+      const { AutocompleteSuggestion } = await google.maps.importLibrary('places');
+      try{
+        await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: 'pizza',
+          locationRestriction: CHICAGOLAND,
+        });
+      }catch(probeErr){
+        console.warn('Places requests are blocked for this origin.', probeErr);
+        placesBlocked = true;
+        $('#placesNotice').style.display = '';
+        enableManualMode();
+      }
+    } catch(err){
+      console.warn('Places Autocomplete unavailable — falling back to manual entry.', err);
+      placesBlocked = true;
+      enableManualMode();
+    }
+  })();
 
   /* Address autocomplete for manual mode only — the Places-search path
      already gets its address straight from the selected restaurant, so
@@ -1558,7 +1666,9 @@ function openAddRestaurant(){
         const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
           input: q,
           locationRestriction: CHICAGOLAND,
-          includedPrimaryTypes: ['geocode'],
+          // 'geocode' was a legacy Autocomplete-widget filter value — the
+          // Places API (New) used here only accepts real Table A types.
+          includedPrimaryTypes: ['street_address', 'route', 'premise', 'subpremise'],
         });
         if($('#rAddr').value.trim() !== q) return; // stale response, input moved on
         if(!suggestions || !suggestions.length){ hideAddrSuggestions(); return; }
@@ -1583,55 +1693,6 @@ function openAddRestaurant(){
     }, 300);
   });
   $('#rAddr').addEventListener('blur', ()=> setTimeout(hideAddrSuggestions, 150));
-
-  (async ()=>{
-    try{
-      const { PlaceAutocompleteElement, AutocompleteSuggestion } = await google.maps.importLibrary('places');
-      const pac = new PlaceAutocompleteElement();
-      pac.includedPrimaryTypes = ['restaurant', 'cafe', 'bar', 'bakery', 'meal_takeaway'];
-      pac.locationRestriction = CHICAGOLAND;
-      $('#nameAutocompleteContainer').appendChild(pac);
-      pac.addEventListener('gmp-select', async ({ placePrediction })=>{
-        const place = placePrediction.toPlace();
-        await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType'] });
-        // Cuisines map themselves from Google's classification, then land
-        // in the Filing-under chips where they can be adjusted before saving.
-        const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
-        const tags = [];
-        types.forEach(t=>{
-          const tag = GOOGLE_TYPE_TAG[t];
-          if(tag && !tags.includes(tag)) tags.push(tag);
-        });
-        selectedPlace = {
-          name: place.displayName || '',
-          address: place.formattedAddress || '',
-          lat: place.location ? place.location.lat() : null,
-          lng: place.location ? place.location.lng() : null,
-          phone: place.internationalPhoneNumber || null,
-          website: place.websiteURI || null,
-          placeId: place.id || null,
-        };
-        pendingTags = tags;
-        renderFilingUnder();
-      });
-      // Probe one real request: a referrer-blocked or misconfigured API key
-      // renders the widget fine but 403s every suggestion, which looks like
-      // a dead search box. Surface that loudly and open manual entry.
-      try{
-        await AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: 'pizza',
-          locationRestriction: CHICAGOLAND,
-        });
-      }catch(probeErr){
-        console.warn('Places requests are blocked for this origin.', probeErr);
-        $('#placesNotice').style.display = '';
-        enableManualMode();
-      }
-    } catch(err){
-      console.warn('Places Autocomplete unavailable — falling back to manual entry.', err);
-      enableManualMode();
-    }
-  })();
 
   $('#saveAdd').addEventListener('click', async (e)=>{
     const name = manualMode ? $('#rName').value.trim() : (selectedPlace ? selectedPlace.name : '');
