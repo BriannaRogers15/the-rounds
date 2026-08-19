@@ -5,7 +5,7 @@ service cloud.firestore {
     // Brianna's real Firebase Auth UID — the only account allowed to
     // create or delete restaurant listings. Known after her first sign-in.
     function isOwner() {
-      return request.auth.uid == 'OWNER_UID_PLACEHOLDER';
+      return request.auth.uid == 'pyrbuH8HHGQ2wus3OQvkMRq2Qol1';
     }
 
     match /users/{userId} {

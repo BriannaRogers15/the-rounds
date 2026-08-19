@@ -138,9 +138,20 @@
       if(signedInChip) signedInChip.remove();
       signedInChip = document.createElement('div');
       signedInChip.className = 'signed-in-chip';
-      signedInChip.innerHTML = `<span>Signed in as ${escapeHtml(user.displayName || user.email)}</span><button id="authSignOutBtn">Sign out</button>`;
+      signedInChip.innerHTML = `<span>Signed in as <button id="authRenameBtn" class="chip-name">${escapeHtml(user.displayName || user.email)} ✏️</button></span><button id="authSignOutBtn">Sign out</button>`;
       document.body.appendChild(signedInChip);
       document.getElementById('authSignOutBtn').addEventListener('click', ()=> signOut(auth));
+      document.getElementById('authRenameBtn').addEventListener('click', async ()=>{
+        const next = prompt('Your name (shown on your reviews):', user.displayName || '');
+        if(next === null) return; // cancelled
+        const name = next.trim();
+        if(!name || name === user.displayName) return;
+        try{
+          await updateProfile(user, { displayName: name });
+          await setDoc(doc(db, 'users', user.uid), { displayName: name }, { merge: true });
+          renderSignedInChip(user);
+        }catch(err){ console.error('Could not update name:', err); alert('Could not save that name — try again.'); }
+      });
     }
 
     onAuthStateChanged(auth, async (user)=>{

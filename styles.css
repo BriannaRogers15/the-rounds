@@ -842,3 +842,8 @@ h1{
   border:1px solid var(--hairline); border-radius:999px; padding:5px 12px;
 }
 .signed-in-chip button:hover{ border-color: var(--flag-blue-dim); }
+.signed-in-chip .chip-name{
+  font-weight:700; color:var(--cream); background:none; border:none;
+  padding:0; border-radius:0; text-decoration:underline; text-decoration-style:dotted;
+}
+.signed-in-chip .chip-name:hover{ color:var(--flag-blue-bright); }
