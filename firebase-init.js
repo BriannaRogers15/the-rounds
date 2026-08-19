@@ -6,9 +6,10 @@
    removes the data/*.js dependency, app.js can move to `import` directly. */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup,
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, onAuthStateChanged, signOut, updateProfile,
+  setPersistence, browserLocalPersistence,
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
 import {
   getFirestore, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc,
@@ -31,9 +32,19 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
+// Firebase Auth defaults to IndexedDB-backed session persistence, which hit
+// a real Safari IndexedDB failure right after sign-in (confirmed via stack
+// trace: directlySetCurrentUser -> _set -> _openDb in Firebase's own
+// indexed_db.ts, thrown as "Database is closing/hidden"). localStorage
+// persistence doesn't touch IndexedDB at all, sidestepping that failure
+// point entirely rather than working around a symptom of it.
+setPersistence(auth, browserLocalPersistence).catch((err)=>
+  console.error('Could not set auth persistence:', err));
+
 window.RoundsFirebase = {
   auth, db, googleProvider,
-  signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  signInWithPopup, signInWithRedirect, getRedirectResult,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, onAuthStateChanged, signOut, updateProfile,
   doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc,
   collection, onSnapshot, serverTimestamp, arrayUnion, arrayRemove,

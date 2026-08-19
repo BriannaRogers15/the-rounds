@@ -24,34 +24,48 @@
 
 <div id="authGate" class="auth-gate" style="display:none;">
   <div class="auth-card">
+    <svg class="emblem" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="64" height="40" rx="3" fill="#F3EDE0"/>
+      <rect x="0" y="9" width="64" height="5" fill="#4FA8DE"/>
+      <rect x="0" y="26" width="64" height="5" fill="#4FA8DE"/>
+      <g fill="#C8102E">
+        <path transform="translate(16,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+        <path transform="translate(27,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+        <path transform="translate(38,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+        <path transform="translate(49,20) scale(1.25)" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/>
+      </g>
+    </svg>
     <div class="eyebrow">A Chicagoland Dining Ledger</div>
     <h1>The Rounds</h1>
     <div class="sub" id="authSub">Sign in to see what the group's been eating.</div>
+    <div class="rule"></div>
 
-    <button class="btn" id="googleSignInBtn" style="width:100%;">Sign in with Google</button>
+    <div class="auth-card-body">
+      <button class="btn" id="googleSignInBtn" style="width:100%;">Sign in with Google</button>
 
-    <div class="auth-divider"><span>or</span></div>
+      <div class="auth-divider"><span>or</span></div>
 
-    <div class="field" id="authNameField" style="display:none;">
-      <label>Your name <span style="text-transform:none;">(shown on your reviews)</span></label>
-      <input type="text" id="authName" placeholder="e.g. Bri">
+      <div class="field" id="authNameField" style="display:none;">
+        <label>Your name <span style="text-transform:none;">(shown on your reviews)</span></label>
+        <input type="text" id="authName" placeholder="e.g. Bri">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="authEmail" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="authPassword" placeholder="••••••••">
+      </div>
+
+      <button class="btn secondary" id="authSubmitBtn" style="width:100%;">Sign In</button>
+
+      <div class="auth-links">
+        <a href="#" id="authModeToggle">New here? Create an account</a>
+        <a href="#" id="authForgotLink">Forgot password?</a>
+      </div>
+      <div class="auth-error" id="authError" style="display:none;"></div>
     </div>
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="authEmail" placeholder="you@example.com">
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" id="authPassword" placeholder="••••••••">
-    </div>
-
-    <button class="btn secondary" id="authSubmitBtn" style="width:100%;">Sign In</button>
-
-    <div class="auth-links">
-      <a href="#" id="authModeToggle">New here? Create an account</a>
-      <a href="#" id="authForgotLink">Forgot password?</a>
-    </div>
-    <div class="auth-error" id="authError" style="display:none;"></div>
   </div>
 </div>
 

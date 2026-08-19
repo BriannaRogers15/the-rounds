@@ -11,10 +11,33 @@
   function init(){
     const {
       auth, googleProvider, db,
-      signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      signInWithPopup, signInWithRedirect, getRedirectResult,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail, onAuthStateChanged, signOut, updateProfile,
       doc, setDoc, getDoc, serverTimestamp,
     } = window.RoundsFirebase;
+
+    /* Popup and redirect each fail in a different, specific context — pick
+       the one that actually works for the context this page is running in,
+       rather than a single global choice:
+       - Popup breaks inside an installed/standalone PWA (no reliable
+         opener/opened-window relationship for the result to come back on).
+         It works fine in a normal browser tab, desktop or mobile.
+       - Redirect is the standard fix for standalone mode, but depends on
+         Firebase correlating state across a full navigation to Google and
+         back — Safari's cross-site tracking protection can interrupt that,
+         especially testing over plain http://localhost. */
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+
+    // Only relevant in standalone mode — that's the only case that ever
+    // initiates a redirect in the first place, so checking for a pending
+    // result in normal-tab/popup mode is pure overhead that can surface
+    // confusing, irrelevant errors (e.g. transient IndexedDB hiccups) on
+    // every plain page load before anyone's clicked anything.
+    if(isStandalone){
+      getRedirectResult(auth).catch((err)=> showError(friendlyAuthError(err)));
+    }
 
     let mode = 'signin'; // 'signin' | 'signup'
 
@@ -52,7 +75,10 @@
 
     document.getElementById('googleSignInBtn').addEventListener('click', async ()=>{
       clearError();
-      try{ await signInWithPopup(auth, googleProvider); }
+      try{
+        if(isStandalone) await signInWithRedirect(auth, googleProvider);
+        else await signInWithPopup(auth, googleProvider);
+      }
       catch(err){ showError(friendlyAuthError(err)); }
     });
 
@@ -90,6 +116,11 @@
     });
 
     function friendlyAuthError(err){
+      // Log the real error every time this runs — the on-screen message is
+      // deliberately simplified, but that must never be the only place the
+      // failure detail exists. Silently swallowing the real error here is
+      // exactly what made this bug hard to diagnose earlier.
+      console.error('Auth/Firestore error:', err && err.name, err && err.code, err && err.message, err);
       const map = {
         'auth/invalid-email': 'That email address looks off.',
         'auth/user-not-found': 'No account with that email — try creating one.',
