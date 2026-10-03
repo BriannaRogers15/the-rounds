@@ -2467,6 +2467,10 @@ async function waitForFirebase(){
   }
 
   applyHash(); // restores the view from the address (empty hash = landing)
+  // Signals that restaurants/visits/saveRestaurants/renderAll are safe to
+  // touch from outside the app (e.g. test fixtures via page.evaluate),
+  // mirroring the rounds-firebase-ready event in firebase-init.js.
+  window.dispatchEvent(new Event('rounds-app-ready'));
   // Boundary data (city neighborhoods + suburb towns) loads in the
   // background; neighborhood stamps persist on each record once assigned,
   // so these are real fetches only the first time.

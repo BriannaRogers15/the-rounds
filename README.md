@@ -18,6 +18,9 @@ A personal restaurant guide tracker for Chicago and the Chicagoland area. Log vi
 ## Running locally
 Just open `index.html` in a browser — no build step, no dependencies. (Serve it over HTTP for the service worker/offline features: `python3 -m http.server`.)
 
+## Testing
+The app itself needs nothing beyond a browser and a static file server. An optional, dev-only automated test suite lives in `tests/` and uses Node tooling (Playwright + the Firebase Emulator Suite) that never touches production data or the real Firebase project. To run it: `npm install && npm test`. See `tests/README.md` for coverage, phasing, and the handful of things that can't be automated (real Google OAuth consent, most notably).
+
 ## Installing on your phone
 1. Host this repo somewhere with HTTPS (e.g. GitHub Pages — see below).
 2. Open the site on your phone in Safari (iOS) or Chrome (Android).

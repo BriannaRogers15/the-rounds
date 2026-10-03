@@ -3,3 +3,11 @@
 .vscode/
 launch.json
 settings.local.json
+node_modules/
+test-results/
+playwright-report/
+playwright/.cache/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/

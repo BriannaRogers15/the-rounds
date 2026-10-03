@@ -10,10 +10,12 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, onAuthStateChanged, signOut, updateProfile,
   setPersistence, browserLocalPersistence, browserSessionPersistence,
+  connectAuthEmulator,
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
 import {
   getFirestore, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc,
   collection, getDocs, onSnapshot, writeBatch, serverTimestamp, arrayUnion, arrayRemove,
+  connectFirestoreEmulator,
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 // Public web-app config — not a secret, access control is entirely the
@@ -30,6 +32,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Test-only seam: window.__ROUNDS_TEST__ is never set in production (it's
+// assigned via Playwright's addInitScript, which runs before this module
+// evaluates), so this branch is dead code outside the test suite — prod
+// behavior is unchanged. Points at the local Firebase Emulator Suite
+// instead of the real the-rounds-fc02a project so tests never touch real
+// user data and don't depend on live network/Google availability.
+if(window.__ROUNDS_TEST__?.useEmulators){
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+}
+
 const googleProvider = new GoogleAuthProvider();
 const OWNER_UID = 'pyrbuH8HHGQ2wus3OQvkMRq2Qol1';
 let keepSignedIn = true;

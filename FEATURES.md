@@ -24,6 +24,21 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] Installable PWA, offline-capable (app shell + boundary data cached)
 - [x] `.gitignore` (excludes `.DS_Store`, `.claude/`, `.vscode/`, local settings)
 
+## Test coverage
+
+Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only — see `tests/README.md`). Phase 1 (zero-backend guest-mode coverage) shipped 2026-10-03.
+
+- [x] Guest-mode access control — `tests/e2e/01-auth-gate-access-control.spec.js`
+- [x] Landing/neighborhoods page, area banner — `02-landing-areas`, `03-area-banner`
+- [x] Listings grid, map view — `04-listings-grid`, `05-map-view`
+- [x] Search (incl. debounce), sort (name/date/rating), filters — `06-search`, `07-sort`, `08-filters`
+- [x] Guides/cuisine rail, menu display, URL hash routing — `09-guides-rail`, `13-menu-system`, `16-hash-routing`
+- [ ] Sign-up/in/out, password reset, owner-vs-non-owner, boot/migration idempotency — needs the Firestore Emulator (Phase 2)
+- [ ] Firestore security rules access-control matrix — Phase 3
+- [ ] Add Listing, restaurant detail writes, Log a Visit, reviewer profiles, backup/restore, distance sort, tile-fallback — need mocked Places/Geolocation (Phase 4)
+- [ ] CI workflow — Phase 5
+- [ ] Real Google OAuth consent — not automatable, manual-only by design
+
 ## In progress / needs a status check
 
 - [ ] **Per-restaurant menu coverage** — confirmed by direct count: 162 of 249 restaurants have a curated `MENU_LOOKUP` entry, **91 have none yet**. The ongoing "Remediation: X sectioned" commits are cleaning up/expanding existing entries (Azul Mariscos, Pappadeaux, Crab Du Jour, Original Pancake House, etc.) — separate from the 91 that haven't been started at all.
