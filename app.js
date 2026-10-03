@@ -5,6 +5,9 @@ let activeProfileId = null;
 let activeCategory = 'All';
 let activeSubTag = null;
 let dataLoaded = false;
+let sharedLedgerReady = false;
+let sharedLedgerStatus = 'Connecting…';
+let sharedLedgerStatusError = false;
 let sortBy = 'name';
 let userLocation = null;
 let locationRequested = false;
@@ -137,16 +140,37 @@ async function migrateCategories(){
 async function saveRestaurants(){
   try{ await store.set('restaurants', JSON.stringify(restaurants)); }
   catch(e){ console.error('Could not save restaurants', e); }
+  await persistSharedLedger('restaurants', restaurants);
 }
 async function saveVisits(){
   try{ await store.set('visits', JSON.stringify(visits)); }
   catch(e){ console.error('Could not save visits', e); }
+  await persistSharedLedger('visits', visits);
 }
 async function saveProfiles(){
   try{
     await store.set('profiles', JSON.stringify(profiles));
     await store.set('activeProfile', activeProfileId || '');
   }catch(e){ console.error('Could not save profiles', e); }
+}
+async function persistSharedLedger(kind, records){
+  if(!sharedLedgerReady || !canWriteLedger()) return;
+  try{
+    await window.RoundsFirebase.syncSharedLedger(kind, records);
+    setSharedLedgerStatus('Shared');
+  }catch(error){
+    console.error(`Could not sync shared ${kind}:`, error);
+    setSharedLedgerStatus('Sync issue', true);
+  }
+}
+function setSharedLedgerStatus(message, isError=false){
+  sharedLedgerStatus = message;
+  sharedLedgerStatusError = isError;
+  const status = $('#ledgerStatus');
+  if(status){
+    status.textContent = message;
+    status.classList.toggle('error', isError);
+  }
 }
 function activeProfile(){
   return profiles.find(p => p.id === activeProfileId) || null;
@@ -173,6 +197,10 @@ function exportBackup(){
   setTimeout(()=> URL.revokeObjectURL(a.href), 5000);
 }
 async function importBackup(file){
+  if(!canManageListings()){
+    alert('Only the ledger manager can restore a backup.');
+    return;
+  }
   let data;
   try{ data = JSON.parse(await file.text()); }
   catch(e){ alert("That file isn't readable as a backup."); return; }
@@ -592,6 +620,8 @@ function restaurantInArea(r, area){
   if(!area) return true;
   if(area.type === 'neighborhood') return r.neighborhood === area.name;
   if(area.type === 'town') return r.town === area.name;
+  if(area.type === 'region') return r.region === area.name;
+  if(area.type === 'side') return r.region === 'Chicago' && !!r.neighborhood && sideForHood(r.neighborhood) === area.name;
   if(area.type === 'other') return r.region === 'Chicago' && !r.neighborhood;
   return true;
 }
@@ -937,7 +967,7 @@ function renderContent(){
   if(list.length === 0){
     el.className = '';
     el.innerHTML = restaurants.length === 0
-      ? `<div class="empty"><b>No listings in this book yet</b>Add your first stop to start tracking it.</div>`
+      ? `<div class="empty"><b>No listings in this book yet</b>${canManageListings() ? 'Add your first stop to start tracking it.' : 'The shared ledger has no listings yet.'}</div>`
       : `<div class="empty"><b>No listings match</b>Try a different search, filter, or tab.</div>`;
     if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
     return;
@@ -1273,17 +1303,16 @@ function renderAreasPage(){
     const blocks = (sideStocked[side] || []).sort(az).map(name => areaBlockHTML({ type:'neighborhood', name })).join('')
       + (showGhosts ? (sideGhosts[side] || []).sort(az).map(name => areaBlockHTML({ type:'neighborhood', name })).join('') : '');
     if(!blocks) return '';
-    return `<div class="area-side-label">${escapeHtml(side)}</div><div class="area-blocks">${blocks}</div>`;
+    return `<button class="area-side-label" data-type="side" data-name="${escapeHtml(side)}">${escapeHtml(side)}</button><div class="area-blocks">${blocks}</div>`;
   }).join('');
   const elsewhereBlock = unassigned ? `<div class="area-blocks">${areaBlockHTML({ type:'other', name:'Elsewhere in Chicago' })}</div>` : '';
   const chicagoSection = (sideSections || ghostNames.length) ? `
-    <div class="area-group-label">Chicago</div>
     ${sideSections}
     ${elsewhereBlock}
     ${ghostNames.length ? `<button class="ghost-toggle" id="ghostToggle">${showGhosts ? 'Hide' : 'Show'} ${ghostNames.length} unexplored neighborhood${ghostNames.length===1?'':'s'} ${showGhosts ? '▴' : '▾'}</button>` : ''}` : '';
   const suburbGroups = REGION_ORDER.filter(region => townByRegion[region]).map(region=>{
     const blocks = Object.keys(townByRegion[region]).sort(az).map(town => areaBlockHTML({ type:'town', name: town })).join('');
-    return `<div class="area-group-label">${escapeHtml(region)}</div><div class="area-blocks">${blocks}</div>`;
+    return `<button class="area-group-label" data-type="region" data-name="${escapeHtml(region)}">${escapeHtml(region)}</button><div class="area-blocks">${blocks}</div>`;
   }).join('');
 
   el.innerHTML = `
@@ -1293,7 +1322,7 @@ function renderAreasPage(){
         <div class="areas-sub">Tap a neighborhood and its spots and cuisines pop up.</div>
       </div>
       <div class="areas-head-actions">
-        <button class="btn secondary" id="addFromAreas">+ New Listing</button>
+        ${canManageListings() ? '<button class="btn secondary" id="addFromAreas">+ New Listing</button>' : ''}
         <button class="btn" id="browseAllBtn">Browse all listings →</button>
       </div>
     </div>
@@ -1302,23 +1331,28 @@ function renderAreasPage(){
       ${suburbGroups}
     </div>
     <div class="data-row">
-      <span>Your whole ledger lives on this device.</span>
+      <span>Shared ledger <span id="ledgerStatus" role="status" class="${sharedLedgerStatusError ? 'error' : ''}">${sharedLedgerStatus}</span></span>
       <button class="link-btn" id="exportBtn">⤓ Export backup</button>
-      <button class="link-btn" id="importBtn">⤒ Restore backup</button>
+      ${canManageListings() ? '<button class="link-btn" id="importBtn">⤒ Restore backup</button>' : ''}
       <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
     </div>
   `;
 
   $('#browseAllBtn').addEventListener('click', ()=>{ activeArea = null; currentPage = 'listings'; renderAll(); });
-  $('#addFromAreas').addEventListener('click', openAddRestaurant);
+  const addFromAreas = $('#addFromAreas');
+  if(addFromAreas) addFromAreas.addEventListener('click', openAddRestaurant);
   $('#exportBtn').addEventListener('click', exportBackup);
-  $('#importBtn').addEventListener('click', ()=> $('#importFile').click());
+  const importBtn = $('#importBtn');
+  if(importBtn) importBtn.addEventListener('click', ()=> $('#importFile').click());
   $('#importFile').addEventListener('change', (e)=>{
     if(e.target.files[0]) importBackup(e.target.files[0]);
     e.target.value = '';
   });
   $$('.area-block', el).forEach(block=>{
     block.addEventListener('click', ()=> openArea({ type: block.dataset.type, name: block.dataset.name }));
+  });
+  $$('.area-group-label, .area-side-label', el).forEach(label=>{
+    label.addEventListener('click', ()=> openArea({ type: label.dataset.type, name: label.dataset.name }));
   });
   const ghostToggle = $('#ghostToggle');
   if(ghostToggle) ghostToggle.addEventListener('click', ()=>{
@@ -1364,6 +1398,7 @@ function renderAll(){
   }
   renderAreaBanner();
   renderProfileChip();
+  updateAccessControls();
   syncHash();
 }
 
@@ -1386,6 +1421,7 @@ function renderProfileChip(){
   $('#profileBtn').textContent = p ? `👤 ${p.name}` : '👤 Set reviewer';
 }
 function openProfiles(){
+  if(!canWriteLedger()) return;
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ovP">
       <div class="modal">
@@ -1453,7 +1489,32 @@ function openProfiles(){
   });
 }
 
+function canWriteLedger(){
+  return sharedLedgerReady && !!(window.RoundsFirebase && window.RoundsFirebase.auth && window.RoundsFirebase.auth.currentUser) && !window.roundsGuestMode;
+}
+function canManageListings(){
+  return canWriteLedger() && window.RoundsFirebase.isOwner();
+}
+function updateAccessControls(){
+  const guest = !!window.roundsGuestMode;
+  document.body.classList.toggle('guest-mode', guest);
+  const notice = $('#guestNotice');
+  if(notice) notice.hidden = !guest;
+  const profileButton = $('#profileBtn');
+  if(profileButton) profileButton.hidden = guest;
+  const addButton = $('#addRestaurantBtn');
+  if(addButton) addButton.hidden = !canManageListings();
+}
+window.addEventListener('rounds-access-changed', ()=>{
+  updateAccessControls();
+  if(dataLoaded) renderAll();
+});
+
 function openAddRestaurant(){
+  if(!canManageListings()){
+    alert('Only the ledger manager can add listings.');
+    return;
+  }
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov">
       <div class="modal">
@@ -1695,6 +1756,7 @@ function openAddRestaurant(){
   $('#rAddr').addEventListener('blur', ()=> setTimeout(hideAddrSuggestions, 150));
 
   $('#saveAdd').addEventListener('click', async (e)=>{
+    if(!canManageListings()) return;
     const name = manualMode ? $('#rName').value.trim() : (selectedPlace ? selectedPlace.name : '');
     const address = manualMode ? $('#rAddr').value.trim() : (selectedPlace ? selectedPlace.address : '');
     if(!name || (manualMode && !address)){
@@ -1730,6 +1792,9 @@ function openAddRestaurant(){
 function openDetail(id){
   const r = restaurants.find(x=>x.id===id);
   if(!r) return;
+  const canEditListing = canManageListings();
+  const canLogVisit = canWriteLedger();
+  const currentUid = window.RoundsFirebase?.auth?.currentUser?.uid;
   const vs = visitsFor(id);
   const cats = categories();
   const datalist = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
@@ -1740,8 +1805,8 @@ function openDetail(id){
         <div class="detail-head">
           <div>
             <div class="tag-row" id="tagRow">
-              ${(r.categories||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}<button class="tag-x" data-tag="${escapeHtml(t)}">×</button></span>`).join('')}
-              <input type="text" id="newTag" class="tag-add" list="tagList" placeholder="+ add guide">
+              ${(r.categories||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}${canEditListing ? `<button class="tag-x" data-tag="${escapeHtml(t)}">×</button>` : ''}</span>`).join('')}
+              ${canEditListing ? '<input type="text" id="newTag" class="tag-add" list="tagList" placeholder="+ add guide">' : ''}
               <datalist id="tagList">${datalist}</datalist>
             </div>
             <div class="detail-name">${nameLinkHtml(r)}</div>
@@ -1753,10 +1818,10 @@ function openDetail(id){
             </div>
           </div>
         </div>
-        <div style="margin-top:16px; display:flex; gap:8px;">
-          <button class="btn small" id="logVisitBtn">+ Log a Visit</button>
-          <button class="btn small danger" id="deleteRestBtn">Delete Listing</button>
-        </div>
+        ${(canLogVisit || canEditListing) ? `<div style="margin-top:16px; display:flex; gap:8px;">
+          ${canLogVisit ? '<button class="btn small" id="logVisitBtn">+ Log a Visit</button>' : ''}
+          ${canEditListing ? '<button class="btn small danger" id="deleteRestBtn">Delete Listing</button>' : ''}
+        </div>` : ''}
         <div class="menu-section">
           <h3>Menu</h3>
           <div class="menu-groups ${menuOf(r).length > 40 ? 'cols3' : ''}" id="menuChips">
@@ -1779,7 +1844,7 @@ function openDetail(id){
                   <div class="visit-meta-small">Would return: ${v.wouldReturn ? 'Yes' : 'No'}</div>
                   ${v.notes ? `<div class="visit-meta-small">Notes: ${escapeHtml(v.notes)}</div>` : ''}
                 </div>
-                <button class="trash" data-vid="${v.id}">remove</button>
+                ${canLogVisit && v.authorUid === currentUid ? `<button class="trash" data-vid="${v.id}">remove</button>` : ''}
               </div>
             `).join('') : '<div class="no-visits">No visits logged yet.</div>'}
           </div>
@@ -1789,8 +1854,14 @@ function openDetail(id){
   `;
   $('#closeDet').addEventListener('click', closeModal);
   $('#ov').addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
-  $('#logVisitBtn').addEventListener('click', ()=> openLogVisit(id));
-  $('#deleteRestBtn').addEventListener('click', async ()=>{
+  const logVisitButton = $('#logVisitBtn');
+  if(logVisitButton) logVisitButton.addEventListener('click', ()=> openLogVisit(id));
+  const deleteRestaurantButton = $('#deleteRestBtn');
+  if(deleteRestaurantButton) deleteRestaurantButton.addEventListener('click', async ()=>{
+    if(!canManageListings()){
+      alert('Only the ledger manager can delete listings.');
+      return;
+    }
     if(!confirm(`Delete "${r.name}" and all its logged visits? This can't be undone.`)) return;
     restaurants = restaurants.filter(x=>x.id!==id);
     visits = visits.filter(v=>v.restaurantId!==id);
@@ -1801,6 +1872,10 @@ function openDetail(id){
   });
   $$('.tag-x', $('#modalRoot')).forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
+      if(!canManageListings()){
+        alert('Only the ledger manager can edit listing tags.');
+        return;
+      }
       e.stopPropagation();
       removeTagFromRestaurant(id, btn.dataset.tag);
       await saveRestaurants();
@@ -1810,6 +1885,10 @@ function openDetail(id){
   });
   const newTagInput = $('#newTag');
   const commitTag = async ()=>{
+    if(!canManageListings()){
+      alert('Only the ledger manager can add listing tags.');
+      return;
+    }
     const val = newTagInput.value.trim();
     if(!val) return;
     if(addTagToRestaurant(id, val)){
@@ -1820,12 +1899,18 @@ function openDetail(id){
       newTagInput.value = '';
     }
   };
-  newTagInput.addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); commitTag(); }
-  });
-  newTagInput.addEventListener('blur', commitTag);
+  if(newTagInput){
+    newTagInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); commitTag(); }
+    });
+    newTagInput.addEventListener('blur', commitTag);
+  }
   $$('.trash', $('#modalRoot')).forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
+      if(!canWriteLedger() || visits.find(v=>v.id===e.target.dataset.vid)?.authorUid !== currentUid){
+        alert('You can only remove your own visits.');
+        return;
+      }
       const vid = e.target.dataset.vid;
       visits = visits.filter(v=>v.id!==vid);
       await saveVisits();
@@ -1836,6 +1921,10 @@ function openDetail(id){
 }
 
 function openLogVisit(restaurantId){
+  if(!canWriteLedger()){
+    alert('Sign in to log a visit.');
+    return;
+  }
   let rating = 0;
   let wouldReturn = null;
   const today = new Date().toISOString().slice(0,10);
@@ -1985,6 +2074,7 @@ function openLogVisit(restaurantId){
   });
 
   $('#saveLog').addEventListener('click', async (e)=>{
+    if(!canWriteLedger()) return;
     if(!rating){ alert('Pick a rating.'); return; }
     if(wouldReturn === null){ alert('Let us know if you\'d go back.'); return; }
     let reviewerName;
@@ -2015,7 +2105,7 @@ function openLogVisit(restaurantId){
     const ate = [...checkedDishes];
     if(typedDish && !ate.some(d => d.toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
     const notes = $('#vNotes').value.trim();
-    visits.push({ id: uid(), restaurantId, date, ate, rating, wouldReturn, notes, reviewer: reviewerName, createdAt: Date.now() });
+    visits.push({ id: uid(), restaurantId, date, ate, rating, wouldReturn, notes, reviewer: reviewerName, authorUid: window.RoundsFirebase.auth.currentUser.uid, createdAt: Date.now() });
     if(typedDish && addDishToMenu(restaurantId, typedDish)) await saveRestaurants();
     await saveVisits();
     const rect = e.target.getBoundingClientRect();
@@ -2039,9 +2129,11 @@ $$('#sortOpts button').forEach(btn=>{
   });
 });
 
+let searchDebounce = null;
 $('#searchBox').addEventListener('input', (e)=>{
   searchQuery = e.target.value;
-  renderContent();
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(renderContent, 150);
 });
 
 $('#unvisitedToggle').addEventListener('click', ()=>{
@@ -2282,25 +2374,104 @@ async function removeRemovedListings(){
   await saveVisits();
 }
 
+async function waitForFirebase(){
+  if(window.RoundsFirebase) return window.RoundsFirebase;
+  return new Promise((resolve)=>{
+    const timeout = setTimeout(()=> resolve(null), 10000);
+    window.addEventListener('rounds-firebase-ready', ()=>{
+      clearTimeout(timeout);
+      resolve(window.RoundsFirebase || null);
+    }, { once: true });
+  });
+}
+
 (async function init(){
   await loadData();
-  await migrateCategories();
-  await seedIfNeeded();
-  await enrichAddresses();
-  await removeClosedPlaces();
-  await renameCuisineTags();
-  await stripParentDessertTag();
-  await removeStrayTags();
-  await removeRemovedListings();
-  await seedMenusFromVisits();
-  await seedCuratedMenus();
-  await assignAreas();
+  const firebase = await waitForFirebase();
+  let watcher = null;
+  let cloudAvailable = false;
+  let owner = false;
+
+  if(firebase){
+    try{
+      await firebase.authStateReady;
+      owner = firebase.isOwner();
+      watcher = firebase.watchSharedLedger();
+      const shared = await watcher.ready;
+      cloudAvailable = true;
+      const hasCloudData = shared.restaurants.length > 0 || shared.visits.length > 0;
+      if(owner){
+        const mergeById = (cloudRecords, localRecords)=>{
+          const cloudIds = new Set(cloudRecords.map((record)=> record.id));
+          return [...cloudRecords, ...localRecords.filter((record)=> !cloudIds.has(record.id))];
+        };
+        restaurants = mergeById(shared.restaurants, restaurants);
+        visits = mergeById(shared.visits, visits);
+      } else {
+        restaurants = shared.restaurants;
+        visits = shared.visits;
+      }
+      if(hasCloudData || !owner){
+        await store.set('restaurants', JSON.stringify(restaurants));
+        await store.set('visits', JSON.stringify(visits));
+      }
+    }catch(error){
+      console.warn('Shared ledger unavailable; using this browser\'s cached copy.', error);
+      if(watcher) watcher.unsubscribe();
+      watcher = null;
+      setSharedLedgerStatus('Offline copy', true);
+    }
+  }
+
+  if(owner || !firebase){
+    await migrateCategories();
+    await seedIfNeeded();
+    await enrichAddresses();
+    await removeClosedPlaces();
+    await renameCuisineTags();
+    await stripParentDessertTag();
+    await removeStrayTags();
+    await removeRemovedListings();
+    await seedMenusFromVisits();
+    await seedCuratedMenus();
+    await assignAreas();
+  }
+
+  if(cloudAvailable && watcher){
+    if(owner){
+      const ownerUid = firebase.auth.currentUser.uid;
+      visits.forEach((visit)=> { if(!visit.authorUid) visit.authorUid = ownerUid; });
+      try{
+        await firebase.syncSharedLedger('restaurants', restaurants);
+        await firebase.syncSharedLedger('visits', visits);
+      }catch(error){
+        console.error('Could not initialize the shared ledger:', error);
+        watcher.unsubscribe();
+        watcher = null;
+        cloudAvailable = false;
+        setSharedLedgerStatus('Sync issue', true);
+      }
+    }
+  }
+
+  if(cloudAvailable && watcher){
+    sharedLedgerReady = true;
+    watcher.subscribe(async (changes)=>{
+      if(changes.restaurants) restaurants = changes.restaurants;
+      if(changes.visits) visits = changes.visits;
+      if(changes.restaurants) await store.set('restaurants', JSON.stringify(restaurants));
+      if(changes.visits) await store.set('visits', JSON.stringify(visits));
+      if(dataLoaded) renderAll();
+    });
+    setSharedLedgerStatus('Shared');
+  }
+
   applyHash(); // restores the view from the address (empty hash = landing)
   // Boundary data (city neighborhoods + suburb towns) loads in the
   // background; neighborhood stamps persist on each record once assigned,
   // so these are real fetches only the first time.
   Promise.allSettled([loadHoodGeo(), loadTownGeo()]).then(async ()=>{
-    if(hoodGeo) await assignNeighborhoods(hoodGeo);
+    if(hoodGeo && owner) await assignNeighborhoods(hoodGeo);
     renderAll();
   });
 })();

@@ -388,6 +388,9 @@ const SEED_RESTAURANTS = [
   {name:"Maxwell Street Depot", category:"Sandwiches", address:"Chicago, IL"},
   // Second Shrimp Stop location (Bronzeville), added per Brianna 2026-07-11.
   {name:"Shrimp Stop 2", category:"Seafood", address:"101 E 47th St, Chicago, IL 60653"},
+  // Distinct restaurant from MiMi's Craft Kitchen despite the similar name —
+  // same ownership, separate South Loop address. Added per Brianna 2026-10-03.
+  {name:"MiMi's Tacos & French Fries", category:"Mexican", address:"1155 S Jefferson St, Chicago, IL 60607"},
 ];
 
 /* Real addresses, phone numbers, and Google Maps links looked up from
@@ -654,4 +657,5 @@ const ADDRESS_LOOKUP = [
   // Name as it exists in Brianna's storage (added via Places search).
   {name:"Chixter - 95th & Jeffery", website:"https://www.facebook.com/people/Chixter-95th-Jeffery/61590825741438/"},
   {name:"Shrimp Stop 2", address:"101 E 47th St, Chicago, IL 60653", lat:41.8091778, lng:-87.6226135, website:"https://www.shrimp-stop.com/", yelp:"https://www.yelp.com/biz/shrimp-stop-chicago-3"},
+  {name:"MiMi's Tacos & French Fries", address:"1155 S Jefferson St, Chicago, IL 60607", phone:"+1 312-929-3775", website:"https://tacosandfries.com"},
 ];

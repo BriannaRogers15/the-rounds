@@ -27,7 +27,7 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 ## In progress / needs a status check
 
 - [ ] **Per-restaurant menu coverage** — confirmed by direct count: 162 of 249 restaurants have a curated `MENU_LOOKUP` entry, **91 have none yet**. The ongoing "Remediation: X sectioned" commits are cleaning up/expanding existing entries (Azul Mariscos, Pappadeaux, Crab Du Jour, Original Pancake House, etc.) — separate from the 91 that haven't been started at all.
-- [ ] **Apple Maps guide reconciliation** — per memory notes, ~22 of 28 guides reconciled as of 2026-07-11, 3 guides unaccounted, "Selva" specifically flagged open. Needs a fresh check — this note may be stale.
+- [x] **Apple Maps guide reconciliation** — re-verified 2026-10-03 by transcribing all 45 screenshots in `/Users/briannarogers/Desktop/guides` against the live data: 25 distinct guides, 269 places, only two real gaps found. "Selva" (Mexican) was confirmed missing but Brianna decided to drop it rather than add it. "MiMi's Tacos & French Fries" (1155 S Jefferson St) was added as a second, separate listing from MiMi's Craft Kitchen. Everything else that looked like a gap (Cesar's Killer Margaritas, El Potosi, Leonel's Market, El Salto, Soul Prime, Burp Catering) was already intentionally excluded/removed. The remaining 3 of Brianna's 28 Apple Maps guides were never screenshotted — presumed non-food guides, not a gap.
 - [ ] **Menu QC pass** — batch 1 (Mexican + gems + test listings) seeded 2026-07-11; ~200 listings were pending quality-check as of that date. Status since then unconfirmed — there's no QC-tracking field in code, so this has to be confirmed from Brianna's own notes, not the app.
 
 ## Parked / not started

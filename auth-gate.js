@@ -40,6 +40,24 @@
     }
 
     let mode = 'signin'; // 'signin' | 'signup'
+    const rememberMe = document.getElementById('rememberMe');
+    const passwordInput = document.getElementById('authPassword');
+    try{
+      rememberMe.checked = localStorage.getItem('rounds:keep-signed-in') !== 'false';
+    }catch(_error){}
+    rememberMe.addEventListener('change', ()=>{
+      try{ localStorage.setItem('rounds:keep-signed-in', String(rememberMe.checked)); }
+      catch(_error){}
+    });
+
+    document.getElementById('togglePassword').addEventListener('click', (event)=>{
+      const button = event.currentTarget;
+      const showing = passwordInput.type === 'password';
+      passwordInput.type = showing ? 'text' : 'password';
+      button.textContent = showing ? 'Hide' : 'Show';
+      button.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+      button.setAttribute('aria-pressed', String(showing));
+    });
 
     function escapeHtml(s){
       const d = document.createElement('div');
@@ -58,6 +76,32 @@
       el.textContent = '';
     }
 
+    async function applyChosenPersistence(){
+      const keepSignedIn = document.getElementById('rememberMe')?.checked ?? true;
+      await window.RoundsFirebase.applyAuthPersistence(keepSignedIn);
+    }
+
+    function enterGuestMode(){
+      window.roundsGuestMode = true;
+      const gate = document.getElementById('authGate');
+      const wrap = document.querySelector('.wrap');
+      if(gate) gate.style.display = 'none';
+      if(wrap) wrap.style.display = '';
+      document.getElementById('guestNotice').hidden = false;
+      document.body.classList.add('guest-mode');
+      clearError();
+      window.dispatchEvent(new Event('rounds-access-changed'));
+    }
+
+    window.showRoundsAuthGate = ()=>{
+      window.roundsGuestMode = false;
+      document.getElementById('authGate').style.display = '';
+      document.querySelector('.wrap').style.display = 'none';
+      document.getElementById('guestNotice').hidden = true;
+      document.body.classList.remove('guest-mode');
+      window.dispatchEvent(new Event('rounds-access-changed'));
+    };
+
     function setMode(next){
       mode = next;
       document.getElementById('authNameField').style.display = mode === 'signup' ? '' : 'none';
@@ -65,6 +109,7 @@
       document.getElementById('authModeToggle').textContent = mode === 'signup'
         ? 'Already have an account? Sign in'
         : 'New here? Create an account';
+      passwordInput.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
       clearError();
     }
 
@@ -76,19 +121,29 @@
     document.getElementById('googleSignInBtn').addEventListener('click', async ()=>{
       clearError();
       try{
+        await applyChosenPersistence();
         if(isStandalone) await signInWithRedirect(auth, googleProvider);
         else await signInWithPopup(auth, googleProvider);
       }
       catch(err){ showError(friendlyAuthError(err)); }
     });
 
+    document.getElementById('authGuestLink').addEventListener('click', (e)=>{
+      e.preventDefault();
+      enterGuestMode();
+    });
+    document.getElementById('guestSignInBtn').addEventListener('click', ()=> window.showRoundsAuthGate());
+
     document.getElementById('authSubmitBtn').addEventListener('click', async ()=>{
       clearError();
       const email = document.getElementById('authEmail').value.trim();
-      const password = document.getElementById('authPassword').value;
+      const password = passwordInput.value;
       const name = document.getElementById('authName').value.trim();
-      if(!email || !password){ showError('Enter an email and password.'); return; }
+      const emailInput = document.getElementById('authEmail');
+      if(!email || !emailInput.validity.valid){ showError('Enter a valid email address.'); return; }
+      if(!password){ showError('Enter your password.'); return; }
       try{
+        await applyChosenPersistence();
         if(mode === 'signup'){
           if(!name){ showError('Enter a name — it\'s shown on your reviews.'); return; }
           const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -102,6 +157,9 @@
           await signInWithEmailAndPassword(auth, email, password);
         }
       }catch(err){ showError(friendlyAuthError(err)); }
+    });
+    passwordInput.addEventListener('keydown', (event)=>{
+      if(event.key === 'Enter') document.getElementById('authSubmitBtn').click();
     });
 
     document.getElementById('authForgotLink').addEventListener('click', async (e)=>{
@@ -161,8 +219,12 @@
       if(loading) loading.style.display = 'none';
 
       if(user){
+        window.roundsGuestMode = false;
+        document.body.classList.remove('guest-mode');
+        document.getElementById('guestNotice').hidden = true;
         gate.style.display = 'none';
         if(wrap) wrap.style.display = '';
+        window.dispatchEvent(new Event('rounds-access-changed'));
         renderSignedInChip(user);
         try{
           const userRef = doc(db, 'users', user.uid);
@@ -175,9 +237,19 @@
           if(!existing.exists()) payload.createdAt = serverTimestamp();
           await setDoc(userRef, payload, { merge: true });
         }catch(err){ console.warn('Could not write users/{uid} doc', err); }
+      } else if(window.roundsGuestMode){
+        gate.style.display = 'none';
+        if(wrap) wrap.style.display = '';
+        document.getElementById('guestNotice').hidden = false;
+        document.body.classList.add('guest-mode');
+        window.dispatchEvent(new Event('rounds-access-changed'));
+        if(signedInChip){ signedInChip.remove(); signedInChip = null; }
       } else {
+        document.body.classList.remove('guest-mode');
+        document.getElementById('guestNotice').hidden = true;
         gate.style.display = '';
         if(wrap) wrap.style.display = 'none';
+        window.dispatchEvent(new Event('rounds-access-changed'));
         if(signedInChip){ signedInChip.remove(); signedInChip = null; }
       }
     });

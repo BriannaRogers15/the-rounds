@@ -5,16 +5,16 @@ service cloud.firestore {
     // Brianna's real Firebase Auth UID — the only account allowed to
     // create or delete restaurant listings. Known after her first sign-in.
     function isOwner() {
-      return request.auth.uid == 'pyrbuH8HHGQ2wus3OQvkMRq2Qol1';
+      return request.auth != null && request.auth.uid == 'pyrbuH8HHGQ2wus3OQvkMRq2Qol1';
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
     match /restaurants/{restaurantId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       // Only Brianna creates or deletes listings.
       allow create, delete: if request.auth != null && isOwner();
       // Anyone signed in may update — but ONLY the `menu` field (the
@@ -23,13 +23,13 @@ service cloud.firestore {
       // Brianna can update anything. The on-request enrichment script runs
       // with the Admin SDK via a service-account key, which bypasses these
       // rules entirely, so its writes are unaffected by this line.
-      allow update: if request.auth != null &&
-        (isOwner() ||
+      allow update: if isOwner() ||
+        (request.auth != null &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['menu']));
     }
 
     match /visits/{visitId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow create: if request.auth != null && request.resource.data.authorUid == request.auth.uid;
       // Only the visit's own author can edit or delete it.
       allow update, delete: if request.auth != null && resource.data.authorUid == request.auth.uid;

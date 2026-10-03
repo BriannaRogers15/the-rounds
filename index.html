@@ -17,6 +17,9 @@
     v: "weekly",
   });
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -24,7 +27,7 @@
 
 <div id="authGate" class="auth-gate" style="display:none;">
   <div class="auth-card">
-    <svg class="emblem" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg">
+    <svg class="emblem" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <rect x="0" y="0" width="64" height="40" rx="3" fill="#F3EDE0"/>
       <rect x="0" y="9" width="64" height="5" fill="#4FA8DE"/>
       <rect x="0" y="26" width="64" height="5" fill="#4FA8DE"/>
@@ -55,14 +58,23 @@
       </div>
       <div class="field">
         <label>Password</label>
-        <input type="password" id="authPassword" placeholder="••••••••">
+        <div class="auth-password-wrap">
+          <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+          <button type="button" class="auth-password-toggle" id="togglePassword" aria-label="Show password" aria-pressed="false">Show</button>
+        </div>
       </div>
+
+      <label class="auth-remember" for="rememberMe">
+        <input type="checkbox" id="rememberMe" checked>
+        <span>Keep me signed in</span>
+      </label>
 
       <button class="btn secondary" id="authSubmitBtn" style="width:100%;">Sign In</button>
 
       <div class="auth-links">
         <a href="#" id="authModeToggle">New here? Create an account</a>
         <a href="#" id="authForgotLink">Forgot password?</a>
+        <a href="#" id="authGuestLink">Continue as guest</a>
       </div>
       <div class="auth-error" id="authError" style="display:none;"></div>
     </div>
@@ -70,8 +82,12 @@
 </div>
 
 <div class="wrap" style="display:none;">
+  <div class="guest-notice" id="guestNotice" hidden>
+    <span>Guest access · read only</span>
+    <button type="button" id="guestSignInBtn">Sign in</button>
+  </div>
   <header>
-    <svg class="emblem" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg">
+    <svg class="emblem" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <rect x="0" y="0" width="64" height="40" rx="3" fill="#F3EDE0"/>
       <rect x="0" y="9" width="64" height="5" fill="#4FA8DE"/>
       <rect x="0" y="26" width="64" height="5" fill="#4FA8DE"/>
@@ -101,7 +117,7 @@
       <div class="tools-row">
         <button class="btn secondary small rail-toggle" id="railToggle">☰ Guides</button>
         <div class="search-wrap">
-          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M18 18L13.8 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M18 18L13.8 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <input type="text" id="searchBox" class="search-box" placeholder="Search your listings…">
         </div>
         <button class="filter-chip" id="unvisitedToggle">Haven't been yet</button>
@@ -127,7 +143,7 @@
         </div>
         <div class="tools-divider"></div>
         <button class="btn secondary" id="profileBtn">👤</button>
-        <button class="btn" id="addRestaurantBtn">+ New Listing</button>
+        <button class="btn" id="addRestaurantBtn" hidden>+ New Listing</button>
       </div>
 
       <div id="content" class="loading">Pulling up your listings…</div>
