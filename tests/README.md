@@ -7,10 +7,10 @@ optional test suite for verifying it, not a dependency of running it.
 
 ```bash
 npm install
-npm test              # rules + e2e
+npm test              # everything (rules + e2e)
 npm run test:e2e       # Playwright UI flows only
 npm run test:e2e:ui    # same, with Playwright's interactive UI runner
-npm run test:rules     # Firestore security rules only (Phase 3)
+npm run test:rules     # Firestore security rules only
 npm run test:emulators # start the Firebase emulators standalone, with the
                         # inspector UI at http://127.0.0.1:4000, for manual
                         # poking/debugging
@@ -126,10 +126,13 @@ requires it to get past "Loading…").
 | Owner vs. signed-in non-owner UI gating | `e2e/01-auth-gate-access-control.spec.js` |
 | Migration chain idempotency (owner boot, run twice) | `e2e/00-boot-and-migrations.spec.js` |
 
-**Phase 3:** Firestore security rules (`tests/rules/*`) via
-`@firebase/rules-unit-testing` — the full access-control matrix, including
-the easy-to-assume-wrong case that the owner has **no** override on
-`visits` update/delete (author-only, no exceptions).
+**Phase 3 (done):** Firestore security rules, run in Node (no browser) via
+`@firebase/rules-unit-testing` against the real `firestore.rules`. 36
+tests across `rules/users`, `rules/restaurants`, `rules/visits`. Each
+restriction is checked as an allowed/denied pair on the same document, so
+a rule that's too loose *or* too strict fails a test. Includes the
+easy-to-assume-wrong case: the owner has **no** override on other people's
+`users` docs or `visits` (author-only edit/delete, no exceptions).
 
 **Phase 4:** flows needing mocked Google Places / Geolocation / map tiles —
 Add Listing (`e2e/10-add-listing.spec.js`), restaurant detail write paths

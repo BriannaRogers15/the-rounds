@@ -35,7 +35,7 @@ Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only
 - [x] Guides/cuisine rail, menu display, URL hash routing — `09-guides-rail`, `13-menu-system`, `16-hash-routing`
 - [x] Sign-up/in/out, wrong-password error, password reset, rename, owner-vs-non-owner UI — `01-auth-gate-access-control` (Phase 2)
 - [x] Migration chain is idempotent across owner boots — `00-boot-and-migrations` (Phase 2)
-- [ ] Firestore security rules access-control matrix — Phase 3
+- [x] Firestore security rules access-control matrix (users / restaurants / visits, 36 allow-deny checks) — `tests/rules/*` (Phase 3)
 - [ ] Add Listing, restaurant detail writes, Log a Visit, reviewer profiles, backup/restore, distance sort, tile-fallback — need mocked Places/Geolocation (Phase 4)
 - [ ] CI workflow — Phase 5
 - [ ] Real Google OAuth consent — not automatable, manual-only by design

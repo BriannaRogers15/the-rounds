@@ -36,5 +36,12 @@ module.exports = defineConfig({
       testDir: './tests/e2e',
       use: { ...devices['Desktop Chrome'] },
     },
+    // Node-only: these specs never request `page`, so no browser launches.
+    // They talk straight to the Firestore Emulator via
+    // @firebase/rules-unit-testing.
+    {
+      name: 'rules',
+      testDir: './tests/rules',
+    },
   ],
 });
