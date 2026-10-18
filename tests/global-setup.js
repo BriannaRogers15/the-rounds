@@ -1,9 +1,12 @@
-// Starts the Firebase Auth Emulator for the whole Playwright run, so every
-// test — including pure guest-mode ones — can get past the auth gate
-// (auth-gate.js unconditionally waits for window.RoundsFirebase to exist,
-// see tests/README.md) without depending on live internet/Google Firebase.
-// Returning a teardown function from globalSetup is Playwright's supported
-// pattern for this, avoiding a separate file + cross-process PID handoff.
+// Starts the Firebase Auth + Firestore Emulators for the whole Playwright
+// run, so every test — including pure guest-mode ones — can get past the
+// auth gate (auth-gate.js unconditionally waits for window.RoundsFirebase
+// to exist, see tests/README.md) without depending on live internet/Google
+// Firebase. Firestore joins as of Phase 2, for real sign-in/owner flows and
+// the shared-ledger watcher resolving promptly instead of falling back to
+// an empty offline-cache snapshot. Returning a teardown function from
+// globalSetup is Playwright's supported pattern for this, avoiding a
+// separate file + cross-process PID handoff.
 const { spawn } = require('child_process');
 const http = require('http');
 
@@ -28,7 +31,7 @@ function waitForPort(port, host, timeoutMs) {
 module.exports = async function globalSetup() {
   const emulator = spawn(
     'npx',
-    ['firebase', 'emulators:start', '--only', 'auth', '--project', 'the-rounds-fc02a'],
+    ['firebase', 'emulators:start', '--only', 'auth,firestore', '--project', 'the-rounds-fc02a'],
     { cwd: __dirname + '/..', stdio: ['ignore', 'pipe', 'pipe'] }
   );
 
@@ -37,10 +40,13 @@ module.exports = async function globalSetup() {
   emulator.stderr.on('data', (d) => { output += d.toString(); });
 
   try {
-    await waitForPort(9099, '127.0.0.1', 30000);
+    await Promise.all([
+      waitForPort(9099, '127.0.0.1', 30000),
+      waitForPort(8080, '127.0.0.1', 30000),
+    ]);
   } catch (err) {
     emulator.kill();
-    console.error('Firebase Auth Emulator failed to start. Output:\n' + output);
+    console.error('Firebase Emulators failed to start. Output:\n' + output);
     throw err;
   }
 

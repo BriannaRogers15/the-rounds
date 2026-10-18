@@ -33,7 +33,8 @@ Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only
 - [x] Listings grid, map view — `04-listings-grid`, `05-map-view`
 - [x] Search (incl. debounce), sort (name/date/rating), filters — `06-search`, `07-sort`, `08-filters`
 - [x] Guides/cuisine rail, menu display, URL hash routing — `09-guides-rail`, `13-menu-system`, `16-hash-routing`
-- [ ] Sign-up/in/out, password reset, owner-vs-non-owner, boot/migration idempotency — needs the Firestore Emulator (Phase 2)
+- [x] Sign-up/in/out, wrong-password error, password reset, rename, owner-vs-non-owner UI — `01-auth-gate-access-control` (Phase 2)
+- [x] Migration chain is idempotent across owner boots — `00-boot-and-migrations` (Phase 2)
 - [ ] Firestore security rules access-control matrix — Phase 3
 - [ ] Add Listing, restaurant detail writes, Log a Visit, reviewer profiles, backup/restore, distance sort, tile-fallback — need mocked Places/Geolocation (Phase 4)
 - [ ] CI workflow — Phase 5

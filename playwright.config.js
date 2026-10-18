@@ -4,14 +4,18 @@ const { defineConfig, devices } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './tests',
   fullyParallel: true,
-  // Every test shares one local Firebase Auth Emulator instance (started in
-  // globalSetup) since the app's auth gate blocks on it unconditionally.
-  // Too many parallel browser contexts initializing auth simultaneously
-  // starves that single process and stalls page loads (reproduced: 2/4
-  // tests hang on the loading screen with the default worker count on this
-  // machine, 0/4 with workers capped at 2) — this is a known constraint of
-  // a single local emulator instance, not app or test flakiness.
-  workers: 2,
+  // Every test shares one local Firebase Auth (+ as of Phase 2, Firestore)
+  // Emulator instance (started in globalSetup), since the app's auth gate
+  // blocks on it unconditionally. Phase 1's guest-only tests tolerated 2
+  // parallel workers fine, but Phase 2's real sign-in + live Firestore
+  // listeners per test proved genuinely unreliable at any concurrency above
+  // 1 — reproduced repeatedly: tests hang indefinitely waiting on the
+  // emulator under 2 workers even after every actual logic bug was fixed,
+  // and were rock-solid every time at workers:1. This is a real capacity
+  // limit of one local emulator pair under concurrent browser contexts, not
+  // app or test flakiness — a slower, reliable suite beats a faster, flaky
+  // one.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [['html', { open: 'never' }]],

@@ -16,10 +16,11 @@ npm run test:emulators # start the Firebase emulators standalone, with the
                         # poking/debugging
 ```
 
-`npm test`/`npm run test:e2e` start the Firebase Auth Emulator automatically
-(see `tests/global-setup.js`) and serve the app via the same
+`npm test`/`npm run test:e2e` start the Firebase Auth + Firestore Emulators
+automatically (see `tests/global-setup.js`) and serve the app via the same
 `python3 -m http.server 8741` command documented in `.claude/skills/verify`.
-Nothing talks to the real `the-rounds-fc02a` Firebase project.
+Nothing talks to the real `the-rounds-fc02a` Firebase project. Requires a
+JRE on the machine (the emulators are Java).
 
 ## Why every test needs the Auth Emulator, even "zero-backend" ones
 
@@ -34,14 +35,11 @@ part of this app, including guest mode, without it. The Auth Emulator makes
 that instant and offline instead of depending on live internet + Google's
 servers.
 
-**Known constraint: cap `workers` at 2.** All tests share one local Auth
-Emulator process. Too many parallel browser contexts initializing auth at
-once starves it and stalls page loads on "Loading…" indefinitely — reproduced
-directly: 2 of 5 tests hung with Playwright's default (CPU-count-based)
-worker count on this machine, 0 of 50+ with `workers: 2` (see
-`playwright.config.js`). This is a known characteristic of a single local
-emulator instance under load, not app or test flakiness — don't "fix" it by
-raising timeouts.
+**Known constraint: `workers: 1`.** All tests share one local Auth +
+Firestore emulator pair. Guest-only tests tolerated 2 workers, but once real
+sign-in and live Firestore listeners entered the picture, anything above 1
+was unreliable. Serial is slower but genuinely stable (full suite ~1–2 min).
+Don't "fix" stalls by raising timeouts.
 
 **Known gotcha: use `page.goto(url-with-hash)`, not `location.hash = X` then
 `.reload()`, for cold-load hash tests.** The latter was observed to lose the
@@ -50,6 +48,35 @@ test runner (reproducible, though the exact mechanism wasn't pinned down —
 likely interacts with the custom `webServer` + fixture setup). A fresh
 `goto()` with the hash already in the target URL is also a more faithful
 simulation of "someone opened a bookmarked link" anyway.
+
+## Signed-in test gotchas (learned the hard way in Phase 2)
+
+- **`accounts:batchCreate` fails silently.** It requires an explicit
+  `localId` per user and reports per-user failures as an `error` array
+  inside an HTTP **200** response. `res.ok` alone is not success — see
+  `batchCreateUser()` in `fixtures/auth-helpers.js`.
+- **The owner account is one fixed uid.** Every owner session targets the
+  same `OWNER_UID`, so `createOwnerTestUser()` uses fixed credentials and
+  tolerates "already exists" rather than racing to create it per test.
+- **Non-owners can't create restaurants — and a rejected write poisons the
+  next test.** `firestore.rules` blocks it (correctly). A signed-in
+  non-owner calling `injectRestaurants()` triggers a real, rejected
+  Firestore write that left the emulator degraded for the *following*
+  test. Have the owner create listings (`openOwnerPage(browser)`), then
+  view them as the non-owner. Guest pages never write, so they're exempt.
+- **One page-level session fixture per test.** `ownerPage`/`signedInPage`
+  each open their own browser context, but a test needing *two* sessions
+  should call `openOwnerPage(browser)` / `openSignedInPage(browser)`
+  directly rather than relying on fixture combinations.
+- **Migrations only run on a boot that starts already signed in.**
+  `app.js`'s `init()` runs once per navigation and checks `isOwner()` near
+  the top. `openOwnerPage` loads the page *then* signs in, so that first
+  boot runs as a non-owner. The first owner boot is the next reload — see
+  `e2e/00-boot-and-migrations.spec.js`.
+- **Always wait for `rounds-app-ready`.** `canWriteLedger()` depends on
+  `sharedLedgerReady`, which only flips once the Firestore watcher
+  resolves. `openAppPage()` waits for it so write-gated UI doesn't render
+  off a stale `false`.
 
 ## Test hook mechanism
 
@@ -91,10 +118,13 @@ requires it to get past "Loading…").
 | URL hash routing | `e2e/16-hash-routing.spec.js` |
 | View toggle persistence | `e2e/17-misc.spec.js` |
 
-**Phase 2 (next):** Firestore Emulator wired in; full sign-up/in/out,
-password reset, persistence, rename-profile, owner-vs-non-owner UI
-(`e2e/01-auth-gate-access-control.spec.js` extended); boot/migration-chain
-idempotency for owner and no-firebase sessions (`e2e/00-boot-and-migrations.spec.js`).
+**Phase 2 (done):** Firestore Emulator wired in.
+
+| Feature | Spec file |
+|---|---|
+| Sign-up, sign-in, wrong password, sign-out, password reset, rename | `e2e/01-auth-gate-access-control.spec.js` |
+| Owner vs. signed-in non-owner UI gating | `e2e/01-auth-gate-access-control.spec.js` |
+| Migration chain idempotency (owner boot, run twice) | `e2e/00-boot-and-migrations.spec.js` |
 
 **Phase 3:** Firestore security rules (`tests/rules/*`) via
 `@firebase/rules-unit-testing` — the full access-control matrix, including

@@ -1,37 +1,83 @@
 const base = require('@playwright/test');
+const { createOwnerTestUser, createRegularTestUser } = require('./auth-helpers');
+const { waitForAppReady } = require('./ledger-helpers');
+
+async function signInViaForm(page, { email, password }) {
+  await page.fill('#authEmail', email);
+  await page.fill('#authPassword', password);
+  await page.click('#authSubmitBtn');
+  await page.waitForSelector('.wrap:not([style*="display: none"])');
+}
+
+// Navigates a fresh page to the app with emulators + test hooks wired up,
+// and waits for app.js's own async init chain to settle. Takes a
+// BrowserContext (not just `page`) so a single test can open more than one
+// independent signed-in session at once (see openOwnerPage/openSignedInPage
+// below) — Playwright's per-test `page` fixture only ever gives you one.
+async function openAppPage(context) {
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.__ROUNDS_TEST__ = { useEmulators: true };
+    if ('serviceWorker' in navigator) {
+      Object.defineProperty(navigator.serviceWorker, 'register', {
+        value: () => Promise.reject(new Error('disabled in tests')),
+      });
+    }
+    window.addEventListener('rounds-app-ready', () => {
+      window.__roundsAppReady = true;
+    });
+  });
+  await page.goto('/index.html');
+  // app.js's own async init chain (data load -> Firebase wait -> shared-
+  // ledger watcher resolution -> sharedLedgerReady=true -> applyHash) runs
+  // independently of the auth-gate UI, so this is safe to wait for before
+  // any sign-in/guest interaction. Without it, canWriteLedger()/
+  // canManageListings()-gated UI (e.g. #logVisitBtn) can render based on a
+  // not-yet-true sharedLedgerReady immediately after sign-in — a real race
+  // reproduced directly, not a hypothetical one.
+  await waitForAppReady(page);
+  return page;
+}
+
+async function openGuestPage(context) {
+  const page = await openAppPage(context);
+  await page.click('#authGuestLink');
+  await page.waitForSelector('.wrap:not([style*="display: none"])');
+  return page;
+}
+
+// Real sign-in via the Auth Emulator as a session whose uid is literally
+// OWNER_UID (see auth-helpers.js) — isOwner() and firestore.rules both just
+// work, unmodified. Takes `browser` (not a context/page) so callers that
+// need a second, fully independent owner session in the same test (its own
+// context, not sharing cookies/storage with another page) can just call
+// this again.
+async function openOwnerPage(browser) {
+  const context = await browser.newContext();
+  const page = await openAppPage(context);
+  await signInViaForm(page, await createOwnerTestUser());
+  return page;
+}
+
+async function openSignedInPage(browser) {
+  const context = await browser.newContext();
+  const page = await openAppPage(context);
+  await signInViaForm(page, await createRegularTestUser());
+  return page;
+}
 
 const test = base.test.extend({
   // A fresh page with the app loaded, service worker disabled (removes
   // cache-staleness as a source of flakiness entirely, rather than relying
-  // on bumping CACHE_NAME or Playwright's fresh-context default), and the
-  // rounds-app-ready flag-setting listener registered before any page
-  // script runs.
-  appPage: async ({ page }, use) => {
-    await page.addInitScript(() => {
-      // Picked up by firebase-init.js before it evaluates (addInitScript
-      // runs before any page script, including the type="module" one) —
-      // points the app at the local emulators instead of the real project.
-      window.__ROUNDS_TEST__ = { useEmulators: true };
-      // Classic no-op: avoids ever registering a real service worker in
-      // test runs, so there's nothing to go stale between test files.
-      if ('serviceWorker' in navigator) {
-        Object.defineProperty(navigator.serviceWorker, 'register', {
-          value: () => Promise.reject(new Error('disabled in tests')),
-        });
-      }
-      window.addEventListener('rounds-app-ready', () => {
-        window.__roundsAppReady = true;
-      });
-    });
-    await page.goto('/index.html');
-    await use(page);
+  // on bumping CACHE_NAME or Playwright's fresh-context default), emulators
+  // wired, and app.js's init chain already settled.
+  appPage: async ({ context }, use) => {
+    await use(await openAppPage(context));
   },
 
   // appPage, already past the auth gate via guest mode.
-  guestPage: async ({ appPage }, use) => {
-    await appPage.click('#authGuestLink');
-    await appPage.waitForSelector('.wrap:not([style*="display: none"])');
-    await use(appPage);
+  guestPage: async ({ context }, use) => {
+    await use(await openGuestPage(context));
   },
 
   // guestPage, already navigated past the neighborhoods landing page into
@@ -42,6 +88,23 @@ const test = base.test.extend({
     await guestPage.waitForSelector('#content:not(.loading)');
     await use(guestPage);
   },
+
+  // A fresh owner session. A test that also needs a second, independent
+  // signed-in session (e.g. owner creates a listing, a different non-owner
+  // views it) should use openOwnerPage/openSignedInPage(browser) directly
+  // instead of combining two of these page-level fixtures — they all
+  // resolve through the same single `page`/`context` fixture per test, so
+  // requesting two in one test tries to sign in twice on an already-
+  // signed-in page (reproduced directly, not hypothetical).
+  ownerPage: async ({ browser }, use) => {
+    await use(await openOwnerPage(browser));
+  },
+
+  // A fresh ordinary (non-owner) signed-in session. Same one-per-test
+  // caveat as ownerPage above.
+  signedInPage: async ({ browser }, use) => {
+    await use(await openSignedInPage(browser));
+  },
 });
 
-module.exports = { test, expect: base.expect };
+module.exports = { test, expect: base.expect, signInViaForm, openAppPage, openGuestPage, openOwnerPage, openSignedInPage };
