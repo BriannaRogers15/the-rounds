@@ -63,3 +63,25 @@ test.describe('Map view', () => {
     }
   });
 });
+
+test.describe('Map view: offline fallback', () => {
+  // The app swaps to its pin map only when no tile has finished loading
+  // after 2.5s — i.e. tile requests that hang. (Tiles that *error* fast
+  // count as "finished" to Leaflet, so that case keeps the Leaflet map with
+  // blank tiles; see tests/README.md.) A route that never responds models
+  // the hanging case.
+  test('if street-map tiles hang, it falls back to a relative-position pin map', async ({ listingsPage }) => {
+    const probes = probeRestaurants();
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await listingsPage.route(/tile\.openstreetmap\.org/, () => {});
+      await listingsPage.click('[data-view="map"]');
+      // The app waits 2.5s for any tile to load before swapping.
+      await expect(listingsPage.locator('#customMap .map-pin')).toHaveCount(probes.length, { timeout: 10000 });
+      await expect(listingsPage.locator('.map-note', { hasText: "Live map tiles aren't reachable" })).toBeVisible();
+      await expect(listingsPage.locator('#leafletMapEl')).toHaveCount(0);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
+});

@@ -26,6 +26,9 @@ async function openAppPage(context) {
     window.addEventListener('rounds-app-ready', () => {
       window.__roundsAppReady = true;
     });
+    window.addEventListener('rounds-boot-settled', () => {
+      window.__roundsBootSettled = true;
+    });
   });
   await page.goto('/index.html');
   // app.js's own async init chain (data load -> Firebase wait -> shared-
@@ -52,17 +55,24 @@ async function openGuestPage(context) {
 // need a second, fully independent owner session in the same test (its own
 // context, not sharing cookies/storage with another page) can just call
 // this again.
-async function openOwnerPage(browser) {
+// `contextSetup(context)` runs before the first navigation — the place to
+// install init scripts (e.g. the Google Places mock, which must be defined
+// before index.html's Maps bootstrap loader runs) or grant permissions.
+// `creds` signs in as a specific existing user instead of a fresh one
+// (e.g. the same account on two "devices").
+async function openOwnerPage(browser, { contextSetup } = {}) {
   const context = await browser.newContext();
+  if (contextSetup) await contextSetup(context);
   const page = await openAppPage(context);
   await signInViaForm(page, await createOwnerTestUser());
   return page;
 }
 
-async function openSignedInPage(browser) {
+async function openSignedInPage(browser, { contextSetup, creds } = {}) {
   const context = await browser.newContext();
+  if (contextSetup) await contextSetup(context);
   const page = await openAppPage(context);
-  await signInViaForm(page, await createRegularTestUser());
+  await signInViaForm(page, creds || await createRegularTestUser());
   return page;
 }
 
@@ -96,14 +106,21 @@ const test = base.test.extend({
   // resolve through the same single `page`/`context` fixture per test, so
   // requesting two in one test tries to sign in twice on an already-
   // signed-in page (reproduced directly, not hypothetical).
+  // These open their own context (not Playwright's per-test one), so they
+  // must close it themselves — otherwise every test leaves a page with live
+  // Firestore listeners running against the shared emulator.
   ownerPage: async ({ browser }, use) => {
-    await use(await openOwnerPage(browser));
+    const page = await openOwnerPage(browser);
+    await use(page);
+    await page.context().close();
   },
 
   // A fresh ordinary (non-owner) signed-in session. Same one-per-test
   // caveat as ownerPage above.
   signedInPage: async ({ browser }, use) => {
-    await use(await openSignedInPage(browser));
+    const page = await openSignedInPage(browser);
+    await use(page);
+    await page.context().close();
   },
 });
 

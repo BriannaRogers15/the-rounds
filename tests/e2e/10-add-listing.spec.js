@@ -1,0 +1,181 @@
+const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
+const { resetLedger } = require('../fixtures/ledger-helpers');
+const { installPlacesMock, SAMPLE_PLACES } = require('../fixtures/places-mock');
+const { getDoc } = require('../fixtures/firestore-seed');
+
+// Add Listing is owner-only, and its search path talks to Google Places —
+// replaced here by a fake installed before page load (fixtures/places-mock.js).
+
+async function openAddModal(browser, mockOptions = {}) {
+  const page = await openOwnerPage(browser, { contextSetup: (ctx) => installPlacesMock(ctx, mockOptions) });
+  const dialogs = [];
+  page.on('dialog', async (d) => { dialogs.push(d.message()); await d.accept(); });
+  await page.click('#addFromAreas');
+  await expect(page.locator('#rName')).toBeVisible();
+  return { page, dialogs };
+}
+
+async function findSaved(page, name) {
+  return page.evaluate((name) => restaurants.find((r) => r.name === name) || null, name);
+}
+
+test.describe('Add Listing: Google Places search path', () => {
+  test('searching shows only food/drink results; picking one auto-tags and fills details', async ({ browser }) => {
+    const { page } = await openAddModal(browser);
+    let saved = null;
+    try {
+      await page.fill('#rName', 'Mock');
+      const suggestions = page.locator('#nameSuggestions li');
+      await expect(suggestions).toHaveCount(1); // hardware store filtered out
+      await expect(suggestions.first()).toContainText('Mock Taqueria');
+
+      await suggestions.first().click();
+      // mexican_restaurant -> "Mexican" via GOOGLE_TYPE_TAG
+      await expect(page.locator('#filingUnder .tag-pill')).toHaveCount(1);
+      await expect(page.locator('#filingUnder .tag-pill')).toContainText('Mexican');
+
+      await page.click('#saveAdd');
+      await expect(page.locator('#rName')).toHaveCount(0); // modal closed
+
+      saved = await findSaved(page, 'Mock Taqueria');
+      const place = SAMPLE_PLACES[0];
+      expect(saved).toMatchObject({
+        categories: ['Mexican'],
+        address: place.formattedAddress,
+        phone: place.internationalPhoneNumber,
+        website: place.websiteURI,
+        lat: place.lat,
+        lng: place.lng,
+      });
+      expect(saved.mapsUrl).toContain(`place_id:${place.id}`);
+
+      // Actually persisted to the shared ledger, not just local state.
+      await expect.poll(() => getDoc(`restaurants/${saved.id}`)).toMatchObject({ name: 'Mock Taqueria' });
+    } finally {
+      if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
+      await page.context().close();
+    }
+  });
+
+  test('auto-suggested guide chips can be edited before saving', async ({ browser }) => {
+    const { page } = await openAddModal(browser);
+    let saved = null;
+    try {
+      await page.fill('#rName', 'Mock Taq');
+      await page.locator('#nameSuggestions li').first().click();
+      await page.locator('#filingUnder .tag-x[data-tag="Mexican"]').click();
+      await expect(page.locator('#filingUnder .tag-pill')).toHaveCount(0);
+      await page.fill('#addTagInput', 'Tacos');
+      await page.press('#addTagInput', 'Enter');
+      await expect(page.locator('#filingUnder .tag-pill')).toContainText('Tacos');
+
+      await page.click('#saveAdd');
+      saved = await findSaved(page, 'Mock Taqueria');
+      expect(saved.categories).toEqual(['Tacos']);
+    } finally {
+      if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
+      await page.context().close();
+    }
+  });
+
+  test('saving with zero guide tags is blocked', async ({ browser }) => {
+    // A real food result Google doesn't classify beyond "restaurant" —
+    // GOOGLE_TYPE_TAG maps it to nothing, so no chip is pre-filled.
+    const generic = {
+      id: 'mock-place-generic', displayName: 'Mock Generic Diner',
+      formattedAddress: '400 W Mock St, Chicago, IL 60607, USA', lat: 41.88, lng: -87.64,
+      primaryType: 'restaurant', types: ['restaurant', 'food'],
+    };
+    const { page, dialogs } = await openAddModal(browser, { places: [generic] });
+    try {
+      await page.fill('#rName', 'Mock Generic');
+      await page.locator('#nameSuggestions li').first().click();
+      await expect(page.locator('#filingUnder .tag-pill')).toHaveCount(0);
+      await page.click('#saveAdd');
+      expect(dialogs.at(-1)).toContain('Add at least one guide');
+      expect(await findSaved(page, 'Mock Generic Diner')).toBeNull();
+      await expect(page.locator('#rName')).toBeVisible(); // still open
+    } finally {
+      await page.context().close();
+    }
+  });
+
+  test('saving without picking a search result is blocked', async ({ browser }) => {
+    const { page, dialogs } = await openAddModal(browser);
+    try {
+      await page.fill('#rName', 'Typed But Never Picked');
+      await page.click('#saveAdd');
+      expect(dialogs.at(-1)).toContain('Search and select a restaurant');
+      expect(await findSaved(page, 'Typed But Never Picked')).toBeNull();
+    } finally {
+      await page.context().close();
+    }
+  });
+});
+
+test.describe('Add Listing: manual entry path', () => {
+  test('a blocked Places API shows the warning and opens manual entry automatically', async ({ browser }) => {
+    const { page } = await openAddModal(browser, { mode: 'blocked' });
+    try {
+      await expect(page.locator('#placesNotice')).toBeVisible();
+      await expect(page.locator('#manualAddrField')).toBeVisible();
+      await expect(page.locator('#manualToggle')).toBeHidden();
+    } finally {
+      await page.context().close();
+    }
+  });
+
+  test('"Add it manually" requires an address, then saves with address autocomplete coordinates', async ({ browser }) => {
+    const { page, dialogs } = await openAddModal(browser);
+    let saved = null;
+    try {
+      await page.click('#manualToggle');
+      await expect(page.locator('#manualAddrField')).toBeVisible();
+
+      await page.fill('#rName', 'Manual Probe Spot');
+      await page.fill('#addTagInput', 'American');
+      await page.press('#addTagInput', 'Enter');
+      await page.click('#saveAdd');
+      expect(dialogs.at(-1)).toContain('Name and address are required');
+
+      await page.fill('#rAddr', '300 N Mock');
+      await page.locator('#addrSuggestions li').first().click();
+      await expect(page.locator('#rAddr')).toHaveValue('300 N Mock Ave, Chicago, IL 60614, USA');
+
+      await page.click('#saveAdd');
+      saved = await findSaved(page, 'Manual Probe Spot');
+      expect(saved).toMatchObject({
+        categories: ['American'],
+        address: '300 N Mock Ave, Chicago, IL 60614, USA',
+        lat: 41.92,
+        lng: -87.65,
+      });
+      expect(saved.website).toBeUndefined();
+    } finally {
+      if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
+      await page.context().close();
+    }
+  });
+
+  test('a free-typed manual address saves without coordinates', async ({ browser }) => {
+    const { page } = await openAddModal(browser, { mode: 'blocked' });
+    let saved = null;
+    try {
+      // The failed startup probe switches to manual mode asynchronously and
+      // clears the chips when it does — wait for it, or a tag added first
+      // gets wiped.
+      await expect(page.locator('#manualAddrField')).toBeVisible();
+      await page.fill('#rName', 'Typed Address Spot');
+      await page.fill('#rAddr', '1 Nowhere Rd, Chicago, IL');
+      await page.fill('#addTagInput', 'American');
+      await page.press('#addTagInput', 'Enter');
+      await page.click('#saveAdd');
+      saved = await findSaved(page, 'Typed Address Spot');
+      expect(saved.address).toBe('1 Nowhere Rd, Chicago, IL');
+      expect(saved.lat).toBeUndefined();
+    } finally {
+      if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
+      await page.context().close();
+    }
+  });
+});

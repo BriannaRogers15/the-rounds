@@ -134,15 +134,39 @@ a rule that's too loose *or* too strict fails a test. Includes the
 easy-to-assume-wrong case: the owner has **no** override on other people's
 `users` docs or `visits` (author-only edit/delete, no exceptions).
 
-**Phase 4:** flows needing mocked Google Places / Geolocation / map tiles —
-Add Listing (`e2e/10-add-listing.spec.js`), restaurant detail write paths
-(`e2e/11-restaurant-detail.spec.js`), Log a Visit
-(`e2e/12-log-visit.spec.js`), reviewer profiles being device-local
-(`e2e/14-reviewer-profiles.spec.js`), backup & restore
-(`e2e/15-backup-restore.spec.js`), distance sort, and the `tilesOk`
-timeout → relative-map fallback.
+**Phase 4 (done):** write flows, plus mocked Google Places / geolocation /
+map tiles.
 
-**Phase 5:** CI workflow (`.github/workflows/test.yml`).
+| Feature | Spec file |
+|---|---|
+| Add Listing — Places search (mocked), auto-tagging, chip edits, manual entry, address autocomplete, validation | `e2e/10-add-listing.spec.js` |
+| Detail modal — links, owner tag add/remove, delete listing (cascade), who may remove a visit | `e2e/11-restaurant-detail.spec.js` |
+| Log a Visit — validation, full save, calendar date, new dish joins the menu, reviewer switch | `e2e/12-log-visit.spec.js` |
+| Reviewer profiles — add/switch/remove, duplicates, device-local | `e2e/14-reviewer-profiles.spec.js` |
+| Backup export and owner restore (incl. bad files) | `e2e/15-backup-restore.spec.js` |
+| Distance sort — location granted / denied / never answers | `e2e/07-sort.spec.js` |
+| Map pin-map fallback when tiles hang | `e2e/05-map-view.spec.js` |
+| Landing page when boundary data can't load | `e2e/02-landing-areas.spec.js` |
+
+The Places mock (`fixtures/places-mock.js`) pre-defines
+`google.maps.importLibrary` before page load; `index.html`'s Maps loader
+leaves an existing definition alone, so no network interception is needed.
+
+**Phase 5 (done):** `.github/workflows/test.yml` runs `npm test` on every
+push and pull request (Node 22, Java 21 for the emulators, Chromium).
+
+## Bugs these tests found in the app
+
+- **Edits to existing listings never reached Firestore** (fixed in
+  `firebase-init.js`). `syncSharedLedger` diffed against a cache that held
+  the same objects the app edits in place, so tag changes, new dishes,
+  enrichment and area stamping all looked "unchanged" and were skipped.
+  Covered by `11-restaurant-detail`, `12-log-visit`, and the regression test
+  in `00-boot-and-migrations`, which fails against the old code.
+- **Not fixed — the map's offline fallback only triggers when tile requests
+  hang.** Leaflet fires `load` even when tiles *error*, so a truly offline
+  map (fast failures) keeps showing Leaflet with blank tiles and working
+  markers instead of the pin map. Tested only for the hang case.
 
 ## Out of scope (by design, not an oversight)
 
@@ -154,10 +178,10 @@ timeout → relative-map fallback.
    framework — mocked instead (Phase 4), which validates the app's handling
    of Places responses, not Google's live service.
 3. **Cross-browser/mobile matrix.** Chromium-only via Playwright.
-4. **Real Census/Chicago Data Portal GeoJSON endpoints.** Mocked with
-   committed fixtures for determinism (Phase 4); the "boundaries
-   unavailable" fallback is tested against a simulated fetch failure, not a
-   real one.
+4. **Real network dependencies still in play.** Neighborhood/suburb
+   boundary data, the Firebase SDK (gstatic), Leaflet, map tiles and Google
+   Fonts load from the real internet; the suite needs network access. The
+   "boundaries unavailable" case is tested by blocking those requests.
 5. **The PWA service-worker update-banner lifecycle.** Test fixtures
    disable service worker registration entirely (removes cache-staleness
    as a flakiness source for everything else) — this specific flow would

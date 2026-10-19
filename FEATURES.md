@@ -36,8 +36,8 @@ Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only
 - [x] Sign-up/in/out, wrong-password error, password reset, rename, owner-vs-non-owner UI — `01-auth-gate-access-control` (Phase 2)
 - [x] Migration chain is idempotent across owner boots — `00-boot-and-migrations` (Phase 2)
 - [x] Firestore security rules access-control matrix (users / restaurants / visits, 36 allow-deny checks) — `tests/rules/*` (Phase 3)
-- [ ] Add Listing, restaurant detail writes, Log a Visit, reviewer profiles, backup/restore, distance sort, tile-fallback — need mocked Places/Geolocation (Phase 4)
-- [ ] CI workflow — Phase 5
+- [x] Add Listing, detail-modal writes, Log a Visit, reviewer profiles, backup/restore, distance sort, map + boundary fallbacks — `10`–`15`, `05`, `07`, `02` (Phase 4)
+- [x] CI — `.github/workflows/test.yml` runs the full suite on every push/PR (Phase 5)
 - [ ] Real Google OAuth consent — not automatable, manual-only by design
 
 ## In progress / needs a status check
@@ -56,6 +56,9 @@ Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only
 - [ ] **Duplicate/confusing autocomplete** — reported as "the autocompletion should be one." Needs reproduction steps to pin down exactly what's duplicating (e.g. two suggestion dropdowns, or the Google search box plus the "Filing under" tag-add box both auto-suggesting at once).
 - [ ] **Add Listing search box slow to appear (~10s)** — the box only renders after `google.maps.importLibrary('places')` resolves, which is a real network fetch. Billing was disabled on the Google Cloud project until just now, which plausibly caused failed/retried requests and made this much worse than normal — re-verify now that billing is on before assuming this is still a live bug.
 - [ ] **New adds sometimes save with no website** — `GOOGLE_TYPE_TAG` gaps used to also cause zero-tag saves; that half is now fixed (save is blocked until at least one guide tag is added — see Shipped). Missing website is likely just Google not having a `websiteURI` on file for that business, not a code bug — worth confirming with a specific example that's missing one it should have.
+
+- [ ] **Map offline fallback only triggers when tiles hang, not when they fail** — Leaflet fires `load` even after tile errors, so `tilesOk` turns true and the pin-map fallback never shows when truly offline (you get blank tiles with working markers). Found by the test suite; not fixed.
+- [ ] **Owner startup tasks (seed listings, menus, enrichment, neighborhood stamps) only run on a load that begins signed in** — signing in via the form after the page loads doesn't trigger them until the next reload. Only noticeable while the shared ledger is still empty (first launch). Documented in README; not fixed.
 
 ## Known rough edges
 

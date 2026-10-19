@@ -2,9 +2,6 @@ const { test, expect } = require('../fixtures/app-fixture');
 const { injectRestaurants, injectVisits, resetLedger } = require('../fixtures/ledger-helpers');
 const { probeRestaurants } = require('../fixtures/seed-data');
 
-// Distance sort (geolocation-dependent) is covered in Phase 4 alongside the
-// grant/deny/timeout mocks — see tests/README.md.
-
 async function cardOrder(page) {
   return page.locator('.ticket').evaluateAll((cards) => cards.map((c) => c.dataset.id));
 }
@@ -59,6 +56,56 @@ test.describe('Sort options', () => {
         restaurantIds: probes.map((r) => r.id),
         visitIds: visits.map((v) => v.id),
       });
+    }
+  });
+});
+
+// Distance sort asks for the browser's location the first time it's
+// picked. Three outcomes matter: granted, denied, and never answering.
+test.describe('Sort by distance', () => {
+  test('with location granted, sorts nearest first and shows distance badges', async ({ listingsPage, context }) => {
+    const probes = probeRestaurants();
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await context.grantPermissions(['geolocation']);
+      // Right next to Probe Hidden Gem (41.7943, -87.5907).
+      await context.setGeolocation({ latitude: 41.7945, longitude: -87.5909 });
+      await listingsPage.click('[data-sort="distance"]');
+      await expect(listingsPage.locator('.dist-badge').first()).toBeVisible();
+      const order = await cardOrder(listingsPage);
+      expect(order[0]).toBe('probe-gem-3');
+      await expect(listingsPage.locator(`.ticket[data-id="probe-gem-3"] .dist-badge`)).toHaveText('0.0 mi');
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
+
+  test('with location denied, the list still renders, just without distances', async ({ listingsPage, context }) => {
+    const probes = probeRestaurants();
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await context.clearPermissions();
+      await listingsPage.click('[data-sort="distance"]');
+      await expect(listingsPage.locator('[data-sort="distance"]')).toHaveClass(/active/);
+      await expect(listingsPage.locator('.ticket')).toHaveCount(probes.length);
+      await expect(listingsPage.locator('.dist-badge')).toHaveCount(0);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
+
+  test('if the location request never answers, the list still renders without distances', async ({ listingsPage }) => {
+    const probes = probeRestaurants();
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await listingsPage.evaluate(() => {
+        Object.defineProperty(navigator.geolocation, 'getCurrentPosition', { value: () => {} });
+      });
+      await listingsPage.click('[data-sort="distance"]');
+      await expect(listingsPage.locator('.ticket')).toHaveCount(probes.length);
+      await expect(listingsPage.locator('.dist-badge')).toHaveCount(0);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }
   });
 });

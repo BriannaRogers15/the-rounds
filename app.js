@@ -2477,5 +2477,9 @@ async function waitForFirebase(){
   Promise.allSettled([loadHoodGeo(), loadTownGeo()]).then(async ()=>{
     if(hoodGeo && owner) await assignNeighborhoods(hoodGeo);
     renderAll();
+    // Background boot work (boundary data + the owner's neighborhood
+    // writes) is done. Lets test fixtures avoid reloading/closing a page
+    // while those writes are still in flight.
+    window.dispatchEvent(new Event('rounds-boot-settled'));
   });
 })();

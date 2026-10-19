@@ -1,6 +1,7 @@
 const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
-const { waitForAppReady } = require('../fixtures/ledger-helpers');
+const { waitForAppReady, waitForBootSettled } = require('../fixtures/ledger-helpers');
 const { clearFirestore, clearAuthUsers } = require('../fixtures/emulator-admin');
+const { seedDoc, getDoc } = require('../fixtures/firestore-seed');
 
 // The owner-session boot sequence runs a chain of one-time-feeling but
 // unconditionally-every-load migrations (migrateCategories, seedIfNeeded,
@@ -47,6 +48,9 @@ test.describe('Boot sequence / migration chain idempotency', () => {
       categoryTagTotal: restaurants.reduce((sum, r) => sum + (r.categories || []).length, 0),
     }));
     expect(firstLoadSnapshot.count).toBeGreaterThan(0);
+    // An owner boot keeps writing after app-ready (neighborhood stamps);
+    // reloading mid-write would stall the emulator for later tests.
+    await waitForBootSettled(ownerPage);
 
     // Second owner-authenticated boot — re-runs app.js's entire init()
     // chain, including every migration, against the Firestore data the
@@ -74,6 +78,28 @@ test.describe('Boot sequence / migration chain idempotency', () => {
     });
     expect(nameCounts).toBe(0);
 
+    await waitForBootSettled(ownerPage);
+    await ownerPage.context().close();
+  });
+
+  // Regression: migrations edit existing records in place (assignAreas sets
+  // r.town / r.region on the object). syncSharedLedger used to diff against
+  // a cache holding those same objects, so in-place edits never reached
+  // Firestore — every device saw the enrichment locally, none persisted it.
+  test('migration edits to a listing that already exists in Firestore are persisted', async ({ browser }) => {
+    await seedDoc('restaurants/legacy-probe', {
+      id: 'legacy-probe', name: 'Legacy Probe', categories: ['American'],
+      address: '1 Legacy St, Chicago, IL 60607', createdAt: 1,
+    });
+    const ownerPage = await openOwnerPage(browser);
+    await ownerPage.reload(); // first boot that runs as the owner (see above)
+    await waitForAppReady(ownerPage);
+
+    const local = await ownerPage.evaluate(() => restaurants.find((r) => r.id === 'legacy-probe'));
+    expect(local).toMatchObject({ town: 'Chicago', region: 'Chicago' });
+    await expect.poll(() => getDoc('restaurants/legacy-probe')).toMatchObject({ town: 'Chicago', region: 'Chicago' });
+
+    await waitForBootSettled(ownerPage);
     await ownerPage.context().close();
   });
 });

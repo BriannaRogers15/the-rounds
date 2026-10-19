@@ -15,18 +15,30 @@ async function waitForAppReady(page) {
   await page.waitForFunction(() => window.__roundsAppReady === true, null, { timeout: 15000 });
 }
 
+// Waits for 'rounds-boot-settled': boundary data loaded and, on a boot that
+// started signed in as the owner, the background neighborhood writes
+// finished. Use before reloading or closing such a page — doing either
+// mid-write leaves the shared emulator stalled for the next test.
+async function waitForBootSettled(page) {
+  await page.waitForFunction(() => window.__roundsBootSettled === true, null, { timeout: 30000 });
+}
+
+// The saves are awaited: for a signed-in session they sync to Firestore,
+// and a write still in flight when the test ends (page closes mid-write)
+// can leave the shared emulator in a bad state for the next test. For guest
+// sessions persistSharedLedger() returns immediately, so this costs nothing.
 async function injectRestaurants(page, list) {
-  await page.evaluate((list) => {
+  await page.evaluate(async (list) => {
     restaurants.push(...list);
-    saveRestaurants();
+    await saveRestaurants();
     renderAll();
   }, list);
 }
 
 async function injectVisits(page, list) {
-  await page.evaluate((list) => {
+  await page.evaluate(async (list) => {
     visits.push(...list);
-    saveRestaurants();
+    await saveVisits();
     renderAll();
   }, list);
 }
@@ -34,12 +46,13 @@ async function injectVisits(page, list) {
 // Removes only the named probe ids, leaving any real/pre-existing data
 // (e.g. from a shared emulator/localStorage state) untouched.
 async function resetLedger(page, { restaurantIds = [], visitIds = [] } = {}) {
-  await page.evaluate(({ restaurantIds, visitIds }) => {
+  await page.evaluate(async ({ restaurantIds, visitIds }) => {
     restaurants = restaurants.filter((r) => !restaurantIds.includes(r.id));
-    visits = visits.filter((v) => !visitIds.includes(v.id));
-    saveRestaurants();
+    visits = visits.filter((v) => !visitIds.includes(v.id) && !restaurantIds.includes(v.restaurantId));
+    await saveRestaurants();
+    await saveVisits();
     renderAll();
   }, { restaurantIds, visitIds });
 }
 
-module.exports = { waitForAppReady, injectRestaurants, injectVisits, resetLedger };
+module.exports = { waitForAppReady, waitForBootSettled, injectRestaurants, injectVisits, resetLedger };

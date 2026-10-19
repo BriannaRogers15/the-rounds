@@ -52,6 +52,13 @@ catch(_error){}
 const authStateReady = setPersistence(auth, keepSignedIn ? browserLocalPersistence : browserSessionPersistence)
   .catch((error)=> console.error('Could not set default auth persistence:', error))
   .then(()=> new Promise((resolve)=> onAuthStateChanged(auth, resolve)));
+// What Firestore is known to hold, per doc id, as a serialized snapshot
+// (stableJson string) — never a live object. syncSharedLedger diffs the
+// app's records against this to decide what to write. It used to hold the
+// very objects handed to the app (and shallow copies sharing their nested
+// arrays), so any in-place edit — categories.push(), menu.push(), r.town =
+// ... — silently changed the baseline too, the diff saw no change, and the
+// edit never reached Firestore. Strings can't be mutated out from under it.
 const ledgerCache = { restaurants: new Map(), visits: new Map() };
 let ledgerWriteQueue = Promise.resolve();
 
@@ -64,7 +71,7 @@ const applyAuthPersistence = async (rememberMe = true) => {
 
 function snapshotItems(snapshot, kind){
   const items = snapshot.docs.map((entry)=> ({ ...entry.data(), id: entry.id }));
-  ledgerCache[kind] = new Map(items.map((item)=> [item.id, item]));
+  ledgerCache[kind] = new Map(items.map((item)=> [item.id, stableJson(item)]));
   return items;
 }
 
@@ -99,10 +106,10 @@ function watchSharedLedger(){
     ready,
     subscribe(callback){
       onUpdate = callback;
-      callback({
-        restaurants: Array.from(ledgerCache.restaurants.values()),
-        visits: Array.from(ledgerCache.visits.values()),
-      });
+      // Latest published items (publish() keeps `initial` current). The
+      // app owns and mutates these freely — the diff baseline lives
+      // separately in ledgerCache as strings.
+      callback({ restaurants: initial.restaurants, visits: initial.visits });
     },
     unsubscribe(){ stopRestaurants(); stopVisits(); },
   };
@@ -121,13 +128,15 @@ function syncSharedLedger(kind, records){
     const user = auth.currentUser;
     if(!user) throw new Error('Sign in before saving shared ledger changes.');
     const previous = ledgerCache[kind];
-    const next = new Map(records.map((record)=> [record.id, { ...record }]));
+    // Deep-copied via JSON so a write in flight isn't affected by the app
+    // mutating the same record before commit().
+    const next = new Map(records.map((record)=> [record.id, JSON.parse(JSON.stringify(record))]));
     const operations = [];
 
     next.forEach((record, id)=>{
-      const oldRecord = previous.get(id);
-      if(!oldRecord || stableJson(oldRecord) !== stableJson(record)){
-        operations.push({ type: 'set', id, record });
+      const json = stableJson(record);
+      if(previous.get(id) !== json){
+        operations.push({ type: 'set', id, record, json });
       }
     });
     previous.forEach((record, id)=>{
@@ -145,7 +154,7 @@ function syncSharedLedger(kind, records){
       await batch.commit();
       slice.forEach((operation)=>{
         if(operation.type === 'delete') previous.delete(operation.id);
-        else previous.set(operation.id, operation.record);
+        else previous.set(operation.id, operation.json);
       });
     }
   });
