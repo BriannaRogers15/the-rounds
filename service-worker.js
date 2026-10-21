@@ -1,4 +1,4 @@
-const CACHE_NAME = 'the-rounds-v113';
+const CACHE_NAME = 'the-rounds-v114';
 const ASSETS = [
   './',
   './index.html',
