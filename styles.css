@@ -93,7 +93,24 @@ h1{
 
 /* ---- Listings layout: cuisine rail + main column ---- */
 .listings-layout{ display:flex; gap:18px; align-items:flex-start; }
-.listings-main{ flex:1; min-width:0; }
+.listings-main{ flex:1; min-width:0; position:relative; min-height: calc(100vh - 32px); }
+
+/* Area outline watermark behind the cards (see renderListingsBackdrop).
+   Sticky within the column so it stays put while the cards scroll over it;
+   the negative margin cancels its height so it takes no layout space, and
+   the column's min-height keeps it from overhanging the page bottom. */
+.listings-backdrop{
+  position:sticky; top:16px; height: calc(100vh - 32px); margin-bottom: calc(32px - 100vh);
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none; z-index:0;
+}
+.listings-backdrop svg{ width:100%; height:100%; max-width:760px; }
+.listings-backdrop path{
+  fill:none; stroke: var(--cream); stroke-opacity:0.16; stroke-width:1.5;
+  stroke-linejoin:round; vector-effect: non-scaling-stroke;
+}
+.listings-backdrop.all-areas path{ stroke-opacity:0.1; stroke-width:1; }
+.listings-main > .tools-row, .listings-main > #content{ position:relative; z-index:1; }
 
 /* The vertical guide list. Desktop: sticky rail beside the cards.
    Phone: off-canvas drawer that slides in from the left. */

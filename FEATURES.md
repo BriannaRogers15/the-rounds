@@ -29,7 +29,7 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only — see `tests/README.md`). Phase 1 (zero-backend guest-mode coverage) shipped 2026-10-03.
 
 - [x] Guest-mode access control — `tests/e2e/01-auth-gate-access-control.spec.js`
-- [x] Landing/neighborhoods page, area banner — `02-landing-areas`, `03-area-banner`
+- [x] Landing/neighborhoods page, area banner, listings outline backdrop — `02-landing-areas`, `03-area-banner`
 - [x] Listings grid, map view — `04-listings-grid`, `05-map-view`
 - [x] Search (incl. debounce), sort (name/date/rating), filters — `06-search`, `07-sort`, `08-filters`
 - [x] Guides/cuisine rail, menu display, URL hash routing — `09-guides-rail`, `13-menu-system`, `16-hash-routing`

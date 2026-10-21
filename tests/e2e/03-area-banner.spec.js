@@ -1,5 +1,5 @@
-const { test, expect } = require('../fixtures/app-fixture');
-const { injectRestaurants, resetLedger } = require('../fixtures/ledger-helpers');
+const { test, expect, openGuestPage, closeContext } = require('../fixtures/app-fixture');
+const { injectRestaurants, resetLedger, waitForBootSettled } = require('../fixtures/ledger-helpers');
 const { probeRestaurants } = require('../fixtures/seed-data');
 
 test.describe('Area banner', () => {
@@ -32,6 +32,63 @@ test.describe('Area banner', () => {
       await expect(guestPage.locator('#listingsLayout')).toBeVisible();
     } finally {
       await resetLedger(guestPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
+});
+
+// Line-only outline watermark behind the listings (renderListingsBackdrop).
+test.describe('Listings backdrop outline', () => {
+  const backdropPath = (page) => page.locator('#listingsBackdrop svg path');
+  // Each polygon is one "M…Z" subpath.
+  const subpathCount = (page) => backdropPath(page).evaluate((p) => (p.getAttribute('d').match(/M/g) || []).length);
+
+  test('Browse all outlines every Chicago neighborhood; picking an area outlines just that area', async ({ guestPage }) => {
+    const probes = probeRestaurants().map((r) => ({ ...r, region: 'Chicago', town: 'Chicago', neighborhood: 'Gold Coast' }));
+    await injectRestaurants(guestPage, probes);
+    try {
+      await waitForBootSettled(guestPage); // boundary file loaded
+      await guestPage.click('#browseAllBtn');
+      await expect(guestPage.locator('#listingsBackdrop')).toBeVisible();
+      await expect(guestPage.locator('#listingsBackdrop')).toHaveClass(/all-areas/);
+      const allCount = await subpathCount(guestPage);
+      expect(allCount).toBeGreaterThanOrEqual(90); // ~98 neighborhoods
+
+      await guestPage.click('#backToAreas');
+      await guestPage.locator('.area-block[data-name="Gold Coast"]').click();
+      await expect(guestPage.locator('#listingsBackdrop')).toBeVisible();
+      await expect(guestPage.locator('#listingsBackdrop')).not.toHaveClass(/all-areas/);
+      const areaCount = await subpathCount(guestPage);
+      expect(areaCount).toBeGreaterThan(0);
+      expect(areaCount).toBeLessThan(allCount);
+      // Outline only — no fill, so it blends into the background.
+      expect(await backdropPath(guestPage).evaluate((p) => getComputedStyle(p).fill)).toBe('none');
+      // Never intercepts clicks meant for the cards.
+      expect(await guestPage.locator('#listingsBackdrop').evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
+    } finally {
+      await resetLedger(guestPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
+
+  test('is hidden in Map view and returns in Grid view', async ({ listingsPage }) => {
+    await waitForBootSettled(listingsPage);
+    await expect(listingsPage.locator('#listingsBackdrop')).toBeVisible();
+    await listingsPage.click('#viewOpts button[data-view="map"]');
+    await expect(listingsPage.locator('#listingsBackdrop')).toBeHidden();
+    await listingsPage.click('#viewOpts button[data-view="grid"]');
+    await expect(listingsPage.locator('#listingsBackdrop')).toBeVisible();
+  });
+
+  test('stays hidden when the boundary data is unavailable', async ({ browser }) => {
+    const context = await browser.newContext();
+    try {
+      await context.route(/data\.cityofchicago\.org|tigerweb\.geo\.census\.gov/, (route) => route.abort());
+      const page = await openGuestPage(context);
+      await waitForBootSettled(page);
+      await page.click('#browseAllBtn');
+      await expect(page.locator('#listingsLayout')).toBeVisible();
+      await expect(page.locator('#listingsBackdrop')).toBeHidden();
+    } finally {
+      await closeContext(context);
     }
   });
 });

@@ -1236,10 +1236,15 @@ function featurePolys(f){
 }
 
 /* The area's true outline from the boundary file, fitted into a 100x100
-   viewBox for the block watermark. Longitude is compressed by
-   cos(latitude) first so the shape keeps its real-world proportions. */
+   viewBox for the block watermark. */
 function areaShapePath(area){
-  const polys = areaFeatures(area).flatMap(featurePolys);
+  return polysShapePath(areaFeatures(area).flatMap(featurePolys));
+}
+
+/* Fits polygons (outer rings) into one 100x100 SVG path. Longitude is
+   compressed by cos(latitude) first so shapes keep their real-world
+   proportions. */
+function polysShapePath(polys){
   if(!polys.length) return null;
   const LNG_SCALE = Math.cos(41.85 * Math.PI / 180);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1384,6 +1389,23 @@ function renderAreaBanner(){
   if(clearBtn) clearBtn.addEventListener('click', ()=>{ activeArea = null; renderAll(); });
 }
 
+/* Line-only watermark behind the listings: the picked area's outline, or
+   every Chicago neighborhood's for "Browse all" (a true Chicagoland outline
+   would be a sparse scatter of suburbs). Hidden in map view, and when no
+   boundary is on file (boundaries still loading/unavailable, "other"). */
+function renderListingsBackdrop(){
+  const el = $('#listingsBackdrop');
+  const polys = currentPage !== 'listings' || viewMode === 'map' ? []
+    : activeArea ? areaFeatures(activeArea).flatMap(featurePolys)
+    : (hoodGeo?.features || []).flatMap(featurePolys);
+  const shape = polysShapePath(polys);
+  el.hidden = !shape;
+  el.classList.toggle('all-areas', !activeArea);
+  el.innerHTML = shape
+    ? `<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"><path d="${shape}"/></svg>`
+    : '';
+}
+
 function renderPageVisibility(){
   const listings = currentPage === 'listings';
   $('#areasPage').style.display = listings ? 'none' : '';
@@ -1404,6 +1426,7 @@ function renderAll(){
     renderAreasPage();
   }
   renderAreaBanner();
+  renderListingsBackdrop();
   renderProfileChip();
   updateAccessControls();
   syncHash();
@@ -2191,6 +2214,7 @@ $$('#viewOpts button').forEach(btn=>{
     viewMode = btn.dataset.view;
     $$('#viewOpts button').forEach(b=> b.classList.toggle('active', b===btn));
     renderContent();
+    renderListingsBackdrop();
   });
 });
 

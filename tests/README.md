@@ -118,7 +118,7 @@ requires it to get past "Loading…").
 |---|---|
 | Guest-mode access control | `e2e/01-auth-gate-access-control.spec.js` |
 | Landing / neighborhoods page | `e2e/02-landing-areas.spec.js` |
-| Area banner | `e2e/03-area-banner.spec.js` |
+| Area banner + listings outline backdrop | `e2e/03-area-banner.spec.js` |
 | Listings grid | `e2e/04-listings-grid.spec.js` |
 | Map view (real Leaflet/OSM tiles) | `e2e/05-map-view.spec.js` |
 | Search (incl. debounce) | `e2e/06-search.spec.js` |
