@@ -62,14 +62,24 @@ test.describe('Map view', () => {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }
   });
+
+  test('if street-map tiles fail outright (offline), it also falls back to the pin map', async ({ listingsPage }) => {
+    const probes = probeRestaurants();
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await listingsPage.route(/tile\.openstreetmap\.org/, (route) => route.abort());
+      await listingsPage.click('[data-view="map"]');
+      await expect(listingsPage.locator('#customMap .map-pin')).toHaveCount(probes.length, { timeout: 10000 });
+      await expect(listingsPage.locator('.map-note', { hasText: "Live map tiles aren't reachable" })).toBeVisible();
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
 });
 
 test.describe('Map view: offline fallback', () => {
-  // The app swaps to its pin map only when no tile has finished loading
-  // after 2.5s — i.e. tile requests that hang. (Tiles that *error* fast
-  // count as "finished" to Leaflet, so that case keeps the Leaflet map with
-  // blank tiles; see tests/README.md.) A route that never responds models
-  // the hanging case.
+  // The app swaps to its pin map when no tile has *successfully* loaded
+  // within 2.5s — whether tile requests fail fast (offline) or hang.
   test('if street-map tiles hang, it falls back to a relative-position pin map', async ({ listingsPage }) => {
     const probes = probeRestaurants();
     await injectRestaurants(listingsPage, probes);
@@ -80,6 +90,19 @@ test.describe('Map view: offline fallback', () => {
       await expect(listingsPage.locator('#customMap .map-pin')).toHaveCount(probes.length, { timeout: 10000 });
       await expect(listingsPage.locator('.map-note', { hasText: "Live map tiles aren't reachable" })).toBeVisible();
       await expect(listingsPage.locator('#leafletMapEl')).toHaveCount(0);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
+
+  test('if street-map tiles fail outright (offline), it also falls back to the pin map', async ({ listingsPage }) => {
+    const probes = probeRestaurants();
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await listingsPage.route(/tile\.openstreetmap\.org/, (route) => route.abort());
+      await listingsPage.click('[data-view="map"]');
+      await expect(listingsPage.locator('#customMap .map-pin')).toHaveCount(probes.length, { timeout: 10000 });
+      await expect(listingsPage.locator('.map-note', { hasText: "Live map tiles aren't reachable" })).toBeVisible();
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }

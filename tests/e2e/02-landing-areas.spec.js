@@ -1,4 +1,4 @@
-const { test, expect, openGuestPage } = require('../fixtures/app-fixture');
+const { test, expect, openGuestPage, closeContext } = require('../fixtures/app-fixture');
 const { waitForAppReady, injectRestaurants, resetLedger } = require('../fixtures/ledger-helpers');
 const { probeRestaurants } = require('../fixtures/seed-data');
 
@@ -57,7 +57,7 @@ test.describe('Landing page: boundary data unavailable', () => {
       await expect(page.locator('#listingsLayout')).toBeVisible();
       expect(errors).toEqual([]);
     } finally {
-      await context.close();
+      await closeContext(context);
     }
   });
 });

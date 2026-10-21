@@ -6,6 +6,10 @@ let activeCategory = 'All';
 let activeSubTag = null;
 let dataLoaded = false;
 let sharedLedgerReady = false;
+// Whether this page load's one-shot startup (init) ran as the owner, and
+// whether that startup has finished. See the rounds-access-changed listener.
+let bootedAsOwner = false;
+let appBooted = false;
 let sharedLedgerStatus = 'Connecting…';
 let sharedLedgerStatusError = false;
 let sortBy = 'name';
@@ -1068,8 +1072,11 @@ function renderLeafletMap(el, withCoords, noteHtml, myToken){
   const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors', maxZoom: 19
   });
+  // 'tileload' fires only for a tile that actually loaded. Leaflet's
+  // layer-level 'load' also fires once every tile has *errored*, which made
+  // a truly offline map (fast failures) look healthy and skip the fallback.
   let tilesOk = false;
-  tileLayer.on('load', ()=>{ tilesOk = true; });
+  tileLayer.on('tileload', ()=>{ tilesOk = true; });
   tileLayer.addTo(leafletMap);
 
   withCoords.forEach(r=>{
@@ -1508,6 +1515,31 @@ function updateAccessControls(){
 window.addEventListener('rounds-access-changed', ()=>{
   updateAccessControls();
   if(dataLoaded) renderAll();
+});
+// The owner's startup work (seeding curated listings, menus, addresses,
+// area/neighborhood stamps, first upload to the shared ledger) lives in
+// init(), which runs once per page load and only if that load *started*
+// signed in as the owner. Signing in as the owner afterwards reloads once
+// so that same tested path runs — rather than re-running it mid-session
+// alongside live ledger updates. The view survives (it's in the URL hash),
+// and the persisted session means this happens about once per device.
+// Non-owner sign-ins have no startup work, so they never reload. Keyed on
+// rounds-signed-in (dispatched by auth-gate.js after its profile write
+// settles) so the reload never interrupts that write.
+let signInSettled = false;
+let ownerReloadStarted = false;
+async function reloadIfOwnerSignedInAfterBoot(){
+  if(ownerReloadStarted) return;
+  if(!(appBooted && signInSettled && !bootedAsOwner && window.RoundsFirebase?.isOwner())) return;
+  ownerReloadStarted = true;
+  try{ await window.RoundsFirebase.prepareForReload(); }
+  catch(error){ console.warn('Could not flush pending writes before reload:', error); }
+  location.reload();
+}
+window.addEventListener('rounds-signed-in', ()=>{
+  signInSettled = true;
+  // If this lands before init() finishes, init() re-checks once it does.
+  reloadIfOwnerSignedInAfterBoot();
 });
 
 function openAddRestaurant(){
@@ -2396,6 +2428,7 @@ async function waitForFirebase(){
     try{
       await firebase.authStateReady;
       owner = firebase.isOwner();
+      bootedAsOwner = owner;
       watcher = firebase.watchSharedLedger();
       const shared = await watcher.ready;
       cloudAvailable = true;
@@ -2467,6 +2500,8 @@ async function waitForFirebase(){
   }
 
   applyHash(); // restores the view from the address (empty hash = landing)
+  appBooted = true;
+  reloadIfOwnerSignedInAfterBoot(); // owner signed in while init() was running
   // Signals that restaurants/visits/saveRestaurants/renderAll are safe to
   // touch from outside the app (e.g. test fixtures via page.evaluate),
   // mirroring the rounds-firebase-ready event in firebase-init.js.

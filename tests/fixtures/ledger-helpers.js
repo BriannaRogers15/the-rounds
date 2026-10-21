@@ -55,4 +55,21 @@ async function resetLedger(page, { restaurantIds = [], visitIds = [] } = {}) {
   }, { restaurantIds, visitIds });
 }
 
-module.exports = { waitForAppReady, waitForBootSettled, injectRestaurants, injectVisits, resetLedger };
+// Opens a listing's detail modal reliably even on a big, live grid. Owner
+// sessions load the full curated dataset, and the grid re-renders on every
+// Firestore snapshot, so a card can move between being located and being
+// clicked — the click then lands on whatever is there (e.g. another card's
+// address link, which opens Google Maps in a new tab). Searching for the
+// name first leaves a single, stationary card; clicking its meta row avoids
+// the name/address links inside the card.
+async function openListingDetail(page, id) {
+  if (!(await page.locator('#listingsLayout').isVisible())) await page.click('#browseAllBtn');
+  // On a non-owner page the listing may still be arriving via snapshot.
+  await page.waitForFunction((id) => restaurants.some((r) => r.id === id), id);
+  const name = await page.evaluate((id) => restaurants.find((r) => r.id === id).name, id);
+  await page.fill('#searchBox', name);
+  await page.locator(`.ticket[data-id="${id}"] .ticket-meta`).click();
+  await page.locator('.modal .detail-name').waitFor();
+}
+
+module.exports = { waitForAppReady, waitForBootSettled, injectRestaurants, injectVisits, resetLedger, openListingDetail };

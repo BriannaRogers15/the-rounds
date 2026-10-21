@@ -1,7 +1,12 @@
-const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
+const { test, expect, openOwnerPage, closeSession } = require('../fixtures/app-fixture');
 const { resetLedger } = require('../fixtures/ledger-helpers');
 const { installPlacesMock, SAMPLE_PLACES } = require('../fixtures/places-mock');
 const { getDoc } = require('../fixtures/firestore-seed');
+const { clearFirestore } = require('../fixtures/emulator-admin');
+
+// Owner sessions seed the full curated dataset into the shared emulator;
+// guest-only specs assert exact card counts, so don't leave it behind.
+test.afterAll(async () => { await clearFirestore(); });
 
 // Add Listing is owner-only, and its search path talks to Google Places —
 // replaced here by a fake installed before page load (fixtures/places-mock.js).
@@ -53,7 +58,7 @@ test.describe('Add Listing: Google Places search path', () => {
       await expect.poll(() => getDoc(`restaurants/${saved.id}`)).toMatchObject({ name: 'Mock Taqueria' });
     } finally {
       if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
-      await page.context().close();
+      await closeSession(page);
     }
   });
 
@@ -74,7 +79,7 @@ test.describe('Add Listing: Google Places search path', () => {
       expect(saved.categories).toEqual(['Tacos']);
     } finally {
       if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
-      await page.context().close();
+      await closeSession(page);
     }
   });
 
@@ -96,7 +101,7 @@ test.describe('Add Listing: Google Places search path', () => {
       expect(await findSaved(page, 'Mock Generic Diner')).toBeNull();
       await expect(page.locator('#rName')).toBeVisible(); // still open
     } finally {
-      await page.context().close();
+      await closeSession(page);
     }
   });
 
@@ -108,7 +113,7 @@ test.describe('Add Listing: Google Places search path', () => {
       expect(dialogs.at(-1)).toContain('Search and select a restaurant');
       expect(await findSaved(page, 'Typed But Never Picked')).toBeNull();
     } finally {
-      await page.context().close();
+      await closeSession(page);
     }
   });
 });
@@ -121,7 +126,7 @@ test.describe('Add Listing: manual entry path', () => {
       await expect(page.locator('#manualAddrField')).toBeVisible();
       await expect(page.locator('#manualToggle')).toBeHidden();
     } finally {
-      await page.context().close();
+      await closeSession(page);
     }
   });
 
@@ -153,7 +158,7 @@ test.describe('Add Listing: manual entry path', () => {
       expect(saved.website).toBeUndefined();
     } finally {
       if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
-      await page.context().close();
+      await closeSession(page);
     }
   });
 
@@ -175,7 +180,7 @@ test.describe('Add Listing: manual entry path', () => {
       expect(saved.lat).toBeUndefined();
     } finally {
       if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
-      await page.context().close();
+      await closeSession(page);
     }
   });
 });

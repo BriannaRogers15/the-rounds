@@ -1,5 +1,5 @@
-const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
-const { injectRestaurants } = require('../fixtures/ledger-helpers');
+const { test, expect, openOwnerPage, closeSession } = require('../fixtures/app-fixture');
+const { injectRestaurants, openListingDetail } = require('../fixtures/ledger-helpers');
 const { getDoc } = require('../fixtures/firestore-seed');
 const { clearFirestore } = require('../fixtures/emulator-admin');
 
@@ -13,13 +13,12 @@ async function arrangeListing(browser, id) {
   const ownerPage = await openOwnerPage(browser);
   const r = { id, name: `Probe ${id}`, categories: ['Pizza'], address: '1 Probe St, Chicago, IL 60607', createdAt: Date.now(), menu: ['Cheese Slice', 'Pepperoni Pie'] };
   await injectRestaurants(ownerPage, [r]);
-  await ownerPage.context().close();
+  await closeSession(ownerPage);
   return r;
 }
 
 async function openLogVisit(page, r) {
-  await page.click('#browseAllBtn');
-  await page.locator(`.ticket[data-id="${r.id}"]`).click();
+  await openListingDetail(page, r.id);
   await page.click('#logVisitBtn');
   await expect(page.locator('#saveLog')).toBeVisible();
 }

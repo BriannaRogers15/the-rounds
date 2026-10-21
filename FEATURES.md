@@ -48,7 +48,7 @@ Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only
 
 ## Parked / not started
 
-- [ ] **Merge `feature/dining-tracker` → `main`** and enable GitHub Pages hosting (still sitting on the feature branch as of this writing)
+- [ ] **Enable GitHub Pages** — `develop` (the default branch) is pushed and ready; Pages still needs turning on in repo Settings → Pages (source: `develop`, root)
 - [ ] **Tag taxonomy pass** — Brianna asked to revisit reorganizing tags later; current `PARENT_GROUPS` already shows some independent reorganization (regional umbrellas like Asian/Latin American/Caribbean/European removed, countries promoted to top-level guides) — worth confirming this is the final shape she wants before considering it done
 
 ## Known bugs
@@ -57,8 +57,9 @@ Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only
 - [ ] **Add Listing search box slow to appear (~10s)** — the box only renders after `google.maps.importLibrary('places')` resolves, which is a real network fetch. Billing was disabled on the Google Cloud project until just now, which plausibly caused failed/retried requests and made this much worse than normal — re-verify now that billing is on before assuming this is still a live bug.
 - [ ] **New adds sometimes save with no website** — `GOOGLE_TYPE_TAG` gaps used to also cause zero-tag saves; that half is now fixed (save is blocked until at least one guide tag is added — see Shipped). Missing website is likely just Google not having a `websiteURI` on file for that business, not a code bug — worth confirming with a specific example that's missing one it should have.
 
-- [ ] **Map offline fallback only triggers when tiles hang, not when they fail** — Leaflet fires `load` even after tile errors, so `tilesOk` turns true and the pin-map fallback never shows when truly offline (you get blank tiles with working markers). Found by the test suite; not fixed.
-- [ ] **Owner startup tasks (seed listings, menus, enrichment, neighborhood stamps) only run on a load that begins signed in** — signing in via the form after the page loads doesn't trigger them until the next reload. Only noticeable while the shared ledger is still empty (first launch). Documented in README; not fixed.
+- [x] **Edits to existing listings never reached Firestore** — tag changes, friends' new dishes, enrichment, area stamps. Fixed in `firebase-init.js` (2026-10-18); regression-tested.
+- [x] **Map offline fallback never triggered when tiles failed fast** — now keyed on a tile actually loading (`tileload`), not Leaflet's layer `load`. Fixed 2026-10-20.
+- [x] **Owner startup only ran on a load that began signed in** — signing in as the owner now reloads once so seeding/upload happens without a manual refresh. Fixed 2026-10-20.
 
 ## Known rough edges
 

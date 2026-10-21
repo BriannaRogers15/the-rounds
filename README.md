@@ -34,10 +34,7 @@ The app itself needs nothing beyond a browser and a static file server. An optio
 5. Make sure the deployed Firestore rules match `firestore.rules` (`firebase deploy --only firestore:rules`) — guest browsing needs the public-read rules.
 
 ### First visit to the live site as the owner
-Browser storage is per-address, so data you've built up locally (e.g. on `localhost`) does **not** carry over to `github.io` on its own.
-1. On the copy that has your data, use **⤓ Export backup** (bottom of the landing page).
-2. On the live site, sign in as the owner, then **⤒ Restore backup** with that file. This uploads everything to the shared ledger.
-3. Reload once. The owner's startup tasks (seeding curated listings, menus, addresses, neighborhood stamps) only run on a load that starts already signed in.
+Just sign in. The curated listings, menus, addresses and Yelp links ship in `data/*.js`; on the owner's first sign-in the page reloads once and uploads them to the shared ledger, after which friends and guests see them. Visits anyone logs are written straight to the shared ledger and show up for everyone live.
 
 ## Data storage
 Restaurants and visits are shared in Firestore. The browser keeps a `localStorage` cache (keys prefixed `rounds:`) for faster startup and offline browsing; changes require an available shared connection. On first startup, the ledger owner's existing local data is uploaded if the shared collections are empty. **Export backup** remains available from the landing page. Reviewer display profiles stay device-local. Neighborhood/suburb boundary files are fetched once (Chicago Data Portal + Census TIGERweb) and kept in the Cache API for offline use.

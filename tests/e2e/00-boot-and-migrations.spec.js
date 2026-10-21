@@ -1,85 +1,89 @@
-const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
+const { test, expect, openOwnerPage, openAppPage, signInViaForm, closeSession, closeContext } = require('../fixtures/app-fixture');
 const { waitForAppReady, waitForBootSettled } = require('../fixtures/ledger-helpers');
 const { clearFirestore, clearAuthUsers } = require('../fixtures/emulator-admin');
 const { seedDoc, getDoc } = require('../fixtures/firestore-seed');
+const { createOwnerTestUser, createRegularTestUser } = require('../fixtures/auth-helpers');
 
-// The owner-session boot sequence runs a chain of one-time-feeling but
-// unconditionally-every-load migrations (migrateCategories, seedIfNeeded,
-// enrichAddresses, renameCuisineTags, etc. — see app.js's init()). Each is
-// written to be idempotent ("safe to re-run — no-op once already done"),
-// but nothing had ever actually verified that claim. This test seeds a
-// real owner session from an empty emulator Firestore (so seedIfNeeded
-// really does seed the full real data/address-lookup.js dataset, exactly
-// like production), then reloads the same session and confirms the
-// migration chain running a second time doesn't change anything — no
-// duplicate restaurants, no duplicate category tags.
-test.describe('Boot sequence / migration chain idempotency', () => {
+// The owner's startup (app.js init()) runs a chain of migrations —
+// migrateCategories, seedIfNeeded, enrichAddresses, renameCuisineTags,
+// seedCuratedMenus, assignAreas, … — then uploads to the shared ledger.
+// It runs once per page load, only on a load that starts signed in as the
+// owner; signing in as the owner later reloads the page once so it runs.
+test.describe('Boot sequence / owner startup', () => {
   test.beforeAll(async () => {
     await clearFirestore();
     await clearAuthUsers();
   });
 
-  // This test writes the full real seed dataset into the shared emulator;
-  // every other spec file reads that same Firestore (guest sessions load
-  // shared.restaurants wholesale) and asserts exact counts against small
-  // injected probe sets, so leaving it behind would break them.
+  // Every other spec reads the same Firestore and asserts exact counts
+  // against small probe sets, so the seeded dataset must not linger.
   test.afterAll(async () => {
     await clearFirestore();
   });
 
+  test('signing in as the owner reloads once and fills an empty shared ledger, no manual refresh', async ({ browser }) => {
+    const context = await browser.newContext();
+    try {
+      const page = await openAppPage(context);
+      expect(await page.evaluate(() => restaurants.length)).toBe(0); // empty ledger, signed out
+
+      const reloaded = page.waitForEvent('load');
+      await signInViaForm(page, await createOwnerTestUser());
+      await reloaded;
+      await waitForAppReady(page);
+
+      expect(await page.evaluate(() => bootedAsOwner)).toBe(true);
+      expect(await page.evaluate(() => restaurants.length)).toBeGreaterThan(0);
+      // Uploaded to the shared ledger, so friends and guests see it too.
+      const sampleId = await page.evaluate(() => restaurants[0].id);
+      await expect.poll(() => getDoc(`restaurants/${sampleId}`)).not.toBeNull();
+      await waitForBootSettled(page);
+    } finally {
+      await closeContext(context);
+    }
+  });
+
+  test('a non-owner signing in does not reload the page', async ({ browser }) => {
+    const context = await browser.newContext();
+    try {
+      const page = await openAppPage(context);
+      let navigations = 0;
+      page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations += 1; });
+      await signInViaForm(page, await createRegularTestUser());
+      await expect(page.locator('.signed-in-chip')).toBeVisible();
+      await page.waitForTimeout(1500); // a reload would have started by now
+      expect(navigations).toBe(0);
+    } finally {
+      await closeContext(context);
+    }
+  });
+
   test('re-running the migration chain on reload produces no duplicates', async ({ browser }) => {
-    // openOwnerPage navigates *then* signs in via the form — so the page's
-    // very first boot (app.js's init() IIFE, which only ever runs once per
-    // navigation) happens while still unauthenticated, and owner is false:
-    // migrations correctly skip that first boot entirely. The first boot
-    // that actually runs as the owner is the *next* one, once Firebase's
-    // persisted session (browserLocalPersistence) makes auth.currentUser
-    // available from the start — i.e. one reload after signing in.
-    const ownerPage = await openOwnerPage(browser);
-    await ownerPage.reload();
-    await waitForAppReady(ownerPage);
-
-    const firstLoadSnapshot = await ownerPage.evaluate(() => ({
+    const ownerPage = await openOwnerPage(browser); // already one owner boot in
+    const signature = () => ownerPage.evaluate(() => ({
       count: restaurants.length,
-      // A cheap signature that would change if seedIfNeeded/enrichAddresses
-      // ran a second time and mutated categories/addresses rather than
-      // no-op'ing — not just a count, which duplicates would also inflate,
-      // but mutation-without-duplication wouldn't.
+      // Would also change if a migration mutated records again rather than
+      // no-op'ing, not just if it duplicated them.
       categoryTagTotal: restaurants.reduce((sum, r) => sum + (r.categories || []).length, 0),
     }));
-    expect(firstLoadSnapshot.count).toBeGreaterThan(0);
-    // An owner boot keeps writing after app-ready (neighborhood stamps);
-    // reloading mid-write would stall the emulator for later tests.
-    await waitForBootSettled(ownerPage);
+    try {
+      const first = await signature();
+      expect(first.count).toBeGreaterThan(0);
 
-    // Second owner-authenticated boot — re-runs app.js's entire init()
-    // chain, including every migration, against the Firestore data the
-    // first owner boot just wrote.
-    await ownerPage.reload();
-    await waitForAppReady(ownerPage);
+      await ownerPage.reload();
+      await waitForAppReady(ownerPage);
+      expect(await signature()).toEqual(first);
 
-    const secondLoadSnapshot = await ownerPage.evaluate(() => ({
-      count: restaurants.length,
-      categoryTagTotal: restaurants.reduce((sum, r) => sum + (r.categories || []).length, 0),
-    }));
-
-    expect(secondLoadSnapshot.count).toBe(firstLoadSnapshot.count);
-    expect(secondLoadSnapshot.categoryTagTotal).toBe(firstLoadSnapshot.categoryTagTotal);
-
-    // Also confirm no restaurant name appears twice — the specific shape a
-    // seedIfNeeded regression (re-adding already-seeded entries) would take.
-    const nameCounts = await ownerPage.evaluate(() => {
-      const counts = {};
-      restaurants.forEach((r) => {
-        const key = r.name.toLowerCase();
-        counts[key] = (counts[key] || 0) + 1;
+      const duplicateNames = await ownerPage.evaluate(() => {
+        const counts = {};
+        restaurants.forEach((r) => { const k = r.name.toLowerCase(); counts[k] = (counts[k] || 0) + 1; });
+        return Object.values(counts).filter((c) => c > 1).length;
       });
-      return Object.values(counts).filter((c) => c > 1).length;
-    });
-    expect(nameCounts).toBe(0);
-
-    await waitForBootSettled(ownerPage);
-    await ownerPage.context().close();
+      expect(duplicateNames).toBe(0);
+      await waitForBootSettled(ownerPage);
+    } finally {
+      await closeSession(ownerPage);
+    }
   });
 
   // Regression: migrations edit existing records in place (assignAreas sets
@@ -92,14 +96,12 @@ test.describe('Boot sequence / migration chain idempotency', () => {
       address: '1 Legacy St, Chicago, IL 60607', createdAt: 1,
     });
     const ownerPage = await openOwnerPage(browser);
-    await ownerPage.reload(); // first boot that runs as the owner (see above)
-    await waitForAppReady(ownerPage);
-
-    const local = await ownerPage.evaluate(() => restaurants.find((r) => r.id === 'legacy-probe'));
-    expect(local).toMatchObject({ town: 'Chicago', region: 'Chicago' });
-    await expect.poll(() => getDoc('restaurants/legacy-probe')).toMatchObject({ town: 'Chicago', region: 'Chicago' });
-
-    await waitForBootSettled(ownerPage);
-    await ownerPage.context().close();
+    try {
+      const local = await ownerPage.evaluate(() => restaurants.find((r) => r.id === 'legacy-probe'));
+      expect(local).toMatchObject({ town: 'Chicago', region: 'Chicago' });
+      await expect.poll(() => getDoc('restaurants/legacy-probe')).toMatchObject({ town: 'Chicago', region: 'Chicago' });
+    } finally {
+      await closeSession(ownerPage);
+    }
   });
 });

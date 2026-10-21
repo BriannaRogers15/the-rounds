@@ -68,15 +68,26 @@ simulation of "someone opened a bookmarked link" anyway.
   each open their own browser context, but a test needing *two* sessions
   should call `openOwnerPage(browser)` / `openSignedInPage(browser)`
   directly rather than relying on fixture combinations.
-- **Migrations only run on a boot that starts already signed in.**
-  `app.js`'s `init()` runs once per navigation and checks `isOwner()` near
-  the top. `openOwnerPage` loads the page *then* signs in, so that first
-  boot runs as a non-owner. The first owner boot is the next reload — see
-  `e2e/00-boot-and-migrations.spec.js`.
+- **Owner sign-in reloads the page.** `app.js`'s `init()` runs once per
+  navigation, so signing in as the owner on a page that loaded signed-out
+  triggers one reload to run the owner startup. `openOwnerPage` waits for
+  that reload, then for `rounds-boot-settled` (the owner's background
+  neighborhood writes) — reloading or closing a page mid-write stalls the
+  emulator for later tests. Owner sessions also seed the full curated
+  dataset, so spec files that use them clear Firestore in `afterAll`.
 - **Always wait for `rounds-app-ready`.** `canWriteLedger()` depends on
   `sharedLedgerReady`, which only flips once the Firestore watcher
   resolves. `openAppPage()` waits for it so write-gated UI doesn't render
   off a stale `false`.
+- **Each e2e spec file gets freshly restarted emulators.** The Firestore
+  emulator keeps server-side state from every session that ever connected,
+  even ones closed cleanly (`closeSession`/`closeContext`); write latency
+  grew with each one (≈210ms → ≈490ms over 15 sessions), so a full run
+  timed out in the later files. `global-setup.js` owns the emulator process
+  and serves `POST http://127.0.0.1:9299/restart`; the auto
+  `freshEmulatorsPerFile` fixture in `app-fixture.js` calls it when a new
+  file starts (~5s each). Don't run `npm run test:emulators` alongside
+  `npm test` — setup refuses to start if the ports are taken.
 
 ## Test hook mechanism
 
@@ -163,10 +174,14 @@ push and pull request (Node 22, Java 21 for the emulators, Chromium).
   enrichment and area stamping all looked "unchanged" and were skipped.
   Covered by `11-restaurant-detail`, `12-log-visit`, and the regression test
   in `00-boot-and-migrations`, which fails against the old code.
-- **Not fixed — the map's offline fallback only triggers when tile requests
-  hang.** Leaflet fires `load` even when tiles *error*, so a truly offline
-  map (fast failures) keeps showing Leaflet with blank tiles and working
-  markers instead of the pin map. Tested only for the hang case.
+- **The map's offline fallback never triggered when tiles failed fast**
+  (fixed in `app.js`). It keyed on Leaflet's layer `load`, which also fires
+  after every tile *errors*; it now keys on `tileload`. `05-map-view` covers
+  both fast failure and hanging tiles.
+- **Owner startup only ran on a page load that began signed in** (fixed in
+  `app.js`). Signing in as the owner now reloads once so seeding and the
+  first upload happen without a manual refresh. Covered by
+  `00-boot-and-migrations`.
 
 ## Out of scope (by design, not an oversight)
 

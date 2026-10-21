@@ -1,10 +1,13 @@
 const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
-const { injectRestaurants, injectVisits, resetLedger } = require('../fixtures/ledger-helpers');
+const { injectRestaurants, injectVisits, resetLedger, openListingDetail } = require('../fixtures/ledger-helpers');
 const { getOwnerUid } = require('../fixtures/auth-helpers');
 const { seedDoc, deleteDoc, getDoc } = require('../fixtures/firestore-seed');
 const { clearFirestore } = require('../fixtures/emulator-admin');
 
 test.beforeAll(async () => { await clearFirestore(); });
+// Owner sessions seed the full curated dataset into the shared emulator;
+// guest-only specs assert exact card counts, so don't leave it behind.
+test.afterAll(async () => { await clearFirestore(); });
 
 function probe(id, extra = {}) {
   return { id, name: `Probe ${id}`, categories: ['American'], address: '1 Probe St, Chicago, IL 60607', createdAt: Date.now(), menu: [], ...extra };
@@ -14,9 +17,7 @@ function visit(id, restaurantId, authorUid, extra = {}) {
 }
 
 async function openListing(page, id) {
-  await page.click('#browseAllBtn');
-  await page.locator(`.ticket[data-id="${id}"]`).click();
-  await expect(page.locator('.modal .detail-name')).toBeVisible();
+  await openListingDetail(page, id);
 }
 
 test.describe('Detail modal: links (any viewer)', () => {

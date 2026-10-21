@@ -1,6 +1,7 @@
 const base = require('@playwright/test');
 const { createOwnerTestUser, createRegularTestUser } = require('./auth-helpers');
-const { waitForAppReady } = require('./ledger-helpers');
+const { waitForAppReady, waitForBootSettled } = require('./ledger-helpers');
+const { restartEmulators } = require('./emulator-admin');
 
 async function signInViaForm(page, { email, password }) {
   await page.fill('#authEmail', email);
@@ -64,7 +65,17 @@ async function openOwnerPage(browser, { contextSetup } = {}) {
   const context = await browser.newContext();
   if (contextSetup) await contextSetup(context);
   const page = await openAppPage(context);
+  // Signing in as the owner on a page that loaded signed-out makes the app
+  // reload once so the owner startup runs (see app.js's
+  // rounds-access-changed listener). Wait for that reload, the app to be
+  // ready again, and the owner's background writes to finish — so tests
+  // start from a settled owner session and never close one mid-write.
+  const reloaded = page.waitForEvent('load');
   await signInViaForm(page, await createOwnerTestUser());
+  await reloaded;
+  await waitForAppReady(page);
+  await waitForBootSettled(page);
+  await page.waitForSelector('.wrap:not([style*="display: none"])');
   return page;
 }
 
@@ -76,18 +87,59 @@ async function openSignedInPage(browser, { contextSetup, creds } = {}) {
   return page;
 }
 
+// Shut a test session down the way a well-behaved tab would: let in-flight
+// Firestore writes finish, then close the app's live listeners, *then*
+// close the browser. Closing straight away abandons open listener streams
+// (and any write mid-commit) on the shared emulator; across ~140 tests they
+// pile up until the emulator stalls (lock timeouts, then 500s). Every
+// session a test opens should be closed through here.
+async function closeContext(context) {
+  for (const page of context.pages()) {
+    try {
+      await page.evaluate(() => window.RoundsFirebase?.prepareForReload?.());
+    } catch (_error) { /* page already gone or never booted — nothing to drain */ }
+  }
+  await context.close();
+}
+const closeSession = (page) => closeContext(page.context());
+
+async function drainPage(page) {
+  try {
+    await page.evaluate(() => window.RoundsFirebase?.prepareForReload?.());
+  } catch (_error) { /* page already gone */ }
+}
+
+let lastSpecFile = null;
+
 const test = base.test.extend({
+  // Every spec file starts against freshly restarted emulators (see
+  // tests/global-setup.js for the measured reason). Auto + test-scoped so it
+  // needs no per-file wiring; it runs after a file's beforeAll, which is fine
+  // because those hooks only clear data, never seed it.
+  freshEmulatorsPerFile: [async ({}, use, testInfo) => {
+    if (testInfo.file !== lastSpecFile) {
+      lastSpecFile = testInfo.file;
+      await restartEmulators();
+    }
+    await use();
+  }, { auto: true, timeout: 90000 }],
+
   // A fresh page with the app loaded, service worker disabled (removes
   // cache-staleness as a source of flakiness entirely, rather than relying
   // on bumping CACHE_NAME or Playwright's fresh-context default), emulators
   // wired, and app.js's init chain already settled.
+  // (Playwright closes `context` itself afterwards; drain first.)
   appPage: async ({ context }, use) => {
-    await use(await openAppPage(context));
+    const page = await openAppPage(context);
+    await use(page);
+    await drainPage(page);
   },
 
   // appPage, already past the auth gate via guest mode.
   guestPage: async ({ context }, use) => {
-    await use(await openGuestPage(context));
+    const page = await openGuestPage(context);
+    await use(page);
+    await drainPage(page);
   },
 
   // guestPage, already navigated past the neighborhoods landing page into
@@ -112,7 +164,7 @@ const test = base.test.extend({
   ownerPage: async ({ browser }, use) => {
     const page = await openOwnerPage(browser);
     await use(page);
-    await page.context().close();
+    await closeSession(page);
   },
 
   // A fresh ordinary (non-owner) signed-in session. Same one-per-test
@@ -120,8 +172,12 @@ const test = base.test.extend({
   signedInPage: async ({ browser }, use) => {
     const page = await openSignedInPage(browser);
     await use(page);
-    await page.context().close();
+    await closeSession(page);
   },
 });
 
-module.exports = { test, expect: base.expect, signInViaForm, openAppPage, openGuestPage, openOwnerPage, openSignedInPage };
+module.exports = {
+  test, expect: base.expect, signInViaForm,
+  openAppPage, openGuestPage, openOwnerPage, openSignedInPage,
+  closeSession, closeContext,
+};

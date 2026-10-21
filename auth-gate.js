@@ -237,6 +237,10 @@
           if(!existing.exists()) payload.createdAt = serverTimestamp();
           await setDoc(userRef, payload, { merge: true });
         }catch(err){ console.warn('Could not write users/{uid} doc', err); }
+        // Sign-in bookkeeping is done (profile write settled). app.js waits
+        // for this — not rounds-access-changed above — before reloading for
+        // the owner's startup, so the reload never cuts this write off.
+        window.dispatchEvent(new Event('rounds-signed-in'));
       } else if(window.roundsGuestMode){
         gate.style.display = 'none';
         if(wrap) wrap.style.display = '';

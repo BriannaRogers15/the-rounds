@@ -1,5 +1,5 @@
-const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
-const { injectRestaurants, resetLedger } = require('../fixtures/ledger-helpers');
+const { test, expect, openOwnerPage, closeSession } = require('../fixtures/app-fixture');
+const { injectRestaurants, resetLedger, openListingDetail } = require('../fixtures/ledger-helpers');
 const { probeRestaurants } = require('../fixtures/seed-data');
 const { createRegularTestUser, randomTestEmail } = require('../fixtures/auth-helpers');
 const { clearFirestore, clearAuthUsers } = require('../fixtures/emulator-admin');
@@ -19,6 +19,9 @@ test.beforeAll(async () => {
   await clearFirestore();
   await clearAuthUsers();
 });
+// Owner sessions seed the full curated dataset into the shared emulator;
+// guest-only specs assert exact card counts, so don't leave it behind.
+test.afterAll(async () => { await clearFirestore(); });
 
 test.describe('Access control: guest mode', () => {
   test('entering guest mode shows the read-only notice and hides owner-only controls', async ({ guestPage }) => {
@@ -166,14 +169,13 @@ test.describe('Access control: owner vs. signed-in non-owner', () => {
     const ownerPage = await openOwnerPage(browser);
     await injectRestaurants(ownerPage, [probe]);
     try {
-      await signedInPage.click('#browseAllBtn');
-      await signedInPage.locator(`.ticket[data-id="${probe.id}"]`).click();
+      await openListingDetail(signedInPage, probe.id);
       await expect(signedInPage.locator('#logVisitBtn')).toBeVisible();
       await expect(signedInPage.locator('#deleteRestBtn')).toHaveCount(0);
       await expect(signedInPage.locator('#newTag')).toHaveCount(0);
     } finally {
       await resetLedger(ownerPage, { restaurantIds: [probe.id] }); // only the owner can delete
-      await ownerPage.context().close();
+      await closeSession(ownerPage);
     }
   });
 
@@ -181,8 +183,7 @@ test.describe('Access control: owner vs. signed-in non-owner', () => {
     const probe = { id: 'probe-owner-1', name: 'Probe Owner Place', categories: ['American'], address: 'Chicago, IL', createdAt: Date.now() };
     await injectRestaurants(ownerPage, [probe]);
     try {
-      await ownerPage.click('#browseAllBtn');
-      await ownerPage.locator(`.ticket[data-id="${probe.id}"]`).click();
+      await openListingDetail(ownerPage, probe.id);
       await expect(ownerPage.locator('#newTag')).toBeVisible();
       await expect(ownerPage.locator('#deleteRestBtn')).toBeVisible();
     } finally {

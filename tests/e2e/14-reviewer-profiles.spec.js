@@ -1,4 +1,4 @@
-const { test, expect, openSignedInPage } = require('../fixtures/app-fixture');
+const { test, expect, openSignedInPage, closeSession } = require('../fixtures/app-fixture');
 const { createRegularTestUser } = require('../fixtures/auth-helpers');
 
 // Reviewer profiles are device-local display names (localStorage only,
@@ -78,8 +78,8 @@ test.describe('Reviewer profiles', () => {
       await openProfiles(deviceB);
       await expect(deviceB.locator('#profileList')).toContainText('No reviewers yet');
     } finally {
-      await deviceA.context().close();
-      await deviceB.context().close();
+      await closeSession(deviceA);
+      await closeSession(deviceB);
     }
   });
 });

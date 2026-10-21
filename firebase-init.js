@@ -15,7 +15,7 @@ import {
 import {
   getFirestore, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc,
   collection, getDocs, onSnapshot, writeBatch, serverTimestamp, arrayUnion, arrayRemove,
-  connectFirestoreEmulator,
+  connectFirestoreEmulator, waitForPendingWrites, terminate,
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 // Public web-app config — not a secret, access control is entirely the
@@ -61,6 +61,8 @@ const authStateReady = setPersistence(auth, keepSignedIn ? browserLocalPersisten
 // edit never reached Firestore. Strings can't be mutated out from under it.
 const ledgerCache = { restaurants: new Map(), visits: new Map() };
 let ledgerWriteQueue = Promise.resolve();
+// Unsubscribe functions for live onSnapshot listeners (see prepareForReload).
+const activeListeners = new Set();
 
 // Default to the safer local storage persistence, but let each sign-in flow
 // choose between a session-only or remember-me experience explicitly.
@@ -101,6 +103,8 @@ function watchSharedLedger(){
   const stopVisits = onSnapshot(collection(db, 'visits'), (snapshot)=>
     publish('visits', snapshotItems(snapshot, 'visits')),
     (error)=> handleError('visits', error));
+  activeListeners.add(stopRestaurants);
+  activeListeners.add(stopVisits);
 
   return {
     ready,
@@ -111,7 +115,10 @@ function watchSharedLedger(){
       // separately in ledgerCache as strings.
       callback({ restaurants: initial.restaurants, visits: initial.visits });
     },
-    unsubscribe(){ stopRestaurants(); stopVisits(); },
+    unsubscribe(){
+      stopRestaurants(); stopVisits();
+      activeListeners.delete(stopRestaurants); activeListeners.delete(stopVisits);
+    },
   };
 }
 
@@ -171,6 +178,20 @@ window.RoundsFirebase = {
   applyAuthPersistence,
   authStateReady,
   isOwner: ()=> auth.currentUser?.uid === OWNER_UID,
+  // Call before a programmatic reload: lets any in-flight writes reach the
+  // server first (a reload would otherwise drop them), then closes the live
+  // listeners cleanly instead of abandoning them mid-stream.
+  prepareForReload: async ()=>{
+    try{ await waitForPendingWrites(db); }
+    finally{
+      // Unsubscribe explicitly so the server drops the listen targets;
+      // terminate() alone left them registered (measured on the emulator:
+      // every later write slowed down with each abandoned session).
+      activeListeners.forEach((stop)=> stop());
+      activeListeners.clear();
+      await terminate(db);
+    }
+  },
   watchSharedLedger, syncSharedLedger,
   doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc,
   collection, getDocs, onSnapshot, serverTimestamp, arrayUnion, arrayRemove,
