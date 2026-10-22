@@ -28,7 +28,8 @@ test.describe('Access control: guest mode', () => {
     await expect(guestPage.locator('#guestNotice')).toBeVisible();
     await expect(guestPage.locator('#guestNotice')).toContainText('read only');
     await expect(guestPage.locator('body')).toHaveClass(/guest-mode/);
-    await expect(guestPage.locator('#profileBtn')).toBeHidden();
+    // Reviewer usernames are retired — visits use the account's name.
+    await expect(guestPage.locator('#profileBtn')).toHaveCount(0);
   });
 
   test('"Sign in" in the guest notice returns to the auth gate', async ({ guestPage }) => {

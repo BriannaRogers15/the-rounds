@@ -1,6 +1,7 @@
 const { test, expect, openOwnerPage, openSignedInPage, closeSession } = require('../fixtures/app-fixture');
 const { injectRestaurants, openListingDetail } = require('../fixtures/ledger-helpers');
 const { getDoc } = require('../fixtures/firestore-seed');
+const { createRegularTestUser } = require('../fixtures/auth-helpers');
 const { clearFirestore } = require('../fixtures/emulator-admin');
 
 // Logged by a signed-in non-owner against a listing the owner created —
@@ -30,7 +31,7 @@ function captureDialogs(page) {
 }
 
 test.describe('Log a Visit: validation', () => {
-  test('rating, would-go-back, and (on a first visit) a username are each required', async ({ browser, signedInPage }) => {
+  test('rating, would-go-back, and (for an account with no name yet) a name are each required', async ({ browser, signedInPage }) => {
     const r = await arrangeListing(browser, 'lv-validate');
     const dialogs = captureDialogs(signedInPage);
     await openLogVisit(signedInPage, r);
@@ -44,18 +45,18 @@ test.describe('Log a Visit: validation', () => {
 
     await signedInPage.click('#wrNo');
     await signedInPage.click('#saveLog');
-    expect(dialogs.at(-1)).toBe('Pick a reviewer username.');
+    expect(dialogs.at(-1)).toContain('Add your name');
 
     expect(await signedInPage.evaluate((id) => visits.filter((v) => v.restaurantId === id).length, r.id)).toBe(0);
   });
 });
 
 test.describe('Log a Visit: saving', () => {
-  test('a full first visit saves everything, creates the reviewer profile, and adds a new dish to the menu', async ({ browser, signedInPage }) => {
+  test('a full visit from an unnamed account saves everything, names the account, and adds a new dish to the menu', async ({ browser, signedInPage }) => {
     const r = await arrangeListing(browser, 'lv-full');
     await openLogVisit(signedInPage, r);
 
-    await signedInPage.fill('#vReviewerNew', 'Probe Reviewer');
+    await signedInPage.fill('#vName', 'Probe Reviewer');
     await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
     await signedInPage.fill('#vAte', 'Garlic Knots'); // not on the menu yet
     await signedInPage.click('#starPick span[data-n="4"]');
@@ -88,46 +89,48 @@ test.describe('Log a Visit: saving', () => {
     await expect.poll(() => getDoc(`visits/${saved.id}`)).toMatchObject({ authorUid: uid, date: chosenDate });
     await expect.poll(async () => (await getDoc(`restaurants/${r.id}`))?.menu).toContain('Garlic Knots');
 
-    // The first visit created this device's reviewer profile.
-    await expect(signedInPage.locator('#profileBtn')).toContainText('Probe Reviewer');
+    // The name went to the account itself (not this device): the chip,
+    // the Firebase profile, and the users/{uid} doc all have it.
+    await expect(signedInPage.locator('.signed-in-chip')).toContainText('Probe Reviewer');
+    expect(await signedInPage.evaluate(() => window.RoundsFirebase.auth.currentUser.displayName)).toBe('Probe Reviewer');
+    await expect.poll(async () => (await getDoc(`users/${uid}`))?.displayName).toBe('Probe Reviewer');
   });
 
-  test('once a profile exists, the form shows "Logging as …" instead of asking for a username', async ({ browser, signedInPage }) => {
-    const r = await arrangeListing(browser, 'lv-second');
-    await signedInPage.evaluate(async () => {
-      profiles.push({ id: 'p-existing', name: 'Existing Reviewer' });
-      activeProfileId = 'p-existing';
-      await saveProfiles();
-    });
-    await openLogVisit(signedInPage, r);
-    await expect(signedInPage.locator('.logged-by')).toContainText('Logging as Existing Reviewer');
-    await expect(signedInPage.locator('#vReviewerNew')).toHaveCount(0);
-
-    await signedInPage.click('#starPick span[data-n="5"]');
-    await signedInPage.click('#wrYes');
-    await signedInPage.click('#saveLog');
-    await expect(signedInPage.locator('.visit-item').first()).toContainText('Existing Reviewer');
+  test('an account with a name logs under it — no name or username question', async ({ browser }) => {
+    const r = await arrangeListing(browser, 'lv-named');
+    const page = await openSignedInPage(browser, { creds: await createRegularTestUser({ displayName: 'Named Probe' }) });
+    try {
+      await openLogVisit(page, r);
+      await expect(page.locator('.logged-by')).toContainText('Logging as Named Probe');
+      await expect(page.locator('#vName')).toHaveCount(0);
+      await page.click('#starPick span[data-n="5"]');
+      await page.click('#wrYes');
+      await page.click('#saveLog');
+      await expect(page.locator('.visit-item').first()).toContainText('Named Probe');
+    } finally {
+      await closeSession(page);
+    }
   });
 
-  test('"switch" swaps in a reviewer picker without losing what was already entered', async ({ browser, signedInPage }) => {
-    const r = await arrangeListing(browser, 'lv-switch');
-    await signedInPage.evaluate(async () => {
-      profiles.push({ id: 'p-a', name: 'Reviewer A' }, { id: 'p-b', name: 'Reviewer B' });
-      activeProfileId = 'p-a';
-      await saveProfiles();
-    });
-    await openLogVisit(signedInPage, r);
-    await signedInPage.fill('#vNotes', 'keep me');
-    await signedInPage.click('#switchReviewer');
-    await signedInPage.selectOption('#vReviewer', 'p-b');
-    await expect(signedInPage.locator('#vNotes')).toHaveValue('keep me');
+  test('renaming yourself moves your past visits to the new name, for everyone', async ({ browser }) => {
+    const r = await arrangeListing(browser, 'lv-rename');
+    const page = await openSignedInPage(browser, { creds: await createRegularTestUser({ displayName: 'Old Name Probe' }) });
+    try {
+      await openLogVisit(page, r);
+      await page.click('#starPick span[data-n="4"]');
+      await page.click('#wrYes');
+      await page.click('#saveLog');
+      const visitId = await page.evaluate((id) => visits.find((v) => v.restaurantId === id).id, r.id);
+      await expect.poll(async () => (await getDoc(`visits/${visitId}`))?.reviewer).toBe('Old Name Probe');
 
-    await signedInPage.click('#starPick span[data-n="4"]');
-    await signedInPage.click('#wrYes');
-    await signedInPage.click('#saveLog');
-    await expect(signedInPage.locator('.visit-item').first()).toContainText('Reviewer B');
-    // Switching here also makes B the active reviewer going forward.
-    expect(await signedInPage.evaluate(() => activeProfileId)).toBe('p-b');
+      page.once('dialog', (d) => d.accept('New Name Probe'));
+      await page.click('#authRenameBtn');
+      await expect(page.locator('.signed-in-chip')).toContainText('New Name Probe');
+      await expect.poll(async () => (await getDoc(`visits/${visitId}`))?.reviewer).toBe('New Name Probe');
+      await expect(page.locator(`.visit-item[data-vid="${visitId}"]`)).toContainText('New Name Probe');
+    } finally {
+      await closeSession(page);
+    }
   });
 
   test('cancel returns to the listing without saving anything', async ({ browser, signedInPage }) => {

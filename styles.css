@@ -509,22 +509,6 @@ h1{
   text-transform:uppercase; color: var(--cream-dim);
 }
 
-/* ---- Reviewer profiles ---- */
-.profile-row{
-  display:flex; align-items:center; gap:10px;
-  padding: 11px 4px; border-top: 1px solid var(--hairline);
-  cursor:pointer;
-}
-.profile-row:first-child{ border-top:none; }
-.profile-row .profile-name{ font-weight:700; font-size:14px; flex:1; }
-.profile-row:hover .profile-name{ color: var(--flag-blue-bright); }
-.profile-row.active .profile-name{ color: var(--flag-blue-bright); }
-.profile-active-tag{
-  font-family:'IBM Plex Mono', monospace; font-size:9px; letter-spacing:1.2px; text-transform:uppercase;
-  color: var(--brick-deep); background: var(--flag-blue);
-  border-radius: 999px; padding: 3px 9px;
-}
-
 .gem-badge{
   position:absolute; top:8px; left:10px;
   font-size:14px; z-index:2;
@@ -736,10 +720,7 @@ h1{
   font-size: 12px; color: var(--cream-dim); margin-top: 4px;
 }
 .logged-by b{ color: var(--cream); font-weight: 700; }
-.logged-by a{
-  color: var(--flag-blue-bright); font-size: 11px; margin-left: 8px;
-  text-decoration: underline; cursor: pointer;
-}
+.logged-by-hint{ font-size: 11.5px; color: var(--cream-dim); }
 /* ---- Dish checklist in Log a Visit ---- */
 .dish-checklist{
   max-height: 260px; overflow-y:auto;

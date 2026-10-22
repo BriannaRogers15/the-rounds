@@ -92,7 +92,7 @@ simulation of "someone opened a bookmarked link" anyway.
 ## Test hook mechanism
 
 The app's only test seam is `page.evaluate` into page-global state.
-`restaurants`/`visits`/`profiles` are top-level `let` bindings in app.js (a
+`restaurants`/`visits` are top-level `let` bindings in app.js (a
 classic, non-module script) and do **not** attach to `window` — but
 `saveRestaurants`/`renderAll`/`openDetail`/`openAddRestaurant` etc. are
 top-level function declarations, which do. `page.evaluate` callbacks run in
@@ -154,8 +154,7 @@ map tiles.
 |---|---|
 | Add Listing — Places search (mocked), auto-tagging, chip edits, manual entry, address autocomplete, validation, Chicagoland-only, one billed session per search | `e2e/10-add-listing.spec.js` |
 | Detail modal — links, owner tag add/remove, delete listing (cascade incl. friends' visits), who may remove a visit | `e2e/11-restaurant-detail.spec.js` |
-| Log a Visit — validation, full save, calendar date, new dish joins the menu, reviewer switch, desktop/phone layout, local-time "today" | `e2e/12-log-visit.spec.js` |
-| Reviewer profiles — add/switch/remove, duplicates, device-local | `e2e/14-reviewer-profiles.spec.js` |
+| Log a Visit — validation, full save, calendar date, new dish joins the menu, logged under the account name (rename moves past visits), desktop/phone layout, local-time "today" | `e2e/12-log-visit.spec.js` |
 | Distance sort — location granted / denied / never answers | `e2e/07-sort.spec.js` |
 | Map pin-map fallback when tiles hang | `e2e/05-map-view.spec.js` |
 | Landing page when boundary data can't load | `e2e/02-landing-areas.spec.js` |

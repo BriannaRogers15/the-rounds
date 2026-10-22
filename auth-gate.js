@@ -146,13 +146,12 @@
         await applyChosenPersistence();
         if(mode === 'signup'){
           if(!name){ showError('Enter a name — it\'s shown on your reviews.'); return; }
-          const cred = await createUserWithEmailAndPassword(auth, email, password);
-          await updateProfile(cred.user, { displayName: name });
-          // onAuthStateChanged already fired (with the pre-update user) by
-          // the time updateProfile resolves, so the chip it rendered is
-          // stale — cred.user is the same object updateProfile just
-          // mutated in place, so re-render with it directly.
-          renderSignedInChip(cred.user);
+          if(name.length > MAX_NAME_LENGTH){ showError(`Keep your name under ${MAX_NAME_LENGTH} characters.`); return; }
+          await createUserWithEmailAndPassword(auth, email, password);
+          // onAuthStateChanged already fired (with the not-yet-named user),
+          // so the chip and users/{uid} doc it wrote say the email —
+          // setting the name now fixes both.
+          await window.setRoundsDisplayName(name);
         } else {
           await signInWithEmailAndPassword(auth, email, password);
         }
@@ -191,6 +190,25 @@
       return map[err.code] || (err.message || 'Something went wrong.');
     }
 
+    /* The one place a person's name is set: their Firebase profile (what
+       their visits are logged under), their users/{uid} doc, and the chip.
+       app.js hears 'rounds-name-changed' and moves their past visits to the
+       new name. Used by sign-up, the chip's ✏️ rename, and Log a Visit
+       (for an account that somehow has no name yet). */
+    const MAX_NAME_LENGTH = 80; // firestore.rules caps a visit's reviewer name at 80
+    window.setRoundsDisplayName = async (rawName)=>{
+      const user = auth.currentUser;
+      const name = String(rawName || '').trim();
+      if(!user) throw new Error('Not signed in.');
+      if(!name) throw new Error('Enter a name.');
+      if(name.length > MAX_NAME_LENGTH) throw new Error(`Keep it under ${MAX_NAME_LENGTH} characters.`);
+      await updateProfile(user, { displayName: name });
+      await setDoc(doc(db, 'users', user.uid), { displayName: name }, { merge: true });
+      renderSignedInChip(user);
+      window.dispatchEvent(new CustomEvent('rounds-name-changed', { detail: { uid: user.uid, name } }));
+      return name;
+    };
+
     let signedInChip = null;
     function renderSignedInChip(user){
       if(signedInChip) signedInChip.remove();
@@ -204,11 +222,8 @@
         if(next === null) return; // cancelled
         const name = next.trim();
         if(!name || name === user.displayName) return;
-        try{
-          await updateProfile(user, { displayName: name });
-          await setDoc(doc(db, 'users', user.uid), { displayName: name }, { merge: true });
-          renderSignedInChip(user);
-        }catch(err){ console.error('Could not update name:', err); alert('Could not save that name — try again.'); }
+        try{ await window.setRoundsDisplayName(name); }
+        catch(err){ console.error('Could not update name:', err); alert(err.message.startsWith('Keep it') ? err.message : 'Could not save that name — try again.'); }
       });
     }
 

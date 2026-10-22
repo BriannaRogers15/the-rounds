@@ -15,7 +15,7 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] Address autocomplete for manual-mode listings (`app.js` `#rAddr` suggestions) — also captures `lat`/`lng`, which manual adds never got before (fixed the gap where manual entries were invisible on Map view and couldn't be filed into a neighborhood). Confirmed working live by Brianna (the `includedPrimaryTypes: ['geocode']` → real Table A types fix was correct).
 - [x] Restaurant-name search rebuilt as a custom dropdown, no longer capped at 5 hardcoded Google place types — queries unrestricted, filters client-side against all 60+ types `GOOGLE_TYPE_TAG` knows about (`FOOD_DRINK_TYPES` in `app.js`), so real food/drink businesses (ice cream shops, steakhouses, wine bars, etc.) stop getting force-routed into manual mode with no website/phone/coordinates. Confirmed working live by Brianna.
 - [x] `refresh-listings` Claude Code skill (`.claude/skills/refresh-listings/`) — agent-assisted enrichment pass for missing/stale menus, missing Yelp links, and cuisine/Occasions tag correctness. Reviews seed data directly and live-added restaurants straight from the public Firestore REST API; drafts a batch with evidence for Brianna to review, never auto-applies. Chicago Gems stays fully manual by design.
-- [x] Reviewer profiles (device-local usernames, visits stamped with who logged them)
+- [x] Visits logged under your account name — no separate usernames; renaming yourself (✏️) updates your past visits too
 - [x] Search, sort (name/date/rating/distance), "haven't been yet" filter
 - [x] In-app website popups with "open in new tab" fallback
 - [x] Add Listing via Google Places Autocomplete — search-by-name, food/drink types only; manual fallback ("Can't find it on Google Maps?") on request, or automatically if search is unavailable
@@ -39,7 +39,7 @@ Automated test suite in `tests/` (Playwright + Firebase Emulator Suite, dev-only
 - [x] Sign-up/in/out, wrong-password error, password reset, rename, owner-vs-non-owner UI — `01-auth-gate-access-control` (Phase 2)
 - [x] Migration chain is idempotent across owner boots — `00-boot-and-migrations` (Phase 2)
 - [x] Firestore security rules access-control matrix (users / restaurants / visits, incl. visit shape validation, 55 checks) — `tests/rules/*` (Phase 3)
-- [x] Add Listing (incl. Chicagoland-only and billing sessions), detail-modal writes, Log a Visit (incl. layout and local date), reviewer profiles, distance sort, map + boundary fallbacks — `10`–`14`, `05`, `07`, `02` (Phase 4)
+- [x] Add Listing (incl. Chicagoland-only and billing sessions), detail-modal writes, Log a Visit (incl. layout and local date), account names on visits (incl. rename), distance sort, map + boundary fallbacks — `10`–`13`, `05`, `07`, `02` (Phase 4)
 - [x] CI — `.github/workflows/test.yml` runs the full suite on every push/PR (Phase 5)
 - [ ] Real Google OAuth consent — not automatable, manual-only by design
 

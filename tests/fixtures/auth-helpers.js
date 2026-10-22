@@ -81,10 +81,12 @@ async function createOwnerTestUser() {
   return { uid, email: OWNER_TEST_EMAIL, password: OWNER_TEST_PASSWORD };
 }
 
-async function createRegularTestUser({ email = randomTestEmail('user'), password = 'testpass123' } = {}) {
+// `displayName` gives the account a name (as sign-up or Google would);
+// without one it's the rare unnamed account Log a Visit asks to name.
+async function createRegularTestUser({ email = randomTestEmail('user'), password = 'testpass123', displayName } = {}) {
   const uid = crypto.randomUUID();
-  await batchCreateUser({ localId: uid, email, rawPassword: password, emailVerified: true });
-  return { uid, email, password };
+  await batchCreateUser({ localId: uid, email, rawPassword: password, emailVerified: true, ...(displayName ? { displayName } : {}) });
+  return { uid, email, password, displayName };
 }
 
 module.exports = { getOwnerUid, randomTestEmail, createOwnerTestUser, createRegularTestUser };

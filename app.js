@@ -1,7 +1,5 @@
 let restaurants = [];
 let visits = [];
-let profiles = [];
-let activeProfileId = null;
 let activeCategory = 'All';
 let activeSubTag = null;
 let dataLoaded = false;
@@ -114,16 +112,10 @@ async function loadData(){
     const v = await store.get('visits');
     visits = v && v.value ? JSON.parse(v.value) : [];
   }catch(e){ visits = []; }
-  try{
-    const p = await store.get('profiles');
-    profiles = p && p.value ? JSON.parse(p.value) : [];
-  }catch(e){ profiles = []; }
-  try{
-    const ap = await store.get('activeProfile');
-    activeProfileId = ap && ap.value ? ap.value : null;
-  }catch(e){ activeProfileId = null; }
-  if(activeProfileId && !profiles.some(p => p.id === activeProfileId)) activeProfileId = null;
-  if(!activeProfileId && profiles.length) activeProfileId = profiles[0].id;
+  // Retired: device-local reviewer usernames. Visits are logged under the
+  // signed-in account's name now; drop what older versions left behind.
+  try{ localStorage.removeItem('rounds:profiles'); localStorage.removeItem('rounds:activeProfile'); }
+  catch(e){}
   dataLoaded = true;
 }
 
@@ -152,12 +144,6 @@ async function saveVisits(){
   catch(e){ console.error('Could not save visits', e); }
   await persistSharedLedger('visits', visits);
 }
-async function saveProfiles(){
-  try{
-    await store.set('profiles', JSON.stringify(profiles));
-    await store.set('activeProfile', activeProfileId || '');
-  }catch(e){ console.error('Could not save profiles', e); }
-}
 async function persistSharedLedger(kind, records){
   if(!sharedLedgerReady || !canWriteLedger()) return;
   try{
@@ -177,8 +163,10 @@ function setSharedLedgerStatus(message, isError=false){
     status.classList.toggle('error', isError);
   }
 }
-function activeProfile(){
-  return profiles.find(p => p.id === activeProfileId) || null;
+/* The signed-in person's name, as visits are logged under it — set at
+   sign-up (or by Google), changed with the ✏️ on "Signed in as …". */
+function accountName(){
+  return (window.RoundsFirebase?.auth?.currentUser?.displayName || '').trim();
 }
 
 function visitsFor(restaurantId){
@@ -1374,7 +1362,6 @@ function renderAll(){
   }
   renderAreaBanner();
   renderListingsBackdrop();
-  renderProfileChip();
   updateAccessControls();
   syncHash();
 }
@@ -1392,79 +1379,24 @@ function nameLinkHtml(r, stopProp){
   return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="name-link"${stopProp ? ' onclick="event.stopPropagation()"' : ''}>${escapeHtml(r.name)}</a>`;
 }
 
-/* ---------- Reviewer profiles (device-local usernames) ---------- */
-function renderProfileChip(){
-  const p = activeProfile();
-  $('#profileBtn').textContent = p ? `👤 ${p.name}` : '👤 Set reviewer';
-}
-function openProfiles(){
-  if(!canWriteLedger()) return;
-  $('#modalRoot').innerHTML = `
-    <div class="overlay" id="ovP">
-      <div class="modal">
-        <button class="close" id="closeProf">×</button>
-        <h2>Reviewers</h2>
-        <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Usernames live on this device. New visits get stamped with whoever's active — tap a name to switch.</div>
-        <div id="profileList" style="margin-top:14px;">
-          ${profiles.length ? profiles.map(p=>`
-            <div class="profile-row ${p.id===activeProfileId?'active':''}" data-pid="${p.id}">
-              <span class="profile-name">${escapeHtml(p.name)}</span>
-              ${p.id===activeProfileId ? '<span class="profile-active-tag">reviewing</span>' : ''}
-              <button class="trash" data-del="${p.id}">remove</button>
-            </div>`).join('') : '<div class="no-visits">No reviewers yet — add the first one below.</div>'}
-        </div>
-        <div class="field">
-          <label>New reviewer</label>
-          <div style="display:flex; gap:8px;">
-            <input type="text" id="newProfileName" placeholder="e.g. Brianna">
-            <button class="btn small" id="addProfileBtn">Add</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-  $('#closeProf').addEventListener('click', closeModal);
-  $('#ovP').addEventListener('click', (e)=>{ if(e.target.id==='ovP') closeModal(); });
-  $$('.profile-row', $('#modalRoot')).forEach(row=>{
-    row.addEventListener('click', async ()=>{
-      activeProfileId = row.dataset.pid;
-      await saveProfiles();
-      renderProfileChip();
-      openProfiles();
-    });
+/* Renaming yourself moves your past visits to the new name too, so a
+   review never stays stuck under an old one. (Each visit stores the name it
+   was logged under; only its author may edit it, which is who this is.) */
+window.addEventListener('rounds-name-changed', async (e)=>{
+  const { uid: renamedUid, name } = e.detail || {};
+  if(!renamedUid || !name) return;
+  let changed = false;
+  visits.forEach(v=>{
+    if(v.authorUid === renamedUid && v.reviewer !== name){ v.reviewer = name; changed = true; }
   });
-  $$('#profileList .trash').forEach(btn=>{
-    btn.addEventListener('click', async (e)=>{
-      e.stopPropagation();
-      const p = profiles.find(x=>x.id===btn.dataset.del);
-      if(!p) return;
-      if(!confirm(`Remove reviewer "${p.name}"? Their past visits keep the name.`)) return;
-      profiles = profiles.filter(x=>x.id!==p.id);
-      if(activeProfileId === p.id) activeProfileId = profiles.length ? profiles[0].id : null;
-      await saveProfiles();
-      renderProfileChip();
-      openProfiles();
-    });
-  });
-  const addProfile = async ()=>{
-    const name = $('#newProfileName').value.trim();
-    if(!name) return;
-    if(profiles.some(p => p.name.toLowerCase() === name.toLowerCase())){
-      alert('That username is already taken on this device.');
-      return;
-    }
-    const p = { id: uid(), name };
-    profiles.push(p);
-    activeProfileId = p.id;
-    await saveProfiles();
-    renderProfileChip();
-    openProfiles();
-  };
-  $('#addProfileBtn').addEventListener('click', addProfile);
-  $('#newProfileName').addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); addProfile(); }
-  });
-}
+  if(changed){
+    await saveVisits();
+    renderAll();
+    // A listing window that's open shows the visits too — redraw it.
+    const openDetailId = $('#modalRoot .modal[data-detail-id]')?.dataset.detailId;
+    if(openDetailId) openDetail(openDetailId);
+  }
+});
 
 function canWriteLedger(){
   return sharedLedgerReady && !!(window.RoundsFirebase && window.RoundsFirebase.auth && window.RoundsFirebase.auth.currentUser) && !window.roundsGuestMode;
@@ -1477,8 +1409,6 @@ function updateAccessControls(){
   document.body.classList.toggle('guest-mode', guest);
   const notice = $('#guestNotice');
   if(notice) notice.hidden = !guest;
-  const profileButton = $('#profileBtn');
-  if(profileButton) profileButton.hidden = guest;
   const addButton = $('#addRestaurantBtn');
   if(addButton) addButton.hidden = !canManageListings();
 }
@@ -1858,7 +1788,7 @@ function openDetail(id){
   const datalist = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov">
-      <div class="modal">
+      <div class="modal" data-detail-id="${escapeHtml(id)}">
         <button class="close" id="closeDet">×</button>
         <div class="detail-head">
           <div>
@@ -2005,11 +1935,11 @@ function openLogVisit(restaurantId){
         <h2>Log a Visit</h2>
         <div class="log-grid">
         <div class="log-who">
-        ${profiles.length
-          ? `<div class="logged-by">Logging as <b>${escapeHtml((activeProfile() || profiles[0]).name)}</b><a href="#" id="switchReviewer">switch</a></div>`
+        ${accountName()
+          ? `<div class="logged-by">Logging as <b>${escapeHtml(accountName())}</b> <span class="logged-by-hint">— change your name with the ✏️ next to it, top right</span></div>`
           : `<div class="field">
-              <label>Pick your username <span style="text-transform:none;">(first visit only — future visits are stamped automatically)</span></label>
-              <input type="text" id="vReviewerNew" placeholder="e.g. Brianna">
+              <label>Your name <span style="text-transform:none;">(shown on your reviews — saved to your account)</span></label>
+              <input type="text" id="vName" maxlength="80" placeholder="e.g. Brianna">
             </div>`}
         </div>
         <div class="field log-date">
@@ -2128,44 +2058,19 @@ function openLogVisit(restaurantId){
   $('#cancelLog').addEventListener('click', ()=> openDetail(restaurantId));
   $('#ov2').addEventListener('click', (e)=>{ if(e.target.id==='ov2') openDetail(restaurantId); });
 
-  // "Logging as X — switch": swaps the line for a reviewer select in place,
-  // without losing anything already entered in the form.
-  const switchLink = $('#switchReviewer');
-  if(switchLink) switchLink.addEventListener('click', (e)=>{
-    e.preventDefault();
-    e.target.closest('.logged-by').outerHTML = `
-      <div class="field">
-        <label>Reviewer</label>
-        <select id="vReviewer">${profiles.map(p=>`<option value="${p.id}" ${p.id===activeProfileId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
-      </div>`;
-  });
-
   $('#saveLog').addEventListener('click', async (e)=>{
     if(!canWriteLedger()) return;
     if(!rating){ alert('Pick a rating.'); return; }
     if(wouldReturn === null){ alert('Let us know if you\'d go back.'); return; }
-    let reviewerName;
-    const reviewerSelect = $('#vReviewer');
-    const reviewerNew = $('#vReviewerNew');
-    if(reviewerSelect){
-      const p = profiles.find(x=>x.id===reviewerSelect.value);
-      reviewerName = p ? p.name : '';
-      if(p && p.id !== activeProfileId){
-        activeProfileId = p.id;
-        await saveProfiles();
-        renderProfileChip();
-      }
-    } else if(reviewerNew){
-      reviewerName = reviewerNew.value.trim();
-      if(!reviewerName){ alert('Pick a reviewer username.'); return; }
-      const p = { id: uid(), name: reviewerName };
-      profiles.push(p);
-      activeProfileId = p.id;
-      await saveProfiles();
-      renderProfileChip();
-    } else {
-      reviewerName = (activeProfile() || profiles[0]).name;
+    // An account with no name yet (rare: an older email sign-up) names
+    // itself here, once — saved to the account, not this device.
+    const nameInput = $('#vName');
+    if(nameInput){
+      if(!nameInput.value.trim()){ alert('Add your name — it\'s shown on your reviews.'); return; }
+      try{ await window.setRoundsDisplayName(nameInput.value); }
+      catch(err){ alert(err.message || 'Could not save your name — try again.'); return; }
     }
+    const reviewerName = accountName();
     const date = selectedDate || today;
     const checkedDishes = $$('.dish-check input:checked', $('#modalRoot')).map(cb => cb.dataset.dish);
     const typedDish = $('#vAte').value.trim();
@@ -2183,7 +2088,6 @@ function openLogVisit(restaurantId){
 }
 
 $('#addRestaurantBtn').addEventListener('click', openAddRestaurant);
-$('#profileBtn').addEventListener('click', openProfiles);
 $('#railToggle').addEventListener('click', openRail);
 $('#railScrim').addEventListener('click', closeRail);
 
