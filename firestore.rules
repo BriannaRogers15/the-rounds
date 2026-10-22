@@ -23,16 +23,51 @@ service cloud.firestore {
       // Brianna can update anything. The on-request enrichment script runs
       // with the Admin SDK via a service-account key, which bypasses these
       // rules entirely, so its writes are unaffected by this line.
+      // A friend's menu write may only append (never drop dishes), and must
+      // stay a list of sane size — every visitor's page renders it.
       allow update: if isOwner() ||
         (request.auth != null &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['menu']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['menu']) &&
+         request.resource.data.menu is list &&
+         request.resource.data.menu.size() <= 1000 &&
+         request.resource.data.menu.size() >= resource.data.get('menu', []).size());
+    }
+
+    // Every visit is rendered on every visitor's page, so its shape is
+    // checked here — one malformed doc (say, no date) would otherwise break
+    // the listings for everyone. Mirrors what app.js's Log a Visit writes.
+    function isValidVisit(visitId) {
+      let d = request.resource.data;
+      return d.keys().hasAll(['restaurantId', 'date', 'rating', 'wouldReturn', 'authorUid'])
+        && d.keys().hasOnly(['id', 'restaurantId', 'date', 'ate', 'rating', 'wouldReturn',
+                             'notes', 'reviewer', 'authorUid', 'createdAt'])
+        && (!('id' in d) || d.id == visitId)
+        && d.restaurantId is string
+        && exists(/databases/$(database)/documents/restaurants/$(d.restaurantId))
+        && d.date is string && d.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && d.rating is int && d.rating >= 1 && d.rating <= 5
+        && d.wouldReturn is bool
+        // Older visits stored `ate` as one free-typed string.
+        && (!('ate' in d) || (d.ate is list && d.ate.size() <= 100) || (d.ate is string && d.ate.size() <= 500))
+        && (!('notes' in d) || (d.notes is string && d.notes.size() <= 2000))
+        && (!('reviewer' in d) || (d.reviewer is string && d.reviewer.size() <= 80))
+        && (!('createdAt' in d) || d.createdAt is number);
     }
 
     match /visits/{visitId} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.authorUid == request.auth.uid;
-      // Only the visit's own author can edit or delete it.
-      allow update, delete: if request.auth != null && resource.data.authorUid == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.authorUid == request.auth.uid
+        && isValidVisit(visitId);
+      // Only the visit's own author can edit it.
+      allow update: if request.auth != null
+        && resource.data.authorUid == request.auth.uid
+        && request.resource.data.authorUid == resource.data.authorUid
+        && isValidVisit(visitId);
+      // The author can delete it; so can Brianna — deleting a listing takes
+      // its visits with it, and it's how spam or a bad review gets removed.
+      allow delete: if request.auth != null
+        && (resource.data.authorUid == request.auth.uid || isOwner());
     }
   }
 }

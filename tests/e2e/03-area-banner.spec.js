@@ -61,9 +61,9 @@ test.describe('Listings backdrop outline', () => {
       expect(areaCount).toBeGreaterThan(0);
       expect(areaCount).toBeLessThan(allCount);
       // Outline only — no fill, so it blends into the background.
-      expect(await backdropPath(guestPage).evaluate((p) => getComputedStyle(p).fill)).toBe('none');
+      await expect(backdropPath(guestPage)).toHaveCSS('fill', 'none');
       // Never intercepts clicks meant for the cards.
-      expect(await guestPage.locator('#listingsBackdrop').evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
+      await expect(guestPage.locator('#listingsBackdrop')).toHaveCSS('pointer-events', 'none');
     } finally {
       await resetLedger(guestPage, { restaurantIds: probes.map((r) => r.id) });
     }

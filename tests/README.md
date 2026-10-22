@@ -138,23 +138,24 @@ requires it to get past "Loading…").
 | Migration chain idempotency (owner boot, run twice) | `e2e/00-boot-and-migrations.spec.js` |
 
 **Phase 3 (done):** Firestore security rules, run in Node (no browser) via
-`@firebase/rules-unit-testing` against the real `firestore.rules`. 36
+`@firebase/rules-unit-testing` against the real `firestore.rules`. 55
 tests across `rules/users`, `rules/restaurants`, `rules/visits`. Each
 restriction is checked as an allowed/denied pair on the same document, so
 a rule that's too loose *or* too strict fails a test. Includes the
-easy-to-assume-wrong case: the owner has **no** override on other people's
-`users` docs or `visits` (author-only edit/delete, no exceptions).
+easy-to-assume-wrong cases: the owner has **no** override on other people's
+`users` docs, and can **delete** but never **edit** someone else's visit.
+Every visit write is shape-checked (required fields, types, sizes, the
+listing must exist), and a friend's menu write may only append.
 
 **Phase 4 (done):** write flows, plus mocked Google Places / geolocation /
 map tiles.
 
 | Feature | Spec file |
 |---|---|
-| Add Listing — Places search (mocked), auto-tagging, chip edits, manual entry, address autocomplete, validation | `e2e/10-add-listing.spec.js` |
-| Detail modal — links, owner tag add/remove, delete listing (cascade), who may remove a visit | `e2e/11-restaurant-detail.spec.js` |
-| Log a Visit — validation, full save, calendar date, new dish joins the menu, reviewer switch | `e2e/12-log-visit.spec.js` |
+| Add Listing — Places search (mocked), auto-tagging, chip edits, manual entry, address autocomplete, validation, Chicagoland-only, one billed session per search | `e2e/10-add-listing.spec.js` |
+| Detail modal — links, owner tag add/remove, delete listing (cascade incl. friends' visits), who may remove a visit | `e2e/11-restaurant-detail.spec.js` |
+| Log a Visit — validation, full save, calendar date, new dish joins the menu, reviewer switch, desktop/phone layout, local-time "today" | `e2e/12-log-visit.spec.js` |
 | Reviewer profiles — add/switch/remove, duplicates, device-local | `e2e/14-reviewer-profiles.spec.js` |
-| Backup export and owner restore (incl. bad files) | `e2e/15-backup-restore.spec.js` |
 | Distance sort — location granted / denied / never answers | `e2e/07-sort.spec.js` |
 | Map pin-map fallback when tiles hang | `e2e/05-map-view.spec.js` |
 | Landing page when boundary data can't load | `e2e/02-landing-areas.spec.js` |

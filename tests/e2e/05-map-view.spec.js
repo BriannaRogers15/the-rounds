@@ -70,7 +70,7 @@ test.describe('Map view', () => {
       await listingsPage.route(/tile\.openstreetmap\.org/, (route) => route.abort());
       await listingsPage.click('[data-view="map"]');
       await expect(listingsPage.locator('#customMap .map-pin')).toHaveCount(probes.length, { timeout: 10000 });
-      await expect(listingsPage.locator('.map-note', { hasText: "Live map tiles aren't reachable" })).toBeVisible();
+      await expect(listingsPage.locator('.map-note', { hasText: "The street map couldn't load" })).toBeVisible();
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }
@@ -88,7 +88,7 @@ test.describe('Map view: offline fallback', () => {
       await listingsPage.click('[data-view="map"]');
       // The app waits 2.5s for any tile to load before swapping.
       await expect(listingsPage.locator('#customMap .map-pin')).toHaveCount(probes.length, { timeout: 10000 });
-      await expect(listingsPage.locator('.map-note', { hasText: "Live map tiles aren't reachable" })).toBeVisible();
+      await expect(listingsPage.locator('.map-note', { hasText: "The street map couldn't load" })).toBeVisible();
       await expect(listingsPage.locator('#leafletMapEl')).toHaveCount(0);
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
@@ -102,7 +102,7 @@ test.describe('Map view: offline fallback', () => {
       await listingsPage.route(/tile\.openstreetmap\.org/, (route) => route.abort());
       await listingsPage.click('[data-view="map"]');
       await expect(listingsPage.locator('#customMap .map-pin')).toHaveCount(probes.length, { timeout: 10000 });
-      await expect(listingsPage.locator('.map-note', { hasText: "Live map tiles aren't reachable" })).toBeVisible();
+      await expect(listingsPage.locator('.map-note', { hasText: "The street map couldn't load" })).toBeVisible();
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }

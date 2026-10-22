@@ -7,7 +7,8 @@ const { createRulesEnv, dbs, seed } = require('./rules-env');
 //   create/delete:  owner only
 //   update:         owner (any field), OR any signed-in user if the write
 //                   changes *only* the `menu` field (the "something I ate
-//                   that isn't listed" path from Log a Visit)
+//                   that isn't listed" path from Log a Visit) — and that
+//                   menu write may only append, as a list of sane size
 let testEnv;
 const existing = { name: 'Probe Pizza Place', categories: ['Pizza'], address: 'Chicago, IL', menu: ['Cheese Slice'] };
 
@@ -47,6 +48,23 @@ test.describe('restaurants: create', () => {
 test.describe('restaurants: update', () => {
   test('a non-owner can add a dish (update touching only `menu`)', async () => {
     await assertSucceeds(dbs(testEnv).alice.doc('restaurants/r1').update({ menu: ['Cheese Slice', 'Garlic Knots'] }));
+  });
+
+  test('a non-owner can add a dish to a listing that had no menu yet', async () => {
+    await seed(testEnv, 'restaurants/r2', { name: 'No Menu Yet', categories: ['American'] });
+    await assertSucceeds(dbs(testEnv).alice.doc('restaurants/r2').update({ menu: ['Burger'] }));
+  });
+
+  test('a non-owner cannot remove dishes from the menu', async () => {
+    await assertFails(dbs(testEnv).alice.doc('restaurants/r1').update({ menu: [] }));
+  });
+
+  test('a non-owner cannot replace the menu with something that is not a list', async () => {
+    await assertFails(dbs(testEnv).alice.doc('restaurants/r1').update({ menu: 'gotcha' }));
+  });
+
+  test('a non-owner cannot grow the menu past the size cap', async () => {
+    await assertFails(dbs(testEnv).alice.doc('restaurants/r1').update({ menu: Array.from({ length: 1001 }, (_, i) => `dish ${i}`) }));
   });
 
   test('a non-owner cannot change the name', async () => {

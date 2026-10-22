@@ -1,6 +1,6 @@
 const { test, expect, openOwnerPage, closeSession } = require('../fixtures/app-fixture');
 const { resetLedger } = require('../fixtures/ledger-helpers');
-const { installPlacesMock, SAMPLE_PLACES } = require('../fixtures/places-mock');
+const { installPlacesMock, SAMPLE_PLACES, OUT_OF_AREA_PLACES } = require('../fixtures/places-mock');
 const { getDoc } = require('../fixtures/firestore-seed');
 const { clearFirestore } = require('../fixtures/emulator-admin');
 
@@ -118,10 +118,103 @@ test.describe('Add Listing: Google Places search path', () => {
   });
 });
 
+test.describe('Add Listing: Chicagoland only', () => {
+  test('suggestions outside Illinois never show', async ({ browser }) => {
+    const { page } = await openAddModal(browser, { places: [...SAMPLE_PLACES, ...OUT_OF_AREA_PLACES] });
+    try {
+      await page.fill('#rName', 'Mock Hoosier');
+      await page.waitForFunction(() => window.__placesMockCalls.some((c) => c.input === 'Mock Hoosier'));
+      await expect(page.locator('#nameSuggestions li')).toHaveCount(0);
+    } finally {
+      await closeSession(page);
+    }
+  });
+
+  test('picking an Illinois spot outside the seven metro counties is refused', async ({ browser }) => {
+    const { page, dialogs } = await openAddModal(browser, { places: [...SAMPLE_PLACES, ...OUT_OF_AREA_PLACES] });
+    try {
+      await page.fill('#rName', 'Mock Rockford');
+      await page.locator('#nameSuggestions li').first().click();
+      await expect.poll(() => dialogs.at(-1)).toContain('outside Chicagoland');
+      await expect(page.locator('#rName')).toHaveValue('');
+      await page.click('#saveAdd');
+      expect(dialogs.at(-1)).toContain('Search and select a restaurant');
+      expect(await findSaved(page, 'Mock Rockford Diner')).toBeNull();
+    } finally {
+      await closeSession(page);
+    }
+  });
+
+  test('a manual address picked outside Chicagoland is refused', async ({ browser }) => {
+    const { page, dialogs } = await openAddModal(browser, {
+      addresses: [{ id: 'mock-addr-rockford', formattedAddress: '9 Mock Ln, Rockford, IL 61101, USA', lat: 42.27, lng: -89.09, state: 'IL', county: 'Winnebago', types: ['street_address'] }],
+    });
+    try {
+      await page.click('#manualToggle');
+      await page.fill('#rAddr', '9 Mock');
+      await page.locator('#addrSuggestions li').first().click();
+      await expect.poll(() => dialogs.at(-1)).toContain('outside Chicagoland');
+      await expect(page.locator('#rAddr')).toHaveValue('');
+    } finally {
+      await closeSession(page);
+    }
+  });
+
+  test('a hand-typed address must name a known Chicagoland town', async ({ browser }) => {
+    const { page, dialogs } = await openAddModal(browser);
+    try {
+      await page.click('#manualToggle');
+      await page.fill('#rName', 'Downstate Probe');
+      await page.fill('#rAddr', '1 Main St, Springfield, IL 62701');
+      await page.fill('#addTagInput', 'American');
+      await page.press('#addTagInput', 'Enter');
+      await page.click('#saveAdd');
+      expect(dialogs.at(-1)).toContain('only covers Chicago and its suburbs');
+      expect(await findSaved(page, 'Downstate Probe')).toBeNull();
+    } finally {
+      await closeSession(page);
+    }
+  });
+});
+
+test.describe('Add Listing: billing', () => {
+  test('one search is one billed session: its keystrokes share a token, and a pick starts a new one', async ({ browser }) => {
+    const { page } = await openAddModal(browser);
+    try {
+      await page.locator('#rName').pressSequentially('Mock Ta', { delay: 400 }); // pauses long enough to fire several requests
+      await expect(page.locator('#nameSuggestions li')).toHaveCount(1);
+      const first = await page.evaluate(() => window.__placesMockCalls.map((c) => c.token));
+      expect(first.length).toBeGreaterThan(1);
+      expect(new Set(first).size).toBe(1);
+      expect(first[0]).not.toBeNull();
+
+      await page.locator('#nameSuggestions li').first().click();
+      await expect(page.locator('#filingUnder .tag-pill')).toHaveCount(1);
+      await page.fill('#rName', 'Mock Taq');
+      await expect.poll(() => page.evaluate(() => window.__placesMockCalls.length)).toBeGreaterThan(first.length);
+      const next = await page.evaluate(() => window.__placesMockCalls.at(-1).token);
+      expect(next).not.toBe(first[0]);
+    } finally {
+      await closeSession(page);
+    }
+  });
+
+  test('opening New Listing makes no search request by itself', async ({ browser }) => {
+    const { page } = await openAddModal(browser);
+    try {
+      await page.waitForTimeout(1000);
+      expect(await page.evaluate(() => window.__placesMockCalls.length)).toBe(0);
+    } finally {
+      await closeSession(page);
+    }
+  });
+});
+
 test.describe('Add Listing: manual entry path', () => {
-  test('a blocked Places API shows the warning and opens manual entry automatically', async ({ browser }) => {
+  test('a blocked Places API shows the warning and opens manual entry on the first search', async ({ browser }) => {
     const { page } = await openAddModal(browser, { mode: 'blocked' });
     try {
+      await page.fill('#rName', 'Anything');
       await expect(page.locator('#placesNotice')).toBeVisible();
       await expect(page.locator('#manualAddrField')).toBeVisible();
       await expect(page.locator('#manualToggle')).toBeHidden();
@@ -162,15 +255,15 @@ test.describe('Add Listing: manual entry path', () => {
     }
   });
 
-  test('a free-typed manual address saves without coordinates', async ({ browser }) => {
+  test('a free-typed address in a known Chicagoland town saves without coordinates', async ({ browser }) => {
     const { page } = await openAddModal(browser, { mode: 'blocked' });
     let saved = null;
     try {
-      // The failed startup probe switches to manual mode asynchronously and
+      // The failed first search switches to manual mode asynchronously and
       // clears the chips when it does — wait for it, or a tag added first
       // gets wiped.
-      await expect(page.locator('#manualAddrField')).toBeVisible();
       await page.fill('#rName', 'Typed Address Spot');
+      await expect(page.locator('#manualAddrField')).toBeVisible();
       await page.fill('#rAddr', '1 Nowhere Rd, Chicago, IL');
       await page.fill('#addTagInput', 'American');
       await page.press('#addTagInput', 'Enter');

@@ -63,7 +63,8 @@ function sortRestaurants(list){
   if(sortBy === 'name'){
     arr.sort((a,b)=> sortName(a.name).localeCompare(sortName(b.name)));
   } else if(sortBy === 'date'){
-    arr.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
+    // Curated listings share one date (CURATED_ADDED_AT), so ties fall back to A–Z.
+    arr.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0) || sortName(a.name).localeCompare(sortName(b.name)));
   } else if(sortBy === 'rating'){
     arr.sort((a,b)=>{
       const ra = avgRating(visitsFor(a.id));
@@ -180,65 +181,21 @@ function activeProfile(){
   return profiles.find(p => p.id === activeProfileId) || null;
 }
 
-/* ---------- Backup / restore ----------
-   Everything lives in this browser's localStorage — one "Clear Website
-   Data" would erase every visit ever logged. Export writes the whole
-   ledger to a JSON file; restore replaces this device's data with it. */
-function exportBackup(){
-  const payload = {
-    app: 'the-rounds',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    restaurants, visits, profiles, activeProfileId,
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `the-rounds-backup-${new Date().toISOString().slice(0,10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=> URL.revokeObjectURL(a.href), 5000);
-}
-async function importBackup(file){
-  if(!canManageListings()){
-    alert('Only the ledger manager can restore a backup.');
-    return;
-  }
-  let data;
-  try{ data = JSON.parse(await file.text()); }
-  catch(e){ alert("That file isn't readable as a backup."); return; }
-  if(data.app !== 'the-rounds' || !Array.isArray(data.restaurants) || !Array.isArray(data.visits)){
-    alert("That file doesn't look like a The Rounds backup.");
-    return;
-  }
-  const summary = `${data.restaurants.length} listings, ${data.visits.length} visits, ${(data.profiles||[]).length} reviewer${(data.profiles||[]).length===1?'':'s'}`;
-  if(!confirm(`Restore this backup (${summary})? It replaces everything currently on this device.`)) return;
-  restaurants = data.restaurants;
-  visits = data.visits;
-  profiles = Array.isArray(data.profiles) ? data.profiles : [];
-  activeProfileId = data.activeProfileId && profiles.some(p=>p.id===data.activeProfileId)
-    ? data.activeProfileId
-    : (profiles[0] ? profiles[0].id : null);
-  await saveRestaurants();
-  await saveVisits();
-  await saveProfiles();
-  // Backups from before the area fields existed still restore cleanly.
-  await assignAreas();
-  if(hoodGeo) await assignNeighborhoods(hoodGeo);
-  renderAll();
-}
-
 function visitsFor(restaurantId){
-  return visits.filter(v => v.restaurantId === restaurantId).sort((a,b)=> b.date.localeCompare(a.date));
+  return visits.filter(v => v.restaurantId === restaurantId).sort((a,b)=> String(b.date || '').localeCompare(String(a.date || '')));
 }
 function avgRating(list){
   if(!list.length) return null;
   return list.reduce((s,v)=>s+v.rating,0) / list.length;
 }
 function starString(n){
-  const full = Math.round(n);
+  const full = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
   return '★'.repeat(full) + '☆'.repeat(5-full);
+}
+/* Today as YYYY-MM-DD in the visitor's own time zone. toISOString() is UTC,
+   which in Chicago turns every evening after 7pm into tomorrow. */
+function localDateStr(dt = new Date()){
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 }
 function fmtDate(d){
   const dt = new Date(d + 'T00:00:00');
@@ -353,7 +310,7 @@ function ateList(v){
   if(Array.isArray(v.ate)) return v.ate;
   return v.ate ? [v.ate] : [];
 }
-function menuOf(r){ return r.menu || []; }
+function menuOf(r){ return Array.isArray(r.menu) ? r.menu : []; }
 /* Groups a spot's stored dishes under the curated section headers
    (Appetizers, Entrees, Drinks...) from MENU_LOOKUP. Grouping happens at
    render time, so stored menus never need migrating: dishes the curation
@@ -1133,7 +1090,7 @@ function renderRelativeMap(el, withCoords, noteHtml, wasFallback){
   el.innerHTML = `
     <div class="map-wrap"><div class="custom-map" id="customMap">${pins}</div></div>
     <div class="map-legend"><span class="legend-dot visited"></span> Visited <span class="legend-dot unvisited"></span> Not yet</div>
-    ${wasFallback ? `<div class="map-note">Live map tiles aren't reachable in this preview, so this shows relative positions instead. Download the file and open it in your browser for the full street map.</div>` : ''}
+    ${wasFallback ? `<div class="map-note">The street map couldn't load (you may be offline), so this shows each spot's position relative to the others instead.</div>` : ''}
     ${noteHtml}
   `;
 
@@ -1344,22 +1301,12 @@ function renderAreasPage(){
     </div>
     <div class="data-row">
       <span>Shared ledger <span id="ledgerStatus" role="status" class="${sharedLedgerStatusError ? 'error' : ''}">${sharedLedgerStatus}</span></span>
-      <button class="link-btn" id="exportBtn">⤓ Export backup</button>
-      ${canManageListings() ? '<button class="link-btn" id="importBtn">⤒ Restore backup</button>' : ''}
-      <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
     </div>
   `;
 
   $('#browseAllBtn').addEventListener('click', ()=>{ activeArea = null; currentPage = 'listings'; renderAll(); });
   const addFromAreas = $('#addFromAreas');
   if(addFromAreas) addFromAreas.addEventListener('click', openAddRestaurant);
-  $('#exportBtn').addEventListener('click', exportBackup);
-  const importBtn = $('#importBtn');
-  if(importBtn) importBtn.addEventListener('click', ()=> $('#importFile').click());
-  $('#importFile').addEventListener('change', (e)=>{
-    if(e.target.files[0]) importBackup(e.target.files[0]);
-    e.target.value = '';
-  });
   $$('.area-block', el).forEach(block=>{
     block.addEventListener('click', ()=> openArea({ type: block.dataset.type, name: block.dataset.name }));
   });
@@ -1565,6 +1512,41 @@ window.addEventListener('rounds-signed-in', ()=>{
   reloadIfOwnerSignedInAfterBoot();
 });
 
+/* ---------- Chicagoland service area ----------
+   The Rounds covers Chicago and its suburbs only: the seven Illinois
+   counties of the Chicago metro (the CMAP region). New Listing refuses
+   anything outside them — no Indiana or Wisconsin border towns, no
+   downstate. */
+const CHICAGOLAND_COUNTIES = new Set(['Cook', 'DuPage', 'Kane', 'Kendall', 'Lake', 'McHenry', 'Will']);
+const CHICAGOLAND_AREA_TEXT = 'Chicago and its suburbs (Cook, DuPage, Kane, Kendall, Lake, McHenry and Will counties)';
+// Those counties' bounding box — the Indiana line on the east, Wisconsin on
+// the north — so Google's suggestions start out local. It's a rectangle, so
+// the real check is the county (placeInChicagoland below).
+const CHICAGOLAND_BOUNDS = { north: 42.495, south: 41.19, east: -87.524, west: -88.71 };
+// Towns a hand-typed address may name without a Google match to verify it.
+const KNOWN_CHICAGOLAND_TOWNS = new Set(['chicago', ...Object.keys(CITY_REGION).map(t => t.toLowerCase())]);
+// Google suggestion text ends "…, Chicago, IL, USA"; anything else is out.
+const ILLINOIS_SUGGESTION = /,\s*IL\b/;
+
+/* Is a Google Places result inside the service area? Decided by its county
+   when Google gives one (it does for U.S. street addresses), otherwise by
+   being an Illinois address inside the bounding box. */
+function placeInChicagoland(components, lat, lng){
+  const part = (type) => (components || []).find(c => (c.types || []).includes(type));
+  const state = part('administrative_area_level_1');
+  if(!state || state.shortText !== 'IL') return false;
+  const county = part('administrative_area_level_2');
+  if(county) return CHICAGOLAND_COUNTIES.has(String(county.longText || '').replace(/\s+County$/i, ''));
+  const b = CHICAGOLAND_BOUNDS;
+  return lat != null && lng != null && lat <= b.north && lat >= b.south && lng <= b.east && lng >= b.west;
+}
+/* A hand-typed address (no Google match) counts only if it names a known
+   Chicagoland town — there's nothing else to verify it against. */
+function typedAddressInChicagoland(address){
+  const town = parseTown(address);
+  return !!town && KNOWN_CHICAGOLAND_TOWNS.has(town.toLowerCase());
+}
+
 function openAddRestaurant(){
   if(!canManageListings()){
     alert('Only the ledger manager can add listings.');
@@ -1577,9 +1559,7 @@ function openAddRestaurant(){
         <h2>New Listing</h2>
         <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Search it, tap it, done — address, website, and cuisines fill themselves.</div>
         <div class="places-notice" id="placesNotice" style="display:none;">
-          ⚠️ Google Maps is rejecting requests from this address (API key referrer restrictions),
-          so search is unavailable — add the key's allowed referrers in Google Cloud Console.
-          Manual entry is open below.
+          ⚠️ Restaurant search isn't available right now, so manual entry is open below.
         </div>
         <div class="field">
           <label>Name <span style="text-transform:none;">(search for the restaurant)</span></label>
@@ -1614,9 +1594,6 @@ function openAddRestaurant(){
   let manualMode = false;
   let pendingTags = [];
   let manualAddressPlace = null;
-  // Chicagoland metro bounding box (city + suburbs), so results outside the area don't show up.
-  // Shared by both the restaurant-name search below and the manual-mode address autocomplete.
-  const CHICAGOLAND = { north: 42.3, south: 41.2, east: -87.3, west: -88.4 };
   /* Editable guide chips, live in the modal before saving. Google's
      suggestions land here first, but the final say is the user's — so a
      spot never has to be saved untagged, manual mode included. */
@@ -1671,13 +1648,40 @@ function openAddRestaurant(){
   let nameDebounce = null;
   let placesBlocked = false;
   const nameList = $('#nameSuggestions');
+  // The Places library, loaded once per window. Loading it is free; only
+  // the requests below are billed.
+  let placesLibrary = null;
+  const loadPlaces = async ()=> placesLibrary || (placesLibrary = await google.maps.importLibrary('places'));
+  // Google bills every keystroke's suggestions plus the final pick as ONE
+  // request when they share a session token. One token per search, retired
+  // once a result is picked (that pick's fetchFields closes the session).
+  let nameSession = null;
+  /* A blocked or misconfigured key fails every request, which would
+     otherwise look like a dead search box — say so and open manual entry. */
+  function placesUnavailable(err){
+    console.warn('Restaurant search unavailable — opening manual entry.', err);
+    if(placesBlocked) return;
+    placesBlocked = true;
+    $('#placesNotice').style.display = '';
+    enableManualMode();
+  }
   function hideNameSuggestions(){
     nameList.style.display = 'none';
     nameList.innerHTML = '';
   }
   async function selectPlace(prediction){
     const place = prediction.toPlace();
-    await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType'] });
+    await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType','addressComponents'] });
+    nameSession = null;
+    hideNameSuggestions();
+    const lat = place.location ? place.location.lat() : null;
+    const lng = place.location ? place.location.lng() : null;
+    if(!placeInChicagoland(place.addressComponents, lat, lng)){
+      selectedPlace = null;
+      $('#rName').value = '';
+      alert(`${place.displayName || 'That spot'} is outside Chicagoland — The Rounds only covers ${CHICAGOLAND_AREA_TEXT}.`);
+      return;
+    }
     // Cuisines map themselves from Google's classification, then land
     // in the Filing-under chips where they can be adjusted before saving.
     const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
@@ -1689,8 +1693,7 @@ function openAddRestaurant(){
     selectedPlace = {
       name: place.displayName || '',
       address: place.formattedAddress || '',
-      lat: place.location ? place.location.lat() : null,
-      lng: place.location ? place.location.lng() : null,
+      lat, lng,
       phone: place.internationalPhoneNumber || null,
       website: place.websiteURI || null,
       placeId: place.id || null,
@@ -1698,7 +1701,6 @@ function openAddRestaurant(){
     $('#rName').value = selectedPlace.name;
     pendingTags = tags;
     renderFilingUnder();
-    hideNameSuggestions();
   }
   $('#rName').addEventListener('input', ()=>{
     selectedPlace = null; // any edit invalidates a previously picked match
@@ -1707,14 +1709,17 @@ function openAddRestaurant(){
     if(manualMode || placesBlocked || q.length < 3){ hideNameSuggestions(); return; }
     nameDebounce = setTimeout(async ()=>{
       try{
-        const { AutocompleteSuggestion } = await google.maps.importLibrary('places');
+        const { AutocompleteSuggestion, AutocompleteSessionToken } = await loadPlaces();
+        if(!nameSession) nameSession = new AutocompleteSessionToken();
         const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
           input: q,
-          locationRestriction: CHICAGOLAND,
+          locationRestriction: CHICAGOLAND_BOUNDS,
+          sessionToken: nameSession,
         });
         if($('#rName').value.trim() !== q) return; // stale response, input moved on
         const picks = (suggestions || [])
           .filter(s => (s.placePrediction.types || []).some(t => FOOD_DRINK_TYPES.has(t)))
+          .filter(s => ILLINOIS_SUGGESTION.test(s.placePrediction.text.text))
           .slice(0, 6);
         if(!picks.length){ hideNameSuggestions(); return; }
         nameList.innerHTML = picks.map((s, i)=>`<li data-i="${i}">${escapeHtml(s.placePrediction.text.text)}</li>`).join('');
@@ -1722,41 +1727,20 @@ function openAddRestaurant(){
         $$('li', nameList).forEach((li, i)=>{
           li.addEventListener('mousedown', (ev)=>{
             ev.preventDefault(); // fires before #rName's blur, so the pick isn't lost
-            selectPlace(picks[i].placePrediction);
+            selectPlace(picks[i].placePrediction).catch(placesUnavailable);
           });
         });
       }catch(err){
-        console.warn('Restaurant search unavailable — manual entry still works.', err);
         hideNameSuggestions();
+        placesUnavailable(err);
       }
     }, 300);
   });
   $('#rName').addEventListener('blur', ()=> setTimeout(hideNameSuggestions, 150));
 
-  // Probe one real request up front: a referrer-blocked or misconfigured
-  // API key fails every suggestion, which would otherwise look like a
-  // dead search box only after someone starts typing. Surface it loudly
-  // and open manual entry right away instead.
-  (async ()=>{
-    try{
-      const { AutocompleteSuggestion } = await google.maps.importLibrary('places');
-      try{
-        await AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: 'pizza',
-          locationRestriction: CHICAGOLAND,
-        });
-      }catch(probeErr){
-        console.warn('Places requests are blocked for this origin.', probeErr);
-        placesBlocked = true;
-        $('#placesNotice').style.display = '';
-        enableManualMode();
-      }
-    } catch(err){
-      console.warn('Places Autocomplete unavailable — falling back to manual entry.', err);
-      placesBlocked = true;
-      enableManualMode();
-    }
-  })();
+  // If the Maps script itself can't load, go straight to manual entry.
+  // (Loading the library costs nothing — no search request is made.)
+  loadPlaces().catch(placesUnavailable);
 
   /* Address autocomplete for manual mode only — the Places-search path
      already gets its address straight from the selected restaurant, so
@@ -1766,6 +1750,7 @@ function openAddRestaurant(){
      that additionally captures lat/lng, which manual entries never got
      before and which the map view / neighborhood filing both need. */
   let addrDebounce = null;
+  let addrSession = null;
   const addrList = $('#addrSuggestions');
   function hideAddrSuggestions(){
     addrList.style.display = 'none';
@@ -1778,17 +1763,21 @@ function openAddRestaurant(){
     if(q.length < 4){ hideAddrSuggestions(); return; }
     addrDebounce = setTimeout(async ()=>{
       try{
-        const { AutocompleteSuggestion } = await google.maps.importLibrary('places');
+        const { AutocompleteSuggestion, AutocompleteSessionToken } = await loadPlaces();
+        if(!addrSession) addrSession = new AutocompleteSessionToken();
         const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
           input: q,
-          locationRestriction: CHICAGOLAND,
+          locationRestriction: CHICAGOLAND_BOUNDS,
           // 'geocode' was a legacy Autocomplete-widget filter value — the
           // Places API (New) used here only accepts real Table A types.
           includedPrimaryTypes: ['street_address', 'route', 'premise', 'subpremise'],
+          sessionToken: addrSession,
         });
         if($('#rAddr').value.trim() !== q) return; // stale response, input moved on
-        if(!suggestions || !suggestions.length){ hideAddrSuggestions(); return; }
-        const picks = suggestions.slice(0, 6);
+        const picks = (suggestions || [])
+          .filter(s => ILLINOIS_SUGGESTION.test(s.placePrediction.text.text))
+          .slice(0, 6);
+        if(!picks.length){ hideAddrSuggestions(); return; }
         addrList.innerHTML = picks.map((s, i)=>`<li data-i="${i}">${escapeHtml(s.placePrediction.text.text)}</li>`).join('');
         addrList.style.display = '';
         $$('li', addrList).forEach((li, i)=>{
@@ -1796,10 +1785,20 @@ function openAddRestaurant(){
             ev.preventDefault(); // fires before #rAddr's blur, so the pick isn't lost
             const prediction = picks[i].placePrediction;
             const place = prediction.toPlace();
-            await place.fetchFields({ fields: ['formattedAddress', 'location'] });
-            $('#rAddr').value = place.formattedAddress || prediction.text.text;
-            manualAddressPlace = place.location ? { lat: place.location.lat(), lng: place.location.lng() } : null;
+            await place.fetchFields({ fields: ['formattedAddress', 'location', 'addressComponents'] });
+            addrSession = null;
             hideAddrSuggestions();
+            const lat = place.location ? place.location.lat() : null;
+            const lng = place.location ? place.location.lng() : null;
+            if(!placeInChicagoland(place.addressComponents, lat, lng)){
+              $('#rAddr').value = '';
+              manualAddressPlace = null;
+              alert(`That address is outside Chicagoland — The Rounds only covers ${CHICAGOLAND_AREA_TEXT}.`);
+              return;
+            }
+            $('#rAddr').value = place.formattedAddress || prediction.text.text;
+            // Verified in the service area; coordinates when Google has them.
+            manualAddressPlace = { lat, lng };
           });
         });
       }catch(err){
@@ -1818,6 +1817,10 @@ function openAddRestaurant(){
       alert(manualMode ? 'Name and address are required. (If it\'s not on Google Maps, the full address is on you.)' : 'Search and select a restaurant, or switch to manual entry.');
       return;
     }
+    if(manualMode && !manualAddressPlace && !typedAddressInChicagoland(address)){
+      alert(`The Rounds only covers ${CHICAGOLAND_AREA_TEXT}. Pick the address from the suggestions so it can be checked, or include a Chicagoland town (e.g. "123 Main St, Oak Park, IL").`);
+      return;
+    }
     if(!pendingTags.length){
       alert('Add at least one guide before saving — type one into "Filing under" below.');
       return;
@@ -1830,7 +1833,7 @@ function openAddRestaurant(){
       if(selectedPlace.website) record.website = selectedPlace.website;
       if(selectedPlace.placeId) record.mapsUrl = `https://www.google.com/maps/place/?q=place_id:${selectedPlace.placeId}`;
     }
-    if(manualMode && manualAddressPlace){
+    if(manualMode && manualAddressPlace && manualAddressPlace.lat != null){
       record.lat = manualAddressPlace.lat;
       record.lng = manualAddressPlace.lng;
     }
@@ -1899,7 +1902,7 @@ function openDetail(id){
                   <div class="visit-meta-small">Would return: ${v.wouldReturn ? 'Yes' : 'No'}</div>
                   ${v.notes ? `<div class="visit-meta-small">Notes: ${escapeHtml(v.notes)}</div>` : ''}
                 </div>
-                ${canLogVisit && v.authorUid === currentUid ? `<button class="trash" data-vid="${v.id}">remove</button>` : ''}
+                ${(canLogVisit && v.authorUid === currentUid) || canEditListing ? `<button class="trash" data-vid="${v.id}">remove</button>` : ''}
               </div>
             `).join('') : '<div class="no-visits">No visits logged yet.</div>'}
           </div>
@@ -1962,10 +1965,15 @@ function openDetail(id){
   }
   $$('.trash', $('#modalRoot')).forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
-      if(!canWriteLedger() || visits.find(v=>v.id===e.target.dataset.vid)?.authorUid !== currentUid){
+      // Authors remove their own visits; the owner can remove any (spam,
+      // or a review that doesn't belong) — firestore.rules allows the same.
+      const target = visits.find(v=>v.id===e.target.dataset.vid);
+      const own = target?.authorUid === currentUid;
+      if(!canWriteLedger() || !(own || canManageListings())){
         alert('You can only remove your own visits.');
         return;
       }
+      if(!own && !confirm(`Remove ${target.reviewer ? target.reviewer + "'s" : 'this'} visit? This can't be undone.`)) return;
       const vid = e.target.dataset.vid;
       visits = visits.filter(v=>v.id!==vid);
       await saveVisits();
@@ -1982,7 +1990,7 @@ function openLogVisit(restaurantId){
   }
   let rating = 0;
   let wouldReturn = null;
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateStr();
   let selectedDate = today;
   let calViewYear = parseInt(today.slice(0,4));
   let calViewMonth = parseInt(today.slice(5,7)) - 1;
@@ -1992,16 +2000,19 @@ function openLogVisit(restaurantId){
 
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov2">
-      <div class="modal">
+      <div class="modal log-modal">
         <button class="close" id="closeLog">×</button>
         <h2>Log a Visit</h2>
+        <div class="log-grid">
+        <div class="log-who">
         ${profiles.length
           ? `<div class="logged-by">Logging as <b>${escapeHtml((activeProfile() || profiles[0]).name)}</b><a href="#" id="switchReviewer">switch</a></div>`
           : `<div class="field">
               <label>Pick your username <span style="text-transform:none;">(first visit only — future visits are stamped automatically)</span></label>
               <input type="text" id="vReviewerNew" placeholder="e.g. Brianna">
             </div>`}
-        <div class="field">
+        </div>
+        <div class="field log-date">
           <label>Date</label>
           <button type="button" class="date-display" id="dateDisplay">${fmtDate(selectedDate)}</button>
           <div class="mini-cal" id="miniCal">
@@ -2013,29 +2024,30 @@ function openLogVisit(restaurantId){
             <div class="mini-cal-grid" id="calGrid"></div>
           </div>
         </div>
-        <div class="field">
+        <div class="field log-ate">
           <label>What did you eat? <span style="text-transform:none;">(check everything you had)</span></label>
           <div id="dishArea">
             ${menu.length ? dishChecklistHtml(rest) : ''}
           </div>
           <input type="text" id="vAte" placeholder="+ something not on the menu list">
         </div>
-        <div class="field">
+        <div class="field log-rating">
           <label>Rating</label>
           <div class="star-pick" id="starPick">
             ${[1,2,3,4,5].map(n=>`<span data-n="${n}">★</span>`).join('')}
           </div>
         </div>
-        <div class="field">
+        <div class="field log-return">
           <label>Would you go back?</label>
           <div class="toggle-pair">
             <button class="yes" id="wrYes">Yes</button>
             <button class="no" id="wrNo">No</button>
           </div>
         </div>
-        <div class="field">
+        <div class="field log-notes">
           <label>Notes <span style="text-transform:none;">(modifications, tips — optional)</span></label>
           <textarea id="vNotes" placeholder="e.g. sub fries for rice, no onions, ask for Jesse"></textarea>
+        </div>
         </div>
         <div class="modal-actions">
           <button class="btn secondary" id="cancelLog">Cancel</button>
@@ -2053,7 +2065,7 @@ function openLogVisit(restaurantId){
     const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
     const daysInMonth = new Date(calViewYear, calViewMonth+1, 0).getDate();
     let html = ['S','M','T','W','T','F','S'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
-    for(let i=0;i<firstDay;i++) html += `<div class="cal-cell empty"></div>`;
+    for(let i=0;i<firstDay;i++) html += `<div class="cal-cell cal-blank"></div>`;
     for(let day=1; day<=daysInMonth; day++){
       const dStr = `${calViewYear}-${String(calViewMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
       const isSel = dStr === selectedDate;
@@ -2061,7 +2073,7 @@ function openLogVisit(restaurantId){
       html += `<button type="button" class="cal-cell${isSel?' selected':''}${isToday?' today':''}" data-date="${dStr}">${day}</button>`;
     }
     grid.innerHTML = html;
-    $$('.cal-cell:not(.empty)', grid).forEach(cell=>{
+    $$('.cal-cell:not(.cal-blank)', grid).forEach(cell=>{
       cell.addEventListener('click', ()=>{
         selectedDate = cell.dataset.date;
         $('#dateDisplay').textContent = fmtDate(selectedDate);
@@ -2219,6 +2231,12 @@ $$('#viewOpts button').forEach(btn=>{
 });
 
 
+/* The curated guide listings predate the live app, so they all carry this
+   one fixed "added" date — stamping them with the moment they were seeded
+   made every curated spot look brand new (all 248 under Recently Added, and
+   Date Added sorting meaningless). Only listings added through New Listing
+   carry their real add time. `seeded: true` marks a curated record. */
+const CURATED_ADDED_AT = Date.UTC(2026, 6, 1); // July 1, 2026
 async function seedIfNeeded(){
   let added = false;
   SEED_RESTAURANTS.forEach(s=>{
@@ -2227,11 +2245,26 @@ async function seedIfNeeded(){
       if(addTagToRestaurant(existing.id, s.category)) added = true;
       if(!existing.address && s.address){ existing.address = s.address; added = true; }
     } else {
-      restaurants.push({ id: uid(), name: s.name, categories: [s.category], address: s.address || '', createdAt: Date.now() });
+      restaurants.push({ id: uid(), name: s.name, categories: [s.category], address: s.address || '', createdAt: CURATED_ADDED_AT, seeded: true });
       added = true;
     }
   });
   if(added) await saveRestaurants();
+}
+
+/* Migration: curated listings seeded before CURATED_ADDED_AT existed got
+   the seeding moment as their createdAt. Re-date them once (the `seeded`
+   flag marks it done). Safe to re-run. */
+async function redateCuratedListings(){
+  const curatedNames = new Set(SEED_RESTAURANTS.map(s => s.name.toLowerCase()));
+  let changed = false;
+  restaurants.forEach(r=>{
+    if(r.seeded || !curatedNames.has(r.name.toLowerCase())) return;
+    if(!r.createdAt || r.createdAt > CURATED_ADDED_AT) r.createdAt = CURATED_ADDED_AT;
+    r.seeded = true;
+    changed = true;
+  });
+  if(changed) await saveRestaurants();
 }
 
 
@@ -2483,6 +2516,7 @@ async function waitForFirebase(){
   if(owner || !firebase){
     await migrateCategories();
     await seedIfNeeded();
+    await redateCuratedListings();
     await enrichAddresses();
     await removeClosedPlaces();
     await renameCuisineTags();

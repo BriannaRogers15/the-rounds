@@ -17,6 +17,11 @@ async function signInViaForm(page, { email, password }) {
 // below) — Playwright's per-test `page` fixture only ever gives you one.
 async function openAppPage(context) {
   const page = await context.newPage();
+  // Kept for waitForAppReady's timeout report (ledger-helpers.js).
+  page.__roundsConsole = [];
+  page.on('console', (m) => page.__roundsConsole.push(`[${((Date.now() % 100000) / 1000).toFixed(1)}s ${m.type()}] ${m.text().slice(0, 300)}`));
+  page.on('pageerror', (e) => page.__roundsConsole.push(`[pageerror] ${e.message}`));
+  page.on('framenavigated', (f) => { if (f === page.mainFrame()) page.__roundsConsole.push(`[${((Date.now() % 100000) / 1000).toFixed(1)}s nav] ${f.url()}`); });
   await page.addInitScript(() => {
     window.__ROUNDS_TEST__ = { useEmulators: true };
     if ('serviceWorker' in navigator) {
@@ -59,10 +64,11 @@ async function openGuestPage(context) {
 // `contextSetup(context)` runs before the first navigation — the place to
 // install init scripts (e.g. the Google Places mock, which must be defined
 // before index.html's Maps bootstrap loader runs) or grant permissions.
+// `contextOptions` go to browser.newContext (viewport, timezoneId, …).
 // `creds` signs in as a specific existing user instead of a fresh one
 // (e.g. the same account on two "devices").
-async function openOwnerPage(browser, { contextSetup } = {}) {
-  const context = await browser.newContext();
+async function openOwnerPage(browser, { contextSetup, contextOptions } = {}) {
+  const context = await browser.newContext(contextOptions);
   if (contextSetup) await contextSetup(context);
   const page = await openAppPage(context);
   // Signing in as the owner on a page that loaded signed-out makes the app
@@ -79,8 +85,8 @@ async function openOwnerPage(browser, { contextSetup } = {}) {
   return page;
 }
 
-async function openSignedInPage(browser, { contextSetup, creds } = {}) {
-  const context = await browser.newContext();
+async function openSignedInPage(browser, { contextSetup, contextOptions, creds } = {}) {
+  const context = await browser.newContext(contextOptions);
   if (contextSetup) await contextSetup(context);
   const page = await openAppPage(context);
   await signInViaForm(page, creds || await createRegularTestUser());

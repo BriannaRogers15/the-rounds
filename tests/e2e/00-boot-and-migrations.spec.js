@@ -86,6 +86,31 @@ test.describe('Boot sequence / owner startup', () => {
     }
   });
 
+  // Regression: curated listings were stamped with the moment they were
+  // seeded, so on the live site all 248 showed under "Recently Added" and
+  // "Date Added" sorting did nothing. They now share one fixed curated date;
+  // ones already uploaded with the seeding time get re-dated once.
+  test('curated listings carry the fixed curated date, not the upload time — including already-uploaded ones', async ({ browser }) => {
+    const ownerPage = await openOwnerPage(browser);
+    try {
+      const curatedName = await ownerPage.evaluate(() => SEED_RESTAURANTS[0].name);
+      const id = await ownerPage.evaluate((n) => restaurants.find((r) => r.name === n).id, curatedName);
+      // Simulate a curated listing uploaded before the fix: seeding-time
+      // createdAt, no `seeded` marker.
+      await seedDoc(`restaurants/${id}`, { ...(await getDoc(`restaurants/${id}`)), createdAt: Date.now(), seeded: null });
+      await ownerPage.reload();
+      await waitForAppReady(ownerPage);
+      const CURATED = await ownerPage.evaluate(() => CURATED_ADDED_AT);
+      await expect.poll(async () => (await getDoc(`restaurants/${id}`))?.createdAt).toBe(CURATED);
+      expect((await getDoc(`restaurants/${id}`)).seeded).toBe(true);
+      const recent = await ownerPage.evaluate(() => restaurants.filter((r) => Date.now() - r.createdAt < 30 * 864e5).length);
+      expect(recent).toBe(0);
+      await waitForBootSettled(ownerPage);
+    } finally {
+      await closeSession(ownerPage);
+    }
+  });
+
   // Regression: migrations edit existing records in place (assignAreas sets
   // r.town / r.region on the object). syncSharedLedger used to diff against
   // a cache holding those same objects, so in-place edits never reached

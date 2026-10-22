@@ -612,20 +612,25 @@ h1{
 }
 .mini-cal-head button:hover{ border-color: var(--flag-blue-dim); }
 .mini-cal-grid{
-  display:grid; grid-template-columns: repeat(7, 1fr); gap:3px;
+  /* minmax(0, …), not plain 1fr: a 1fr track won't shrink below its
+     content's minimum. (The blank cells before the 1st used to be classed
+     `empty` — which is also the big padded "No listings" message style —
+     so their padding blew every column out to ~122px and the calendar
+     spilled out of the window. They're `cal-blank` now.) */
+  display:grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap:3px;
 }
 .cal-dow{
   font-family:'IBM Plex Mono', monospace; font-size:9.5px; color: var(--cream-dim);
   text-align:center; padding-bottom:4px; letter-spacing:0.5px;
 }
 .cal-cell{
-  aspect-ratio: 1; display:flex; align-items:center; justify-content:center;
+  height:34px; min-width:0; display:flex; align-items:center; justify-content:center;
   background: transparent; border:1px solid transparent; border-radius:6px;
   color: var(--cream); font-family:'Manrope', sans-serif; font-size:12px;
   cursor:pointer; transition: all .12s ease;
 }
-.cal-cell.empty{ cursor:default; }
-.cal-cell:not(.empty):hover{ background: var(--brick-deep); border-color: var(--flag-blue-dim); }
+.cal-cell.cal-blank{ cursor:default; }
+.cal-cell:not(.cal-blank):hover{ background: var(--brick-deep); border-color: var(--flag-blue-dim); }
 .cal-cell.today{ border-color: var(--flag-blue-dim); color: var(--flag-blue-bright); }
 
 /* ---- Manual-mode address autocomplete ---- */
@@ -742,9 +747,9 @@ h1{
   background: var(--brick-deep);
   padding: 5px; margin-bottom: 8px;
   /* Two columns so a complete menu stays scannable; three when big. */
-  display:grid; grid-template-columns:1fr 1fr; gap:2px 6px;
+  display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:2px 6px;
 }
-.dish-checklist.cols3{ grid-template-columns:1fr 1fr 1fr; }
+.dish-checklist.cols3{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .dish-group-title{
   grid-column: 1 / -1;
   font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:1.2px;
@@ -758,6 +763,51 @@ h1{
   transition: background .12s ease;
 }
 .dish-check:hover{ background: rgba(243,237,224,0.05); }
+
+/* ---- Log a Visit: roomier everywhere, two columns on desktop ---- */
+.log-modal .logged-by{ font-size:14px; }
+.log-modal .field{ margin-top:18px; }
+.log-modal .field > label{ font-size:12px; margin-bottom:8px; }
+.log-modal .field input, .log-modal .field textarea, .log-modal .field select,
+.log-modal .date-display{ font-size:15px; padding:12px 14px; }
+.log-modal .field textarea{ min-height:90px; }
+.log-modal .dish-check{ font-size:14.5px; padding:8px 10px; }
+.log-modal .dish-group-title{ font-size:11px; }
+.log-modal .star-pick{ font-size:36px; gap:8px; }
+.log-modal .toggle-pair button{ font-size:14.5px; padding:12px; }
+.log-modal .mini-cal{ padding:12px 14px 14px; }
+.log-modal .mini-cal-head span{ font-size:15px; }
+.log-modal .mini-cal-head button{ width:30px; height:30px; font-size:15px; }
+.log-modal .cal-dow{ font-size:11px; }
+.log-modal .cal-cell{ font-size:14px; height:42px; }
+.log-modal .modal-actions .btn{ font-size:14.5px; padding:11px 22px; }
+
+@media (min-width: 900px){
+  .modal.log-modal{ max-width: 900px; padding: 30px 34px 32px; }
+  .log-modal h2{ font-size: 28px; }
+  /* Grid areas, not reordered markup: phones keep the natural top-to-bottom
+     order; desktop puts the menu checklist in its own full-height column. */
+  .log-grid{
+    display:grid; grid-template-columns: minmax(0, 370px) minmax(0, 1fr); column-gap: 32px;
+    grid-template-areas: "who ate" "date ate" "rating ate" "return ate" "notes ate";
+    grid-template-rows: auto auto auto auto 1fr; align-items:start;
+  }
+  .log-who{ grid-area: who; }
+  .log-date{ grid-area: date; }
+  .log-ate{ grid-area: ate; }
+  .log-rating{ grid-area: rating; }
+  .log-return{ grid-area: return; }
+  .log-notes{ grid-area: notes; }
+  /* There's room, so the calendar is simply always there — no extra click. */
+  .log-modal .mini-cal{ display:block; box-shadow:none; }
+  .log-modal .dish-checklist{ max-height: 600px; }
+}
+
+/* Phones: three menu columns are too narrow to read or tap — use two. */
+@media (max-width: 620px){
+  .dish-checklist.cols3{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .menu-groups.cols3{ columns:2; }
+}
 .dish-check:has(input:checked){ background: rgba(79,168,222,0.14); }
 .dish-check input{ accent-color: var(--flag-blue); width:15px; height:15px; margin:0; flex-shrink:0; }
 .visit-item{

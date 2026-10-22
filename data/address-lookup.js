@@ -657,5 +657,7 @@ const ADDRESS_LOOKUP = [
   // Name as it exists in Brianna's storage (added via Places search).
   {name:"Chixter - 95th & Jeffery", website:"https://www.facebook.com/people/Chixter-95th-Jeffery/61590825741438/"},
   {name:"Shrimp Stop 2", address:"101 E 47th St, Chicago, IL 60653", lat:41.8091778, lng:-87.6226135, website:"https://www.shrimp-stop.com/", yelp:"https://www.yelp.com/biz/shrimp-stop-chicago-3"},
-  {name:"MiMi's Tacos & French Fries", address:"1155 S Jefferson St, Chicago, IL 60607", phone:"+1 312-929-3775", website:"https://tacosandfries.com"},
+  // Not its own place on Google Maps (search returns MiMi's Craft Kitchen),
+  // so the coordinates come from the U.S. Census geocoder for this address.
+  {name:"MiMi's Tacos & French Fries", address:"1155 S Jefferson St, Chicago, IL 60607", lat:41.8678064, lng:-87.6421317, phone:"+1 312-929-3775", website:"https://tacosandfries.com"},
 ];

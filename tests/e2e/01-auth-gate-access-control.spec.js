@@ -43,9 +43,11 @@ test.describe('Access control: guest mode', () => {
     await expect(guestPage.locator('#addRestaurantBtn')).toBeHidden();
   });
 
-  test('Restore backup is hidden for guests; Export backup is not', async ({ guestPage }) => {
-    await expect(guestPage.locator('#importBtn')).toHaveCount(0);
-    await expect(guestPage.locator('#exportBtn')).toBeVisible();
+  // Backup/restore was retired: everything lives in the shared ledger, and
+  // a restore would have tried to replace it wholesale.
+  test('there are no backup export/restore controls', async ({ guestPage }) => {
+    await expect(guestPage.locator('#ledgerStatus')).toBeVisible();
+    await expect(guestPage.locator('#importBtn, #exportBtn, #importFile')).toHaveCount(0);
   });
 
   test('a guest can open a listing\'s detail modal but sees no Log Visit or Delete Listing buttons', async ({ listingsPage }) => {
@@ -148,14 +150,9 @@ test.describe('Access control: owner vs. signed-in non-owner', () => {
     await expect(signedInPage.locator('#addFromAreas')).toHaveCount(0);
   });
 
-  test('owner sees Restore backup (and Export)', async ({ ownerPage }) => {
-    await expect(ownerPage.locator('#importBtn')).toBeVisible();
-    await expect(ownerPage.locator('#exportBtn')).toBeVisible();
-  });
-
-  test('a non-owner does not see Restore backup, but does see Export', async ({ signedInPage }) => {
-    await expect(signedInPage.locator('#importBtn')).toHaveCount(0);
-    await expect(signedInPage.locator('#exportBtn')).toBeVisible();
+  test('not even the owner gets backup export/restore controls', async ({ ownerPage }) => {
+    await expect(ownerPage.locator('#ledgerStatus')).toBeVisible();
+    await expect(ownerPage.locator('#importBtn, #exportBtn, #importFile')).toHaveCount(0);
   });
 
   test('a non-owner can log a visit but cannot edit listing tags or delete the listing', async ({ browser, signedInPage }) => {

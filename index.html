@@ -185,9 +185,14 @@ if('serviceWorker' in navigator){
         });
       });
     }).catch(()=>{ /* offline support unavailable, app still works online */ });
+    // A first-ever visit has no controller yet; the new worker's
+    // clients.claim() then fires controllerchange too. Reloading for that
+    // would bounce a brand-new visitor back to the sign-in screen a second
+    // in (and wipe anything typed) — only an actual update should reload.
+    const hadController = !!navigator.serviceWorker.controller;
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-      if(refreshing) return;
+      if(!hadController || refreshing) return;
       refreshing = true;
       window.location.reload();
     });

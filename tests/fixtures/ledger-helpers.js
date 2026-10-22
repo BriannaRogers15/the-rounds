@@ -12,7 +12,44 @@
 // flag-setting listener before navigation, so this is race-safe regardless
 // of how fast the app boots relative to when this is called.
 async function waitForAppReady(page) {
-  await page.waitForFunction(() => window.__roundsAppReady === true, null, { timeout: 15000 });
+  try {
+    await page.waitForFunction(() => window.__roundsAppReady === true, null, { timeout: 15000 });
+  } catch (error) {
+    throw new Error(`${error.message}\n${await describeBootState(page)}`);
+  }
+}
+
+// When the app never reports ready, say how far its startup got (and what
+// it logged) instead of a bare timeout — see openAppPage's console capture.
+async function describeBootState(page) {
+  let state;
+  try {
+    state = await page.evaluate(() => ({
+      readyState: document.readyState,
+      firebaseLoaded: !!window.RoundsFirebase,
+      signedInUid: window.RoundsFirebase?.auth?.currentUser?.uid ?? null,
+      dataLoaded: typeof dataLoaded !== 'undefined' ? dataLoaded : 'n/a',
+      sharedLedgerReady: typeof sharedLedgerReady !== 'undefined' ? sharedLedgerReady : 'n/a',
+      ledgerStatus: typeof sharedLedgerStatus !== 'undefined' ? sharedLedgerStatus : 'n/a',
+      restaurants: typeof restaurants !== 'undefined' ? restaurants.length : 'n/a',
+    }));
+  } catch (e) {
+    state = { evaluateFailed: e.message };
+  }
+  try {
+    state.authStateReady = await page.evaluate(() => Promise.race([
+      window.RoundsFirebase.authStateReady.then(() => 'resolved'),
+      new Promise((r) => setTimeout(() => r('still pending'), 1000)),
+    ]));
+  } catch (e) { state.authStateReady = `probe failed: ${e.message}`; }
+  // Is the emulator itself answering? (Node side, bypassing the page.)
+  const t0 = Date.now();
+  try {
+    const res = await fetch('http://127.0.0.1:8080/v1/projects/the-rounds-fc02a/databases/(default)/documents/restaurants?pageSize=1', { signal: AbortSignal.timeout(5000) });
+    state.emulatorRest = `${res.status} in ${Date.now() - t0}ms`;
+  } catch (e) { state.emulatorRest = `failed after ${Date.now() - t0}ms: ${e.message}`; }
+  const logs = (page.__roundsConsole || []).slice(-15).join('\n  ');
+  return `Boot state: ${JSON.stringify(state)}\nLast console messages:\n  ${logs || '(none)'}`;
 }
 
 // Waits for 'rounds-boot-settled': boundary data loaded and, on a boot that

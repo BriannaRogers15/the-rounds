@@ -10,9 +10,8 @@ A personal restaurant guide tracker for Chicago and the Chicagoland area. Log vi
 - **Shared ledger** — restaurants and visits sync through Firestore across devices. Guests can browse the public ledger; signed-in users can log visits, and listing management is owner-only.
 - **Multi-tag cuisines** with two-level grouping (e.g. Bars → Sports Bars, Tiki Bars, Cocktail Bars), search, sort (name/date/rating/distance), and a "haven't been yet" filter.
 - **In-app website popups** — restaurant sites open in a large overlay with an always-available "Open in new tab" fallback.
-- **Restaurant-only autocomplete** — new listings come from Google Places, restricted to food spots inside Chicagoland; manual entry requires a full address.
+- **Chicagoland only** — new listings must be in Chicago or its suburbs (Cook, DuPage, Kane, Kendall, Lake, McHenry or Will county). Google Places search shows Illinois food spots only and checks the county of whatever you pick; manual entry needs an address picked from the suggestions or a known Chicagoland town.
 - **Grid and street-map views** per area (Leaflet loads lazily, only when the Map view is opened).
-- **Backup & restore** — export the whole ledger to a JSON file and restore it on any device (landing page, bottom row).
 - Installable as a home-screen app (PWA); the app shell, fonts, Leaflet, and boundary data all work offline after first use.
 
 ## Running locally
@@ -37,6 +36,6 @@ The app itself needs nothing beyond a browser and a static file server. An optio
 Just sign in. The curated listings, menus, addresses and Yelp links ship in `data/*.js`; on the owner's first sign-in the page reloads once and uploads them to the shared ledger, after which friends and guests see them. Visits anyone logs are written straight to the shared ledger and show up for everyone live.
 
 ## Data storage
-Restaurants and visits are shared in Firestore. The browser keeps a `localStorage` cache (keys prefixed `rounds:`) for faster startup and offline browsing; changes require an available shared connection. On first startup, the ledger owner's existing local data is uploaded if the shared collections are empty. **Export backup** remains available from the landing page. Reviewer display profiles stay device-local. Neighborhood/suburb boundary files are fetched once (Chicago Data Portal + Census TIGERweb) and kept in the Cache API for offline use.
+Restaurants and visits are shared in Firestore. The browser keeps a `localStorage` cache (keys prefixed `rounds:`) for faster startup and offline browsing; changes require an available shared connection. On first startup, the ledger owner's existing local data is uploaded if the shared collections are empty. Reviewer display profiles stay device-local. Neighborhood/suburb boundary files are fetched once (Chicago Data Portal + Census TIGERweb) and kept in the Cache API for offline use.
 
-Firestore rules allow public reads of restaurants and visits so guest browsing works. Writes remain authenticated: only the ledger owner can create/delete restaurants or edit restaurant metadata, while signed-in reviewers can add their own visits and update menus with dishes they have logged. Deploy updated rules with `firebase deploy --only firestore:rules` when the Firebase CLI is configured for this project.
+Firestore rules allow public reads of restaurants and visits so guest browsing works. Writes remain authenticated: only the ledger owner can create/delete restaurants or edit restaurant metadata, while signed-in reviewers can add their own visits (shape-checked: required fields, types, size limits, and the listing must exist) and append dishes to a menu. The owner can also delete anyone's visit — deleting a listing removes its visits, and it's how spam gets cleared. Deploy updated rules with `firebase deploy --only firestore:rules` when the Firebase CLI is configured for this project.

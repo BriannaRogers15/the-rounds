@@ -1,4 +1,4 @@
-const { test, expect, openOwnerPage } = require('../fixtures/app-fixture');
+const { test, expect, openOwnerPage, openSignedInPage, closeSession } = require('../fixtures/app-fixture');
 const { injectRestaurants, injectVisits, resetLedger, openListingDetail } = require('../fixtures/ledger-helpers');
 const { getOwnerUid } = require('../fixtures/auth-helpers');
 const { seedDoc, deleteDoc, getDoc } = require('../fixtures/firestore-seed');
@@ -122,6 +122,32 @@ test.describe('Detail modal: owner edits', () => {
     await expect.poll(() => getDoc(`restaurants/${r.id}`)).toBeNull();
     await expect.poll(() => getDoc(`visits/${v.id}`)).toBeNull();
   });
+
+  // Regression: the delete cascade used to include friends' visits, which
+  // the rules wouldn't let the owner delete — the whole save was rejected,
+  // and every later save retried the same deletes, so nothing synced again
+  // until a reload.
+  test("deleting a listing also removes friends' visits, and later saves still sync", async ({ ownerPage }) => {
+    const r = probe('delete-friends');
+    const later = probe('delete-friends-later');
+    const friendVisit = visit('delete-friends-v', r.id, 'a-friend', { reviewer: 'A Friend' });
+    await injectRestaurants(ownerPage, [r]);
+    await seedDoc(`visits/${friendVisit.id}`, friendVisit);
+    await expect.poll(() => ownerPage.evaluate((vid) => visits.some((x) => x.id === vid), friendVisit.id)).toBe(true);
+    try {
+      await openListing(ownerPage, r.id);
+      ownerPage.once('dialog', (d) => d.accept());
+      await ownerPage.click('#deleteRestBtn');
+      await expect.poll(() => getDoc(`restaurants/${r.id}`)).toBeNull();
+      await expect.poll(() => getDoc(`visits/${friendVisit.id}`)).toBeNull();
+      expect(await ownerPage.evaluate(() => document.querySelector('#ledgerStatus')?.textContent ?? 'Shared')).not.toBe('Sync issue');
+
+      await injectRestaurants(ownerPage, [later]);
+      await expect.poll(() => getDoc(`restaurants/${later.id}`)).not.toBeNull();
+    } finally {
+      await resetLedger(ownerPage, { restaurantIds: [r.id, later.id] });
+    }
+  });
 });
 
 test.describe('Detail modal: removing visits', () => {
@@ -141,23 +167,41 @@ test.describe('Detail modal: removing visits', () => {
     }
   });
 
-  test("nobody — not even the owner — gets a remove button on someone else's visit", async ({ ownerPage }) => {
+  test("a signed-in friend gets no remove button on someone else's visit", async ({ browser, ownerPage }) => {
     const r = probe('visit-foreign');
     const v = visit('visit-foreign-v', r.id, 'someone-else', { reviewer: 'Someone Else' });
     await injectRestaurants(ownerPage, [r]);
-    // Arranged server-side: the owner's page isn't allowed to write a visit
-    // attributed to someone else (see tests/rules/visits.rules.spec.js).
+    // Arranged server-side: no page may write a visit attributed to
+    // someone else (see tests/rules/visits.rules.spec.js).
+    await seedDoc(`visits/${v.id}`, v);
+    const friendPage = await openSignedInPage(browser);
+    try {
+      await openListing(friendPage, r.id);
+      const item = friendPage.locator(`.visit-item[data-vid="${v.id}"]`);
+      await expect(item).toBeVisible();
+      await expect(item.locator('.trash')).toHaveCount(0);
+    } finally {
+      await closeSession(friendPage);
+      await deleteDoc(`visits/${v.id}`);
+      await expect.poll(() => ownerPage.evaluate((vid) => visits.some((x) => x.id === vid), v.id)).toBe(false);
+      await resetLedger(ownerPage, { restaurantIds: [r.id] });
+    }
+  });
+
+  test("the owner can remove someone else's visit (spam / moderation), after confirming", async ({ ownerPage }) => {
+    const r = probe('visit-moderate');
+    const v = visit('visit-moderate-v', r.id, 'a-spammer', { reviewer: 'Spammer' });
+    await injectRestaurants(ownerPage, [r]);
     await seedDoc(`visits/${v.id}`, v);
     try {
       await openListing(ownerPage, r.id);
       const item = ownerPage.locator(`.visit-item[data-vid="${v.id}"]`);
       await expect(item).toBeVisible();
-      await expect(item.locator('.trash')).toHaveCount(0);
+      ownerPage.once('dialog', (d) => d.accept());
+      await item.locator('.trash').click();
+      await expect(ownerPage.locator(`.visit-item[data-vid="${v.id}"]`)).toHaveCount(0);
+      await expect.poll(() => getDoc(`visits/${v.id}`)).toBeNull();
     } finally {
-      // Remove the foreign visit server-side first; the owner's page can't
-      // delete it, and resetLedger would otherwise try to.
-      await deleteDoc(`visits/${v.id}`);
-      await expect.poll(() => ownerPage.evaluate((vid) => visits.some((x) => x.id === vid), v.id)).toBe(false);
       await resetLedger(ownerPage, { restaurantIds: [r.id] });
     }
   });
