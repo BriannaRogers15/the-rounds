@@ -113,13 +113,16 @@ test.describe('One way in per email', () => {
   // Measured on the Auth Emulator: Firebase itself refuses a second
   // password sign-up for an email (EMAIL_EXISTS), but a Google sign-in with
   // the same email lands on the password account. The app refuses that.
+  // A Google sign-in through the app's own Firebase Auth instance (the
+  // same module the app loads), with an emulator Google credential — what
+  // "Continue with Google" ends in, without driving the emulator's popup
+  // page (which hangs in CI's headless browser).
   async function googleSignIn(page, email) {
-    const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('#googleSignInBtn')]);
-    await popup.waitForLoadState();
-    await popup.getByText('Add new account').click();
-    await popup.fill('#email-input', email);
-    await popup.fill('#display-name-input', 'Google Person');
-    await popup.click('#sign-in');
+    await page.evaluate(async (email) => {
+      const m = await import('https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js');
+      const cred = m.GoogleAuthProvider.credential(JSON.stringify({ sub: `g-${email}`, email, email_verified: true, name: 'Google Person' }));
+      await m.signInWithCredential(window.RoundsFirebase.auth, cred);
+    }, email);
   }
 
   test('an email made with a password cannot sign in with Google', async ({ browser }) => {

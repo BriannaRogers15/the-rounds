@@ -123,7 +123,6 @@
       clearError();
       try{
         await applyChosenPersistence();
-        pendingMethod = 'google.com';
         if(isStandalone) await signInWithRedirect(auth, googleProvider);
         else await signInWithPopup(auth, googleProvider);
       }
@@ -155,13 +154,11 @@
           // The account exists first; reserving the username needs it. If
           // someone grabs the name in between, the username step catches it.
           signupUsername = username;
-          pendingMethod = 'password';
           await createUserWithEmailAndPassword(auth, email, password);
         } else {
-          pendingMethod = 'password';
           await signInWithEmailAndPassword(auth, email, password);
         }
-      }catch(err){ pendingMethod = null; signupUsername = null; showError(friendlyAuthError(err)); }
+      }catch(err){ signupUsername = null; showError(friendlyAuthError(err)); }
     });
     passwordInput.addEventListener('keydown', (event)=>{
       if(event.key === 'Enter') document.getElementById('authSubmitBtn').click();
@@ -314,9 +311,8 @@
       document.getElementById('authSignOutBtn').addEventListener('click', ()=> signOut(auth));
     }
 
-    // Which way the current sign-in started ('password' | 'google.com'),
-    // and the username typed on the sign-up form, if any.
-    let pendingMethod = null;
+    // The username typed on the sign-up form, if any.
+    let setUpUid = null; // the account the sign-in setup last ran for
     let signupUsername = null;
     const methodLabel = (m)=> m === 'google.com' ? 'Continue with Google' : 'your email and password';
 
@@ -372,11 +368,19 @@
       if(loading) loading.style.display = 'none';
 
       if(user){
+        // Firebase can repeat this for the same signed-in account (e.g.
+        // after a profile update). The setup below runs once per account;
+        // re-running it would re-read the account mid-save.
+        if(user.uid === setUpUid) return;
+        setUpUid = user.uid;
         window.roundsGuestMode = false;
         document.body.classList.remove('guest-mode');
         document.getElementById('guestNotice').hidden = true;
-        const method = pendingMethod;
-        pendingMethod = null;
+        // How this sign-in happened, from Firebase's own token ('password' or
+        // 'google.com'). Works for popup and redirect sign-ins alike, and
+        // for a session restored later.
+        let method = null;
+        try{ method = (await user.getIdTokenResult()).signInProvider || null; }catch(_e){}
         // Checking the account's username takes a moment; say so rather
         // than show a blank page.
         gate.style.display = 'none';
@@ -391,6 +395,7 @@
         // with its password, a Google account with Google.
         const createdWith = data.signInMethod || null;
         if(method && createdWith && method !== createdWith && user.providerData.some(p => p.providerId === createdWith)){
+          setUpUid = null;
           await signOut(auth);
           if(loading) loading.style.display = 'none';
           gate.style.display = '';
@@ -431,6 +436,7 @@
         const suggestion = (account.displayName || '').replace(/[^A-Za-z0-9_.]/g, '').slice(0, 20);
         showUsernameGate(suggestion);
       } else if(window.roundsGuestMode){
+        setUpUid = null;
         document.getElementById('usernameGate').style.display = 'none';
         gate.style.display = 'none';
         if(wrap) wrap.style.display = '';
@@ -440,6 +446,7 @@
         window.dispatchEvent(new Event('rounds-access-changed'));
         if(signedInChip){ signedInChip.remove(); signedInChip = null; }
       } else {
+        setUpUid = null;
         document.getElementById('usernameGate').style.display = 'none';
         document.body.classList.remove('guest-mode');
         document.getElementById('guestNotice').hidden = true;
