@@ -394,8 +394,9 @@ h1{
 .ticket-meta .stars{ font-size:16px; }
 .ticket-meta .not-visited{ color: var(--paper-muted); }
 .visit-count{ color: var(--paper-muted); }
+.card-badges{ margin-left:auto; display:inline-flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
 .gem-badge{
-  margin-left:auto; font-size:12.5px; font-weight:800; color: var(--paper-ink);
+  font-size:12.5px; font-weight:800; color: var(--paper-ink);
   background: var(--paper-inner); border:1px solid var(--paper-line); border-radius:999px; padding:3px 10px;
 }
 .dist-badge{ color: var(--action); font-weight:700; }
@@ -1103,3 +1104,5 @@ h1{
   .dish-detail{ flex-direction:row; align-items:center; gap:14px; }
   .dish-detail .dish-mod{ flex:1; }
 }
+
+.tourist-badge{ background: #E3EEF6; border-color: #BFD5E6; color: #17486B; }

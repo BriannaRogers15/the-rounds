@@ -30,7 +30,7 @@ function probeRestaurants() {
     {
       id: 'probe-gem-3',
       name: 'Probe Hidden Gem',
-      categories: ['Chicago Gems', 'American'],
+      categories: ['Personal Gems', 'American'],
       address: '789 S Probe Blvd, Chicago, IL 60615',
       lat: 41.7943,
       lng: -87.5907,

@@ -16,6 +16,7 @@ let locationRequested = false;
 let searchQuery = '';
 let unvisitedOnly = false;
 let gemsOnly = false;
+let touristOnly = false;
 let recentOnly = false;
 let viewMode = 'grid';
 let leafletMap = null;
@@ -262,8 +263,21 @@ function groupForTag(tag){
 /* Badge tags mark a property of a restaurant (a staple, a gem) rather than
    a category — they render as a 💎 corner badge + a tools-row filter,
    never as a guide in the rail or a chip on the card. */
-const BADGE_TAGS = new Set(['Chicago Gems']);
-function isGem(r){ return (r.categories || []).includes('Chicago Gems'); }
+/* Personal Gems is Brianna's own call; Tourist Spots she tags herself.
+   "Chicago Gems" is the gem tag's old name: renameCuisineTags() moves
+   stored listings to the new one on the owner's next sign-in, and until
+   then it still counts as a gem everywhere. */
+const GEM_TAG = 'Personal Gems';
+const TOURIST_TAG = 'Tourist Spots';
+const LEGACY_GEM_TAG = 'Chicago Gems';
+const BADGE_TAGS = new Set([GEM_TAG, TOURIST_TAG, LEGACY_GEM_TAG]);
+function isGem(r){ return (r.categories || []).some(t => t === GEM_TAG || t === LEGACY_GEM_TAG); }
+function isTourist(r){ return (r.categories || []).includes(TOURIST_TAG); }
+/* Guide suggestions for "+ Add a guide": every guide in use, plus the two
+   badge tags, so tagging the first tourist spot needs no typing. */
+function guideSuggestions(){
+  return Array.from(new Set([...categories().filter(c => c !== LEGACY_GEM_TAG), GEM_TAG, TOURIST_TAG])).sort();
+}
 
 function topLevelLabels(){
   const cats = categories();
@@ -524,13 +538,15 @@ const HOOD_EXCLUDE = new Set(["O'Hare"]);
    page groups Chicago into Downtown / North / West / South / East Side.
    Keys are display names (post-HOOD_RENAME). Anything unmapped falls back
    to a rough compass cut on its boundary centroid. */
-const CHI_SIDES = ['Downtown', 'North Side', 'West Side', 'South Side', 'East Side'];
+const CHI_SIDES = ['Downtown', 'Up North', 'Out West', 'Out South', 'Over East'];
+// The sides' names before 2026-11-16, so old bookmarks still land.
+const OLD_SIDE_NAMES = { 'North Side': 'Up North', 'West Side': 'Out West', 'South Side': 'Out South', 'East Side': 'Over East' };
 const HOOD_SIDE = {
   'Downtown': ['Loop', 'South Loop', 'River North', 'Streeterville', 'Gold Coast', 'Old Town', 'Printers Row', 'West Loop', 'Greektown'],
-  'North Side': ['Albany Park', 'Andersonville', 'Avondale', 'Belmont Cragin', 'Boystown', 'Dunning', 'Edgewater', 'Edison Park', 'Hermosa', 'Irving Park', 'Jefferson Park', 'Lake View', 'Lincoln Park', 'Lincoln Square', 'Logan Square', 'Montclare', 'North Center', 'North Park', 'Norwood Park', 'Portage Park', 'Rogers Park', 'Sauganash,Forest Glen', 'Uptown', 'West Ridge', 'Wrigleyville'],
-  'West Side': ['Austin', 'Bucktown', 'East Village', 'Galewood', 'Garfield Park', 'Humboldt Park', 'Little Italy, UIC', 'Little Village', 'Near West Side', 'North Lawndale', 'Pilsen', 'Ukrainian Village', 'West Town', 'Wicker Park'],
-  'South Side': ['Archer Heights', 'Armour Square', 'Ashburn', 'Auburn Gresham', 'Avalon Park', 'Beverly', 'Bridgeport', 'Brighton Park', 'Bronzeville', 'Burnside', 'Calumet Heights', 'Chatham', 'Chicago Lawn', 'Chinatown', 'Clearing', 'Englewood', 'Fuller Park', 'Gage Park', 'Garfield Ridge', 'Grand Crossing', 'Hyde Park', 'Jackson Park', 'Kenwood', 'Mckinley Park', 'Morgan Park', 'Mount Greenwood', 'New City', 'Oakland', 'Pullman', 'Riverdale', 'Roseland', 'South Shore', 'Washington Heights', 'Washington Park', 'West Elsdon', 'West Lawn', 'West Pullman', 'Woodlawn'],
-  'East Side': ['East Side', 'Hegewisch', 'South Chicago', 'South Deering'],
+  'Up North': ['Albany Park', 'Andersonville', 'Avondale', 'Belmont Cragin', 'Boystown', 'Dunning', 'Edgewater', 'Edison Park', 'Hermosa', 'Irving Park', 'Jefferson Park', 'Lake View', 'Lincoln Park', 'Lincoln Square', 'Logan Square', 'Montclare', 'North Center', 'North Park', 'Norwood Park', 'Portage Park', 'Rogers Park', 'Sauganash,Forest Glen', 'Uptown', 'West Ridge', 'Wrigleyville'],
+  'Out West': ['Austin', 'Bucktown', 'East Village', 'Galewood', 'Garfield Park', 'Humboldt Park', 'Little Italy, UIC', 'Little Village', 'Near West Side', 'North Lawndale', 'Pilsen', 'Ukrainian Village', 'West Town', 'Wicker Park'],
+  'Out South': ['Archer Heights', 'Armour Square', 'Ashburn', 'Auburn Gresham', 'Avalon Park', 'Beverly', 'Bridgeport', 'Brighton Park', 'Bronzeville', 'Burnside', 'Calumet Heights', 'Chatham', 'Chicago Lawn', 'Chinatown', 'Clearing', 'Englewood', 'Fuller Park', 'Gage Park', 'Garfield Ridge', 'Grand Crossing', 'Hyde Park', 'Jackson Park', 'Kenwood', 'Mckinley Park', 'Morgan Park', 'Mount Greenwood', 'New City', 'Oakland', 'Pullman', 'Riverdale', 'Roseland', 'South Shore', 'Washington Heights', 'Washington Park', 'West Elsdon', 'West Lawn', 'West Pullman', 'Woodlawn'],
+  'Over East': ['East Side', 'Hegewisch', 'South Chicago', 'South Deering'],
 };
 const HOOD_SIDE_LOOKUP = {};
 Object.entries(HOOD_SIDE).forEach(([side, names]) => names.forEach(n => HOOD_SIDE_LOOKUP[n] = side));
@@ -542,12 +558,12 @@ function sideForHood(name){
     while(stack.length){ const c = stack.pop(); if(typeof c[0] === 'number') pts.push(c); else c.forEach(x => stack.push(x)); }
     const lat = pts.reduce((s, p) => s + p[1], 0) / pts.length;
     const lng = pts.reduce((s, p) => s + p[0], 0) / pts.length;
-    if(lng > -87.565 && lat < 41.75) return 'East Side';
-    if(lat >= 41.90) return 'North Side';
-    if(lat <= 41.85) return 'South Side';
-    return 'West Side';
+    if(lng > -87.565 && lat < 41.75) return 'Over East';
+    if(lat >= 41.90) return 'Up North';
+    if(lat <= 41.85) return 'Out South';
+    return 'Out West';
   }
-  return 'South Side';
+  return 'Out South';
 }
 
 function parseTown(address){
@@ -722,6 +738,7 @@ function applyHash(){
   if(v === 'all' || v === 'area'){
     currentPage = 'listings';
     activeArea = (v === 'area' && p.get('t') && p.get('n')) ? { type: p.get('t'), name: p.get('n') } : null;
+    if(activeArea && activeArea.type === 'side' && OLD_SIDE_NAMES[activeArea.name]) activeArea.name = OLD_SIDE_NAMES[activeArea.name];
     activeCategory = p.get('c') || 'All';
     activeSubTag = p.get('s') || null;
   } else {
@@ -804,7 +821,7 @@ const GUIDE_SECTION = {
   // still files under Cuisines rather than the fallback section.
   'Asian':'Cuisines','Caribbean':'Cuisines','European':'Cuisines','Latin American':'Cuisines',
   'Bars':'Food & Drink','Desserts':'Food & Drink','Pizza':'Food & Drink',
-  'Special Events':'Occasions','Chicago Gems':'Occasions',
+  'Special Events':'Occasions',
 };
 const RAIL_SECTION_ORDER = ['Cuisines', 'Food & Drink', 'Occasions'];
 function renderCuisineRail(){
@@ -1068,6 +1085,9 @@ function getFilteredSortedList(){
   if(unvisitedOnly){
     list = list.filter(r => visitsFor(r.id).length === 0);
   }
+  if(touristOnly){
+    list = list.filter(isTourist);
+  }
   if(gemsOnly){
     list = list.filter(isGem);
   }
@@ -1117,7 +1137,7 @@ function renderContent(){
           ${vs.length
             ? `<span class="visited-label">Visited</span>${starsHtml(avg)}<span class="last-visit">${fmtShortDate(vs[0].date)}</span>`
             : `<span class="not-visited">Not visited yet</span>`}
-          ${isGem(r) ? `<span class="gem-badge">Chicago Gem</span>` : ''}
+          ${isGem(r) || isTourist(r) ? `<span class="card-badges">${isGem(r) ? '<span class="gem-badge">Personal Gem</span>' : ''}${isTourist(r) ? '<span class="gem-badge tourist-badge">Tourist Spot</span>' : ''}</span>` : ''}
         </div>
       </div>
     `;
@@ -1709,7 +1729,7 @@ function openAddRestaurant(){
     const fu = $('#filingUnder');
     if(!fu) return;
     fu.style.display = '';
-    const datalist = categories().map(c=>`<option value="${escapeHtml(c)}">`).join('');
+    const datalist = guideSuggestions().map(c=>`<option value="${escapeHtml(c)}">`).join('');
     fu.innerHTML = `<span class="filing-label">Filing under</span>
       ${pendingTags.map(t=>`<span class="tag-pill">${escapeHtml(t)}<button type="button" class="tag-x" data-tag="${escapeHtml(t)}" aria-label="Remove ${escapeHtml(t)}">×</button></span>`).join('')}
       <input type="text" id="addTagInput" class="tag-add" list="addTagList" placeholder="+ Add a guide" aria-label="Add a guide">
@@ -1984,8 +2004,7 @@ function openDetail(id){
   const currentUid = window.RoundsFirebase?.auth?.currentUser?.uid;
   const vs = visitsFor(id);
   const avg = avgRating(vs);
-  const cats = categories();
-  const datalist = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+  const datalist = guideSuggestions().map(c=>`<option value="${escapeHtml(c)}">`).join('');
   const guides = guideLine(r);
   const mapsHref = r.mapsUrl || (r.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + r.address)}` : '');
   const dishCount = menuOf(r).length;
@@ -2456,7 +2475,7 @@ $('#searchBox').addEventListener('input', (e)=>{
 /* The three filters. On phones they fold behind one "Filters" button,
    which shows how many are on. */
 function syncFilterChips(){
-  const on = { unvisitedToggle: unvisitedOnly, gemsToggle: gemsOnly, recentToggle: recentOnly };
+  const on = { unvisitedToggle: unvisitedOnly, gemsToggle: gemsOnly, touristToggle: touristOnly, recentToggle: recentOnly };
   Object.entries(on).forEach(([id, active])=>{
     const chip = document.getElementById(id);
     chip.classList.toggle('active', active);
@@ -2474,6 +2493,7 @@ $('#filtersToggle').addEventListener('click', ()=>{
 });
 $('#unvisitedToggle').addEventListener('click', ()=>{ unvisitedOnly = !unvisitedOnly; syncFilterChips(); renderContent(); });
 $('#gemsToggle').addEventListener('click', ()=>{ gemsOnly = !gemsOnly; syncFilterChips(); renderContent(); });
+$('#touristToggle').addEventListener('click', ()=>{ touristOnly = !touristOnly; syncFilterChips(); renderContent(); });
 $('#recentToggle').addEventListener('click', ()=>{ recentOnly = !recentOnly; syncFilterChips(); renderContent(); });
 
 $$('#viewOpts button').forEach(btn=>{
@@ -2604,6 +2624,8 @@ const CUISINE_RENAMES = {
   // The library has separate breakfast and brunch guides — split the merged
   // tag. Every spot that carried it is a breakfast-guide spot.
   'Breakfast & Brunch': 'Breakfast',
+  // Renamed 2026-11-16 at Brianna's request: the gems are her own picks.
+  'Chicago Gems': 'Personal Gems',
 };
 async function renameCuisineTags(){
   let changed = false;
@@ -2636,8 +2658,8 @@ const REMOVED_TAGS_BY_NAME = {
   "D'Amato's Bakery": ["Desserts"],
   "Goddess and the Baker": ["Desserts"],
   // Gems curation: staples list is Brianna's call — these two are out.
-  "Watta Potato by Yogis Bistro": ["Chicago Gems"],
-  "Tastee Rolls": ["Chicago Gems"],
+  "Watta Potato by Yogis Bistro": ["Chicago Gems", "Personal Gems"],
+  "Tastee Rolls": ["Chicago Gems", "Personal Gems"],
   // Hot Dogs / Halal never came from a guide — retired as categories.
   "Portillo's": ["Hot Dogs"],
   "Devil Dawgs": ["Hot Dogs"],

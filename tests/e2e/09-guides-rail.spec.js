@@ -5,7 +5,7 @@ const { probeRestaurants } = require('../fixtures/seed-data');
 // Probe data recap: Probe Pizza Place is tagged [Pizza, Italian] (Pizza
 // nests under the Italian group per PARENT_GROUPS); Probe Sushi Spot is
 // [Sushi, Japanese] (Sushi nests under Japanese); Probe Hidden Gem is
-// [Chicago Gems, American] (Chicago Gems is a badge tag, never shown as a
+// [Personal Gems, American] (Personal Gems is a badge tag, never shown as a
 // rail guide; American has no children in this probe set, so it's a leaf).
 
 test.describe('Guides / cuisine rail', () => {
@@ -61,11 +61,11 @@ test.describe('Guides / cuisine rail', () => {
     }
   });
 
-  test('Chicago Gems is never shown as a rail guide (it is a badge, not a category)', async ({ listingsPage }) => {
+  test('Personal Gems is never shown as a rail guide (it is a badge, not a category)', async ({ listingsPage }) => {
     const probes = probeRestaurants();
     await injectRestaurants(listingsPage, probes);
     try {
-      await expect(listingsPage.locator('.rail-item[data-cat="Chicago Gems"]')).toHaveCount(0);
+      await expect(listingsPage.locator('.rail-item[data-cat="Personal Gems"]')).toHaveCount(0);
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }

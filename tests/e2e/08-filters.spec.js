@@ -20,7 +20,7 @@ test.describe('Filter toggles', () => {
     }
   });
 
-  test('Gems shows only Chicago Gems-tagged listings', async ({ listingsPage }) => {
+  test('Personal Gems shows only gem-tagged listings', async ({ listingsPage }) => {
     const probes = probeRestaurants();
     await injectRestaurants(listingsPage, probes);
     try {
@@ -92,6 +92,40 @@ test.describe('Filter toggles', () => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     } finally {
       await closeContext(context);
+    }
+  });
+
+  test('"Tourist spots" shows only listings tagged Tourist Spots, and is a badge, not a guide', async ({ listingsPage }) => {
+    const probes = probeRestaurants();
+    const tourist = { ...probes[1], id: 'probe-tourist', name: 'Probe Tourist Spot', categories: ['Pizza', 'Tourist Spots'] };
+    await injectRestaurants(listingsPage, [...probes, tourist]);
+    try {
+      await expect(listingsPage.locator('.ticket[data-id="probe-tourist"] .tourist-badge')).toHaveText('Tourist Spot');
+      await expect(listingsPage.locator('.ticket[data-id="probe-tourist"] .ticket-guides')).toHaveText('Pizza');
+      await expect(listingsPage.locator('.rail-item[data-cat="Tourist Spots"]')).toHaveCount(0);
+      await listingsPage.click('#touristToggle');
+      await expect(listingsPage.locator('.ticket')).toHaveCount(1);
+      await expect(listingsPage.locator('.ticket[data-id="probe-tourist"]')).toBeVisible();
+      await listingsPage.click('#touristToggle');
+      await expect(listingsPage.locator('.ticket')).toHaveCount(4);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: [...probes.map((r) => r.id), 'probe-tourist'] });
+    }
+  });
+
+  test('a listing still carrying the old "Chicago Gems" tag counts as a Personal Gem until it migrates', async ({ listingsPage }) => {
+    const legacy = { id: 'probe-legacy-gem', name: 'Probe Legacy Gem', categories: ['American', 'Chicago Gems'], address: '1 Probe St, Chicago, IL 60607', menu: [], createdAt: Date.now() };
+    await injectRestaurants(listingsPage, [legacy]);
+    try {
+      await expect(listingsPage.locator('.ticket[data-id="probe-legacy-gem"] .gem-badge')).toHaveText('Personal Gem');
+      await expect(listingsPage.locator('.rail-item[data-cat="Chicago Gems"]')).toHaveCount(0);
+      await listingsPage.click('#gemsToggle');
+      await expect(listingsPage.locator('.ticket[data-id="probe-legacy-gem"]')).toBeVisible();
+      // The owner's startup migration renames the stored tag.
+      const after = await listingsPage.evaluate(async () => { await renameCuisineTags(); return restaurants.find((r) => r.id === 'probe-legacy-gem').categories; });
+      expect(after).toEqual(['American', 'Personal Gems']);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: [legacy.id] });
     }
   });
 });

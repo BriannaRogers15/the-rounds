@@ -54,13 +54,13 @@ test.describe('Listings grid view', () => {
     }
   });
 
-  test('a listing tagged Chicago Gems shows the gem badge', async ({ listingsPage }) => {
+  test('a listing tagged Personal Gems shows the gem badge', async ({ listingsPage }) => {
     const probes = probeRestaurants();
     await injectRestaurants(listingsPage, probes);
     try {
-      const gem = probes.find((r) => r.categories.includes('Chicago Gems'));
-      await expect(listingsPage.locator(`.ticket[data-id="${gem.id}"] .gem-badge`)).toHaveText('Chicago Gem');
-      const nonGem = probes.find((r) => !r.categories.includes('Chicago Gems'));
+      const gem = probes.find((r) => r.categories.includes('Personal Gems'));
+      await expect(listingsPage.locator(`.ticket[data-id="${gem.id}"] .gem-badge`)).toHaveText('Personal Gem');
+      const nonGem = probes.find((r) => !r.categories.includes('Personal Gems'));
       await expect(listingsPage.locator(`.ticket[data-id="${nonGem.id}"] .gem-badge`)).toHaveCount(0);
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
@@ -70,7 +70,7 @@ test.describe('Listings grid view', () => {
   test("cards list the spot's own guides on one line (no umbrella groups, no emoji) and its area, not its street", async ({ listingsPage }) => {
     const probes = probeRestaurants();
     const tagged = {
-      id: 'probe-guides-4', name: 'Probe Guide Line', categories: ['Brunch', 'Jamaican', 'Chicago Gems'],
+      id: 'probe-guides-4', name: 'Probe Guide Line', categories: ['Brunch', 'Jamaican', 'Personal Gems'],
       address: '5 Probe Way, Oak Park, IL 60302', menu: [], createdAt: Date.now(),
     };
     const hood = { ...tagged, id: 'probe-hood-5', name: 'Probe Hood Spot', categories: ['Pizza'], address: '1 Probe St, Chicago, IL 60615', neighborhood: 'Hyde Park' };
@@ -102,7 +102,7 @@ test.describe('Listings grid view', () => {
       await expect(listingsPage.locator('.area-title')).toHaveText('Hyde Park');
       await expect(card().locator('.ticket-area')).toHaveCount(0);
       // A whole side of the city mixes neighborhoods, so the area shows.
-      await listingsPage.evaluate(() => openArea({ type: 'side', name: 'South Side' }));
+      await listingsPage.evaluate(() => openArea({ type: 'side', name: 'Out South' }));
       await expect(card().locator('.ticket-area')).toHaveText('Hyde Park');
     } finally {
       await resetLedger(listingsPage, { restaurantIds: [probe.id] });

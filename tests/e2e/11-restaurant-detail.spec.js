@@ -98,6 +98,19 @@ test.describe('Detail modal: owner edits', () => {
     }
   });
 
+  test('"+ Add a guide" suggests Personal Gems and Tourist Spots even before any listing has them', async ({ ownerPage }) => {
+    const r = probe('tag-suggest');
+    await injectRestaurants(ownerPage, [r]);
+    try {
+      await openListing(ownerPage, r.id);
+      const options = await ownerPage.locator('#tagList option').evaluateAll((els) => els.map((e) => e.value));
+      expect(options).toEqual(expect.arrayContaining(['Personal Gems', 'Tourist Spots']));
+      expect(options).not.toContain('Chicago Gems');
+    } finally {
+      await resetLedger(ownerPage, { restaurantIds: [r.id] });
+    }
+  });
+
   test('adding a tag the listing already has (any case) is a no-op', async ({ ownerPage }) => {
     const r = probe('tag-dup');
     await injectRestaurants(ownerPage, [r]);

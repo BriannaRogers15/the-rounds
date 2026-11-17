@@ -22,6 +22,9 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] Cards skip the neighborhood/town when you're already inside it; visited cards show the last visit date
 - [x] Search finds spots by a dish on their menu ("birria") and says which dish matched
 - [x] "Group favorites" leads a listing's menu: dishes the group rated 4+ on average (real ratings only)
+- [x] "Chicago Gems" renamed "Personal Gems" (stored tag migrated on the owner's next sign-in; the old name counts as a gem until then)
+- [x] "Tourist spots" filter — Brianna tags spots herself with "+ Add a guide" (Tourist Spots is always suggested); tagged cards show a "Tourist Spot" label
+- [x] City sides renamed Up North / Out West / Out South / Over East (Downtown unchanged; old side links still work)
 - [x] Edit your own visit — "Edit" on your visits reopens Log a Visit filled in; changes save to the same visit
 - [x] Menu "checked" dates — every curated menu carries the date it was last checked against its source (`asOf`, recovered from git history); shown in the listing window and stored as `menuUpdated` for staleness checks
 - [x] Visits logged under your account name — no separate usernames; renaming yourself (the pencil on "Signed in as") updates your past visits too

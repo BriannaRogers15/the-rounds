@@ -44,4 +44,19 @@ test.describe('URL hash routing', () => {
     await expect(appPage.locator('#listingsLayout')).toBeVisible();
     await expect(appPage.locator('#areasPage')).toBeHidden();
   });
+
+  test('the city sides are Up North / Out West / Out South / Over East, and old side links still land', async ({ browser }) => {
+    const { openGuestPage, closeContext } = require('../fixtures/app-fixture');
+    const context = await browser.newContext();
+    const page = await openGuestPage(context);
+    try {
+      expect(await page.evaluate(() => CHI_SIDES)).toEqual(['Downtown', 'Up North', 'Out West', 'Out South', 'Over East']);
+      // A bookmark saved before the rename.
+      await page.goto('/index.html#v=area&t=side&n=South+Side');
+      await page.waitForFunction(() => window.__roundsAppReady === true);
+      await expect(page.locator('.area-title')).toHaveText('Out South');
+    } finally {
+      await closeContext(context);
+    }
+  });
 });
