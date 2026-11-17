@@ -160,7 +160,7 @@ test.describe('Menu system (read-only display)', () => {
       const fav = listingsPage.locator('#menuChips .menu-group[data-section="Group favorites"]');
       await expect(fav).toHaveClass(/open/);
       await expect(fav.locator('.dish-name')).toHaveText(['Pepperoni Pie']); // 4.5 avg; Cheese Slice's 3 stays out
-      await expect(fav.locator('.dish-avg')).toHaveText('★ 4.5');
+      await expect(fav.locator('.dish-avg')).toHaveText('4.5★');
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id), visitIds: vs.map((v) => v.id) });
     }

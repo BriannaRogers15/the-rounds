@@ -38,7 +38,7 @@ test.describe('Listings grid view', () => {
       const visitedCard = listingsPage.locator(`.ticket[data-id="${visits[0].restaurantId}"]`);
       await expect(visitedCard.locator('.visited-label')).toHaveText('Visited');
       // The probe visit is rated 5.
-      await expect(visitedCard.locator('.stars')).toHaveText('★★★★★');
+      await expect(visitedCard.locator('.stars .st-full')).toHaveCount(5);
       await expect(visitedCard.locator('.stars')).toHaveAttribute('aria-label', '5 out of 5 stars');
       await expect(visitedCard.locator('.not-visited')).toHaveCount(0);
 

@@ -92,11 +92,19 @@ test.describe('visits: create — shape validation', () => {
     await assertFails(bob({ date: 'yesterday' }));
   });
 
-  test('a rating outside 1–5, or not a whole number, is rejected', async () => {
+  test('half stars are accepted; anything else between whole and half steps is not', async () => {
+    await assertSucceeds(bob({ rating: 4.5 }));
+    await assertSucceeds(bob({ rating: 0.5 }));
+    await assertSucceeds(bob({ rating: 5 }));
+    await assertFails(bob({ rating: 4.25 }));
+    await assertFails(bob({ rating: 3.7 }));
+  });
+
+  test('a rating outside 0.5–5, or not a number, is rejected', async () => {
     await assertFails(bob({ rating: 0 }));
     await assertFails(bob({ rating: 6 }));
+    await assertFails(bob({ rating: 5.5 }));
     await assertFails(bob({ rating: '5' }));
-    await assertFails(bob({ rating: 4.5 }));
   });
 
   test('wouldReturn must be true/false', async () => {

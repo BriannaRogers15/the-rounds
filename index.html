@@ -153,6 +153,10 @@
 </div>
 
 <div id="modalRoot"></div>
+<!-- Shared by every star graphic: the left half of a 24x24 star, for half stars. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs><clipPath id="starHalfClip" clipPathUnits="userSpaceOnUse"><rect x="0" y="0" width="12" height="24"/></clipPath></defs>
+</svg>
 
 <script type="module" src="firebase-init.js"></script>
 <script src="auth-gate.js"></script>

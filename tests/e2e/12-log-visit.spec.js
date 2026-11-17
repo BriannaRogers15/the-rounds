@@ -3,6 +3,7 @@ const { injectRestaurants, openListingDetail } = require('../fixtures/ledger-hel
 const { getDoc } = require('../fixtures/firestore-seed');
 const { createRegularTestUser } = require('../fixtures/auth-helpers');
 const { clearFirestore } = require('../fixtures/emulator-admin');
+const { pickStars } = require('../fixtures/stars');
 
 // Logged by a signed-in non-owner against a listing the owner created —
 // the realistic shape (only the owner can create listings; anyone signed
@@ -39,7 +40,7 @@ test.describe('Log a Visit: validation', () => {
     await signedInPage.click('#saveLog');
     expect(dialogs.at(-1)).toBe('Pick a rating.');
 
-    await signedInPage.click('#starPick [data-n="3"]');
+    await pickStars(signedInPage.locator('#starPick'), 3);
     await signedInPage.click('#saveLog');
     expect(dialogs.at(-1)).toContain("if you'd go back");
 
@@ -59,7 +60,7 @@ test.describe('Log a Visit: saving', () => {
     await signedInPage.fill('#vName', 'Probe Reviewer');
     await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
     await signedInPage.fill('#vAte', 'Garlic Knots'); // not on the menu yet
-    await signedInPage.click('#starPick [data-n="4"]');
+    await pickStars(signedInPage.locator('#starPick'), 4);
     await signedInPage.click('#wrYes');
     await signedInPage.fill('#vNotes', 'Ask for extra crispy.');
 
@@ -103,7 +104,7 @@ test.describe('Log a Visit: saving', () => {
       await openLogVisit(page, r);
       await expect(page.locator('.logged-by')).toContainText('Logging as Named Probe');
       await expect(page.locator('#vName')).toHaveCount(0);
-      await page.click('#starPick [data-n="5"]');
+      await pickStars(page.locator('#starPick'), 5);
       await page.click('#wrYes');
       await page.click('#saveLog');
       await expect(page.locator('.visit-item').first()).toContainText('Named Probe');
@@ -117,7 +118,7 @@ test.describe('Log a Visit: saving', () => {
     const page = await openSignedInPage(browser, { creds: await createRegularTestUser({ displayName: 'Old Name Probe' }) });
     try {
       await openLogVisit(page, r);
-      await page.click('#starPick [data-n="4"]');
+      await pickStars(page.locator('#starPick'), 4);
       await page.click('#wrYes');
       await page.click('#saveLog');
       const visitId = await page.evaluate((id) => visits.find((v) => v.restaurantId === id).id, r.id);
@@ -156,26 +157,26 @@ test.describe('Log a Visit: each dish gets its own stars and changes', () => {
     await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
     const detail = signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .dish-detail');
     await expect(detail).toBeVisible();
-    await detail.locator('.dish-star[data-n="5"]').click();
-    await expect(detail.locator('.dish-star.on')).toHaveCount(5);
+    await pickStars(detail.locator('.star-slider'), 5);
+    await expect(detail.locator('.star-slider')).toHaveAttribute('aria-valuenow', '5');
     await detail.locator('.dish-mod').fill('extra crispy, no oregano');
     await signedInPage.locator('.dish-check input[data-dish="Pepperoni Pie"]').check(); // had it, didn't rate it
     await expect(signedInPage.locator('label[for="vNotes"]')).toContainText('Overall review');
     await signedInPage.fill('#vNotes', 'Great spot, slow on weekends.');
-    await signedInPage.click('#starPick [data-n="4"]');
+    await pickStars(signedInPage.locator('#starPick'), 4);
     await signedInPage.click('#wrYes');
     await signedInPage.click('#saveLog');
 
     const item = signedInPage.locator('.visit-item').first();
     const cheese = item.locator('.ate-list li', { hasText: 'Cheese Slice' });
-    await expect(cheese.locator('.stars')).toHaveText('★★★★★');
+    await expect(cheese.locator('.stars')).toHaveAttribute('aria-label', '5 out of 5 stars');
     await expect(cheese.locator('.ate-mod')).toHaveText('extra crispy, no oregano');
     await expect(item.locator('.ate-list li', { hasText: 'Pepperoni Pie' }).locator('.stars')).toHaveCount(0);
     await expect(item).toContainText('Review Great spot, slow on weekends.');
     // The menu averages the dish's own stars.
     // (It also leads "Group favorites" now; check its own section's row.)
     const row = signedInPage.locator('#menuChips .menu-group:not([data-section="Group favorites"]) .menu-row', { hasText: 'Cheese Slice' });
-    await expect(row.locator('.dish-avg')).toHaveText('★ 5.0');
+    await expect(row.locator('.dish-avg')).toHaveText('5.0★');
     await expect(row.locator('.ordered-badge')).toHaveText('ordered 1×');
 
     const saved = await signedInPage.evaluate((id) => visits.find((v) => v.restaurantId === id), r.id);
@@ -189,8 +190,8 @@ test.describe('Log a Visit: each dish gets its own stars and changes', () => {
     await openLogVisit(signedInPage, r);
     await signedInPage.fill('#vName', 'Editor Probe');
     await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
-    await signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .dish-star[data-n="2"]').click();
-    await signedInPage.click('#starPick [data-n="2"]');
+    await pickStars(signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .star-slider'), 2);
+    await pickStars(signedInPage.locator('#starPick'), 2);
     await signedInPage.click('#wrNo');
     await signedInPage.fill('#vNotes', 'First take.');
     await signedInPage.click('#saveLog');
@@ -202,13 +203,14 @@ test.describe('Log a Visit: each dish gets its own stars and changes', () => {
     await expect(signedInPage.locator('#logTitle')).toContainText('Edit visit');
     await expect(signedInPage.locator('#vNotes')).toHaveValue('First take.');
     await expect(signedInPage.locator('#wrNo')).toHaveAttribute('aria-pressed', 'true');
-    await expect(signedInPage.locator('#starPick [data-n="2"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(signedInPage.locator('#starPick')).toHaveAttribute('aria-valuenow', '2');
     await expect(signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]')).toBeChecked();
-    const star2 = signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .dish-star[data-n="2"]');
-    await expect(star2).toHaveAttribute('aria-pressed', 'true');
-    // Tapping the same star again clears that dish's rating.
-    await star2.click();
-    await signedInPage.click('#starPick [data-n="5"]');
+    const dishStars = signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .star-slider');
+    await expect(dishStars).toHaveAttribute('aria-valuenow', '2');
+    // Tapping the same value again clears that dish's rating.
+    await pickStars(dishStars, 2);
+    await expect(dishStars).toHaveAttribute('aria-valuenow', '0');
+    await pickStars(signedInPage.locator('#starPick'), 5);
     await signedInPage.click('#wrYes');
     await signedInPage.fill('#vNotes', 'Second visit was better.');
     await signedInPage.click('#saveLog');
@@ -219,6 +221,67 @@ test.describe('Log a Visit: each dish gets its own stars and changes', () => {
     expect(after[0]).toMatchObject({ id: before[0].id, rating: 5, wouldReturn: true, notes: 'Second visit was better.', dishDetails: [], createdAt: before[0].createdAt });
     await expect.poll(async () => (await getDoc(`visits/${before[0].id}`))?.notes).toBe('Second visit was better.');
     expect((await getDoc(`visits/${before[0].id}`)).dishDetails).toEqual([]);
+  });
+});
+
+test.describe('Log a Visit: half stars', () => {
+  test('pick a half star by its left half, nudge it with the keyboard, and see a real half star after saving', async ({ browser, signedInPage }) => {
+    const r = await arrangeListing(browser, 'lv-half');
+    await openLogVisit(signedInPage, r);
+    await signedInPage.fill('#vName', 'Half Star Probe');
+    const overall = signedInPage.locator('#starPick');
+    await pickStars(overall, 3.5);
+    await expect(overall).toHaveAttribute('aria-valuenow', '3.5');
+    await expect(overall).toHaveAttribute('aria-valuetext', '3.5 stars');
+    await expect(overall.locator('.st-half')).toHaveCount(1);
+    await expect(overall.locator('.st-full')).toHaveCount(3);
+    await expect(overall.locator('.ss-value')).toHaveText('3.5');
+    // Keyboard and screen readers move it in half steps.
+    await overall.focus();
+    await signedInPage.keyboard.press('ArrowRight');
+    await expect(overall).toHaveAttribute('aria-valuenow', '4');
+    await signedInPage.keyboard.press('ArrowLeft');
+    await signedInPage.keyboard.press('ArrowLeft');
+    await expect(overall).toHaveAttribute('aria-valuenow', '3');
+    await pickStars(overall, 4.5);
+    // A dish gets half stars too.
+    await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
+    await pickStars(signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .star-slider'), 2.5);
+    await signedInPage.click('#wrYes');
+    await signedInPage.click('#saveLog');
+
+    const item = signedInPage.locator('.visit-item').first();
+    await expect(item.locator('.visit-top .stars')).toHaveAttribute('aria-label', '4.5 out of 5 stars');
+    await expect(item.locator('.visit-top .stars .st-half')).toHaveCount(1);
+    expect(await item.innerText()).not.toContain('½');
+    await expect(signedInPage.locator('#menuChips .menu-row', { hasText: 'Cheese Slice' }).locator('.dish-avg')).toHaveText('2.5★');
+    const saved = await signedInPage.evaluate((id) => visits.find((v) => v.restaurantId === id), r.id);
+    expect(saved.rating).toBe(4.5);
+    expect(saved.dishDetails).toEqual([{ dish: 'Cheese Slice', rating: 2.5 }]);
+    // The shared ledger accepts half stars (rules allow 0.5 steps).
+    await expect.poll(async () => (await getDoc(`visits/${saved.id}`))?.rating).toBe(4.5);
+  });
+
+  test('phone: the star row spans the screen, each star is a big target, and dragging picks', async ({ browser }) => {
+    const r = await arrangeListing(browser, 'lv-half-phone');
+    const page = await openSignedInPage(browser, { contextOptions: { viewport: { width: 390, height: 844 }, hasTouch: true } });
+    try {
+      await openLogVisit(page, r);
+      const icons = page.locator('#starPick .ss-icons');
+      const box = await icons.boundingBox();
+      expect(box.width).toBeGreaterThan(260);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      // Drag from the first star to the middle of the fourth: 3.5.
+      await page.mouse.move(box.x + 5, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2, { steps: 5 });
+      await page.mouse.move(box.x + box.width * 0.68, box.y + box.height / 2, { steps: 5 });
+      await page.mouse.up();
+      await expect(page.locator('#starPick')).toHaveAttribute('aria-valuenow', '3.5');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    } finally {
+      await closeSession(page);
+    }
   });
 });
 

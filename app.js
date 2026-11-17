@@ -177,14 +177,103 @@ function avgRating(list){
   if(!list.length) return null;
   return list.reduce((s,v)=>s+v.rating,0) / list.length;
 }
-function starString(n){
-  const full = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
-  return '★'.repeat(full) + '☆'.repeat(5-full);
+/* Ratings go in half steps (0.5 … 5). Averages show to the nearest half. */
+function toHalf(n){ return Math.max(0, Math.min(5, Math.round((Number(n) || 0) * 2) / 2)); }
+function fmtRating(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+const STAR_PATH = 'M12 2.6l2.85 5.95 6.55.85-4.8 4.55 1.25 6.5L12 17.3l-5.85 3.15 1.25-6.5-4.8-4.55 6.55-.85z';
+/* Five star graphics: solid, half (left half solid) or outline. A half is
+   a real half-filled star, never a "½". */
+function starIconsHtml(n){
+  const v = toHalf(n);
+  let html = '';
+  for(let i = 1; i <= 5; i++){
+    const kind = v >= i ? 'full' : (v >= i - 0.5 ? 'half' : 'empty');
+    html += `<svg class="st st-${kind}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="st-o" d="${STAR_PATH}"/>${kind === 'empty' ? '' : `<path class="st-f" d="${STAR_PATH}"${kind === 'half' ? ' clip-path="url(#starHalfClip)"' : ''}/>`}</svg>`;
+  }
+  return html;
 }
 /* Stars with a spoken label, for cards, visits and popups. */
 function starsHtml(n){
-  const full = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
-  return `<span class="stars" role="img" aria-label="${full} out of 5 stars">${starString(n)}</span>`;
+  const v = toHalf(n);
+  return `<span class="stars" role="img" aria-label="${fmtRating(v)} out of 5 stars" data-rating="${v}">${starIconsHtml(v)}</span>`;
+}
+/* The star picker. Tap or click a star's left half for a half star, its
+   right half for a whole one; or drag across the row (on a phone the row
+   spans the screen, so the whole row is the touch target). Arrow keys and
+   screen readers move it in half steps. */
+function starSliderHtml({ id = '', value = 0, label, size = 'big' }){
+  const v = toHalf(value);
+  return `<div class="star-slider ${size}"${id ? ` id="${id}"` : ''} role="slider" tabindex="0" aria-label="${escapeHtml(label)}" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${v}" aria-valuetext="${v ? `${fmtRating(v)} stars` : 'Not rated'}" data-value="${v}">
+    <span class="ss-icons">${starIconsHtml(v)}</span><span class="ss-value">${v ? fmtRating(v) : ''}</span><span class="ss-bubble" aria-hidden="true" hidden></span>
+  </div>`;
+}
+/* `clearable`: tapping the current value again (or Delete) clears it. */
+function wireStarSlider(el, { clearable = false, onChange } = {}){
+  if(el.dataset.wired) return;
+  el.dataset.wired = '1';
+  let value = parseFloat(el.dataset.value) || 0;
+  const icons = el.querySelector('.ss-icons');
+  const label = el.querySelector('.ss-value');
+  const bubble = el.querySelector('.ss-bubble');
+  const paint = (v)=>{ icons.innerHTML = starIconsHtml(v); label.textContent = v ? fmtRating(v) : ''; };
+  const set = (v, notify = true)=>{
+    value = v;
+    el.dataset.value = String(v);
+    el.setAttribute('aria-valuenow', String(v));
+    el.setAttribute('aria-valuetext', v ? `${fmtRating(v)} stars` : 'Not rated');
+    paint(v);
+    if(notify && onChange) onChange(v);
+  };
+  el._setStars = (v)=> set(v, false);
+  const valueAt = (clientX)=>{
+    const b = icons.getBoundingClientRect();
+    const f = (clientX - b.left) / b.width;
+    return Math.min(5, Math.max(0.5, Math.ceil(f * 10) / 2));
+  };
+  const showBubble = (v, clientX)=>{
+    const b = el.getBoundingClientRect();
+    bubble.textContent = fmtRating(v);
+    bubble.style.left = `${clientX - b.left}px`;
+    bubble.hidden = false;
+  };
+  let dragging = false, moved = false, startValue = 0, pending = 0;
+  el.addEventListener('pointerdown', (e)=>{
+    if(e.button > 0) return;
+    dragging = true; moved = false; startValue = value;
+    pending = valueAt(e.clientX);
+    try{ el.setPointerCapture(e.pointerId); }catch(_e){}
+    paint(pending);
+    if(e.pointerType !== 'mouse') showBubble(pending, e.clientX);
+  });
+  el.addEventListener('pointermove', (e)=>{
+    if(dragging){
+      const v = valueAt(e.clientX);
+      if(v !== pending){ moved = true; pending = v; paint(v); }
+      if(e.pointerType !== 'mouse') showBubble(v, e.clientX);
+    } else if(e.pointerType === 'mouse'){
+      paint(valueAt(e.clientX)); // hover preview
+    }
+  });
+  el.addEventListener('pointerup', ()=>{
+    if(!dragging) return;
+    dragging = false;
+    bubble.hidden = true;
+    set(clearable && !moved && pending === startValue ? 0 : pending);
+  });
+  // A vertical swipe that turns into page scrolling cancels the pick.
+  el.addEventListener('pointercancel', ()=>{ dragging = false; bubble.hidden = true; paint(value); });
+  el.addEventListener('pointerleave', ()=>{ if(!dragging) paint(value); });
+  el.addEventListener('keydown', (e)=>{
+    let v = null;
+    if(e.key === 'ArrowRight' || e.key === 'ArrowUp') v = Math.min(5, Math.max(0.5, value + 0.5));
+    else if(e.key === 'ArrowLeft' || e.key === 'ArrowDown') v = Math.max(0.5, value - 0.5);
+    else if(e.key === 'Home') v = 0.5;
+    else if(e.key === 'End') v = 5;
+    else if(clearable && (e.key === 'Delete' || e.key === 'Backspace')) v = 0;
+    if(v === null) return;
+    e.preventDefault();
+    set(v);
+  });
 }
 const PIN_ICON = '<svg class="pin-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>';
 const CHEVRON_ICON = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
@@ -393,7 +482,7 @@ function menuDishStats(r){
   visitsFor(r.id).forEach(v=>{
     new Set(ateList(v).map(d => String(d).toLowerCase())).forEach(d => get(d).count++);
     (v.dishDetails || []).forEach(x=>{
-      if(Number.isInteger(x.rating) && x.rating >= 1 && x.rating <= 5){
+      if(typeof x.rating === 'number' && x.rating >= 0.5 && x.rating <= 5){
         const s = get(String(x.dish || '').toLowerCase());
         s.ratingSum += x.rating; s.ratingN++;
       }
@@ -424,7 +513,7 @@ function menuAccordionHtml(r, state, rowHtml){
   const row = rowHtml || ((d)=>{
     const st = stats[d.toLowerCase()];
     const avg = st && st.ratingN ? st.ratingSum / st.ratingN : null;
-    return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${st && st.count ? `<span class="dish-badges">${avg ? `<span class="dish-avg" title="Average of ${st.ratingN} rating${st.ratingN===1?'':'s'}">★ ${avg.toFixed(1)}</span>` : ''}<span class="ordered-badge">ordered ${st.count}×</span></span>` : ''}</div>`;
+    return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${st && st.count ? `<span class="dish-badges">${avg ? `<span class="dish-avg" title="Average of ${st.ratingN} rating${st.ratingN===1?'':'s'}">${avg.toFixed(1)}★</span>` : ''}<span class="ordered-badge">ordered ${st.count}×</span></span>` : ''}</div>`;
   });
   const section = (g, open, searching)=>{
     if(!g.title) return `<div class="menu-group open" data-section=""><div class="menu-sec-body">${g.dishes.map(row).join('')}</div></div>`;
@@ -796,7 +885,7 @@ function renderStats(){
     <div class="receipt-row"><span class="receipt-label">Listings</span><span class="receipt-val">${total}</span></div>
     <div class="receipt-row"><span class="receipt-label">Spots visited</span><span class="receipt-val">${visitedCount}/${total}</span></div>
     <div class="receipt-row"><span class="receipt-label">Visits logged</span><span class="receipt-val">${totalVisits}</span></div>
-    <div class="receipt-row"><span class="receipt-label">Average rating</span><span class="receipt-val${allAvg ? '' : ' muted'}">${allAvg ? allAvg.toFixed(1) + ' ★' : '—'}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Average rating</span><span class="receipt-val${allAvg ? '' : ' muted'}">${allAvg ? allAvg.toFixed(1) + '★' : '—'}</span></div>
   `;
 }
 
@@ -2238,9 +2327,7 @@ function openLogVisit(restaurantId, visitId){
         </div>
         <div class="field log-rating">
           <span class="field-label" id="ratingLabel">Overall rating</span>
-          <div class="star-pick" id="starPick" role="group" aria-labelledby="ratingLabel">
-            ${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" aria-label="${n} star${n===1?'':'s'}" aria-pressed="${n === rating}">${n <= rating ? '★' : '☆'}</button>`).join('')}
-          </div>
+          ${starSliderHtml({ id: 'starPick', value: rating, label: 'Overall rating', size: 'big' })}
         </div>
         <div class="field log-return">
           <span class="field-label" id="returnLabel">Would you go back?</span>
@@ -2278,22 +2365,23 @@ function openLogVisit(restaurantId, visitId){
   const detailHtml = (d)=>{
     const x = details.get(d) || { rating: 0, mod: '' };
     return `<div class="dish-detail">
-      <div class="dish-stars" role="group" aria-label="Your rating for ${escapeHtml(d)}">${[1,2,3,4,5].map(n=>`<button type="button" class="dish-star${n <= x.rating ? ' on' : ''}" data-n="${n}" aria-label="${n} star${n===1?'':'s'} for ${escapeHtml(d)}" aria-pressed="${n === x.rating}">${n <= x.rating ? '★' : '☆'}</button>`).join('')}</div>
+      ${starSliderHtml({ value: x.rating, label: `Your rating for ${d}`, size: 'small' })}
       <input type="text" class="dish-mod" maxlength="${DISH_MOD_MAX}" value="${escapeHtml(x.mod)}" placeholder="Any changes? e.g. no onions" aria-label="Changes to ${escapeHtml(d)}">
     </div>`;
   };
   const pickRow = (d)=> `<div class="dish-pick" data-dish="${escapeHtml(d)}"><label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"${picked.has(d) ? ' checked' : ''}><span>${escapeHtml(d)}</span></label>${picked.has(d) ? detailHtml(d) : ''}</div>`;
-  const renderDishes = ()=>{ if(dishArea) dishArea.innerHTML = menuAccordionHtml(rest, dishState, pickRow); };
+  // Each dish's own stars: a change goes to every row of that dish.
+  const wireDishSliders = ()=>{
+    if(!dishArea) return;
+    dishArea.querySelectorAll('.star-slider:not([data-wired])').forEach(el => wireStarSlider(el, { clearable: true, onChange: (v)=>{
+      const d = el.closest('.dish-pick').dataset.dish;
+      details.set(d, { mod: '', ...(details.get(d) || {}), rating: v });
+      rowsFor(d).forEach(row=>{ const other = row.querySelector('.star-slider'); if(other && other !== el) other._setStars(v); });
+    }}));
+  };
+  const renderDishes = ()=>{ if(dishArea){ dishArea.innerHTML = menuAccordionHtml(rest, dishState, pickRow); wireDishSliders(); } };
   // A dish listed in two sections has two rows; every change goes to both.
   const rowsFor = (d)=> [...dishArea.querySelectorAll('.dish-pick')].filter(el => el.dataset.dish === d);
-  const paintDishStars = (d)=>{
-    const n = (details.get(d) || {}).rating || 0;
-    rowsFor(d).forEach(row => row.querySelectorAll('.dish-star').forEach(st=>{
-      st.classList.toggle('on', parseInt(st.dataset.n) <= n);
-      st.textContent = parseInt(st.dataset.n) <= n ? '★' : '☆';
-      st.setAttribute('aria-pressed', String(parseInt(st.dataset.n) === n));
-    }));
-  };
   renderDishes();
   if(dishArea){
     dishArea.addEventListener('change', (e)=>{
@@ -2307,6 +2395,7 @@ function openLogVisit(restaurantId, visitId){
         if(box.checked && !open) row.insertAdjacentHTML('beforeend', detailHtml(d));
         if(!box.checked && open) open.remove();
       });
+      wireDishSliders();
     });
     dishArea.addEventListener('input', (e)=>{
       const mod = e.target.closest('.dish-mod');
@@ -2316,16 +2405,6 @@ function openLogVisit(restaurantId, visitId){
       rowsFor(d).forEach(row=>{ const other = row.querySelector('.dish-mod'); if(other && other !== mod) other.value = mod.value; });
     });
     dishArea.addEventListener('click', (e)=>{
-      const star = e.target.closest('.dish-star');
-      if(star){
-        const d = star.closest('.dish-pick').dataset.dish;
-        const n = parseInt(star.dataset.n);
-        const cur = (details.get(d) || {}).rating || 0;
-        // Tapping the same star again clears the dish's rating.
-        details.set(d, { mod: '', ...(details.get(d) || {}), rating: cur === n ? 0 : n });
-        paintDishStars(d);
-        return;
-      }
       const head = e.target.closest('.menu-sec-head');
       if(head && !head.classList.contains('static')){
         const sec = head.closest('.menu-group').dataset.section;
@@ -2382,22 +2461,7 @@ function openLogVisit(restaurantId, visitId){
     }
   });
 
-  const starEls = $$('#starPick button');
-  // Solid when picked, outline when not — told apart by shape, not color alone.
-  const paintStars = (n)=> starEls.forEach(x=>{
-    x.classList.toggle('on', parseInt(x.dataset.n) <= n);
-    x.textContent = parseInt(x.dataset.n) <= n ? '★' : '☆';
-  });
-  paintStars(rating);
-  starEls.forEach(s=>{
-    s.addEventListener('mouseenter', ()=> paintStars(parseInt(s.dataset.n)));
-    s.addEventListener('click', ()=>{
-      rating = parseInt(s.dataset.n);
-      starEls.forEach(x=> x.setAttribute('aria-pressed', String(x === s)));
-      paintStars(rating);
-    });
-  });
-  $('#starPick').addEventListener('mouseleave', ()=> paintStars(rating));
+  wireStarSlider($('#starPick'), { onChange: (v)=>{ rating = v; } });
   const setReturn = (yes)=>{
     wouldReturn = yes;
     $('#wrYes').classList.toggle('on', yes); $('#wrYes').setAttribute('aria-pressed', String(yes));

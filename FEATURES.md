@@ -25,6 +25,7 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] "Chicago Gems" renamed "Personal Gems" (stored tag migrated on the owner's next sign-in; the old name counts as a gem until then)
 - [x] "Tourist spots" filter — Brianna tags spots herself with "+ Add a guide" (Tourist Spots is always suggested); tagged cards show a "Tourist Spot" label
 - [x] City sides renamed Up North / Out West / Out South / Over East (Downtown unchanged; old side links still work)
+- [x] Half stars — overall and per-dish ratings go in half steps. Real half-filled stars where the full row shows; "4.5★" where space is tight. Phones: drag across a full-width star row (the number shows above your thumb); desktop: hover and click; arrow keys and screen readers move in half steps. Database rules allow 0.5 steps (deployed)
 - [x] Edit your own visit — "Edit" on your visits reopens Log a Visit filled in; changes save to the same visit
 - [x] Menu "checked" dates — every curated menu carries the date it was last checked against its source (`asOf`, recovered from git history); shown in the listing window and stored as `menuUpdated` for staleness checks
 - [x] Visits logged under your account name — no separate usernames; renaming yourself (the pencil on "Signed in as") updates your past visits too
