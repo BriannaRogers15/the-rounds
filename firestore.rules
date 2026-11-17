@@ -13,6 +13,46 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // ---- Usernames: public, unique, one per account ----
+    // A username is reserved at usernames/{lowercased}: create-only, so the
+    // database itself refuses a name someone already has (even two people
+    // picking it at the same moment). profiles/{uid} holds the account's
+    // username for everyone to read (reviews show it); it must point at a
+    // reservation the account owns, so nobody can show another's name.
+    function validUsername(name) {
+      return name is string && name.matches('^[A-Za-z0-9_.]{3,20}$')
+        // Same short list the app refuses (public names, so no slurs).
+        && !name.lower().matches('.*(fuck|shit|bitch|cunt|nigg|fag|whore|slut|rape|nazi|hitler|retard|pussy|cock|dick|porn).*');
+    }
+    match /usernames/{name} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid', 'username'])
+        && request.resource.data.uid == request.auth.uid
+        && validUsername(request.resource.data.username)
+        && request.resource.data.username.lower() == name
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username == request.resource.data.username;
+      // Only a change of capitalization (same reservation, same owner).
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'username'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username.lower() == name
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username == request.resource.data.username;
+      // Released only by its owner, and only once their profile has moved on.
+      allow delete: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username.lower() != name;
+    }
+    match /profiles/{uid} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['username'])
+        && validUsername(request.resource.data.username)
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username.lower())).data.uid == uid;
+      allow delete: if false;
+    }
+
     match /restaurants/{restaurantId} {
       allow read: if true;
       // Only Brianna creates or deletes listings.

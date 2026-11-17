@@ -122,6 +122,19 @@ function watchSharedLedger(){
   };
 }
 
+/* Public profiles (just each account's username), live. Reviews show the
+   author's current username from here, so a username change shows
+   everywhere at once and nobody can post under someone else's. */
+function watchProfiles(onChange){
+  const stop = onSnapshot(collection(db, 'profiles'), (snapshot)=>{
+    const byUid = {};
+    snapshot.docs.forEach((entry)=>{ byUid[entry.id] = entry.data(); });
+    onChange(byUid);
+  }, (error)=> console.error('Could not read profiles:', error));
+  activeListeners.add(stop);
+  return ()=>{ stop(); activeListeners.delete(stop); };
+}
+
 function stableJson(value){
   if(Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if(value && typeof value === 'object'){
@@ -192,7 +205,7 @@ window.RoundsFirebase = {
       await terminate(db);
     }
   },
-  watchSharedLedger, syncSharedLedger,
+  watchSharedLedger, syncSharedLedger, watchProfiles, writeBatch,
   doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc,
   collection, getDocs, onSnapshot, serverTimestamp, arrayUnion, arrayRemove,
 };

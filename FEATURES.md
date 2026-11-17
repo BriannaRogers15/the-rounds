@@ -31,7 +31,10 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] Rename a listing (owner, pencil by the name): visits, menu, guides and curated links stay attached via `curatedName`; no duplicate is ever seeded
 - [x] Edit your own visit — "Edit" on your visits reopens Log a Visit filled in; changes save to the same visit
 - [x] Menu "checked" dates — every curated menu carries the date it was last checked against its source (`asOf`, recovered from git history); shown in the listing window and stored as `menuUpdated` for staleness checks
-- [x] Visits logged under your account name — no separate usernames; renaming yourself (the pencil on "Signed in as") updates your past visits too
+- [x] Usernames — every account has a public, unique username (required at email sign-up and on a first Google sign-in, or for accounts from before). Reviews show the author's current username, live from their profile, so a change shows everywhere and nobody can post as someone else. Reserved in `usernames/{lowercased}`; the database refuses duplicates and a short blocked-word list
+- [x] Private display name — starts as the username; only you see it (the "Signed in as" pill, Profile)
+- [x] Profile page (tap your name in the pill): username, display name, email, how you sign in, Owner role, your visits, sign out. No photos (nothing to moderate)
+- [x] One way in per email — a second password sign-up for an email is refused (Firebase), and a Google sign-in on an email made with a password is refused by the app
 - [x] Search, sort (name/date/rating/distance), "haven't been yet" filter
 - [x] In-app website popups with "open in new tab" fallback
 - [x] Add Listing via Google Places Autocomplete — search-by-name, food/drink types only; manual fallback ("Can't find it on Google Maps?") on request, or automatically if search is unavailable

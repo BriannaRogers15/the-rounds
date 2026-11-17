@@ -6,7 +6,7 @@ A personal restaurant guide tracker for Chicago and the Chicagoland area. Log vi
 - **Neighborhood-first landing** — pastel shape-cards carrying each Chicago neighborhood's real boundary silhouette (Chicago Data Portal) and each suburb's municipal outline (U.S. Census TIGERweb). Stocked areas lead, most-spots-first; unexplored neighborhoods sit behind a toggle. Tap an area to see its spots and cuisines.
 - **Accurate neighborhoods** — landmark zones that aren't real neighborhoods (United Center, Museum Campus, Grant Park…) are folded into the neighborhoods around them; Douglas + Grand Boulevard merge into Bronzeville.
 - **Per-restaurant menus** — add dishes one at a time or paste a whole menu; logging a visit is a tap-to-check list, so orders stay consistent. New dishes typed at log time join the menu automatically.
-- **Your name on your reviews** — every visit is logged under the signed-in account's name (from sign-up or Google). Change it with the pencil on "Signed in as …" and your past visits follow.
+- **Your username on your reviews** — every account picks a unique username (shown on its reviews); the display name is private. Change either on your Profile (tap your name in the pill).
 - **Shared ledger** — restaurants and visits sync through Firestore across devices. Guests can browse the public ledger; signed-in users can log visits, and listing management is owner-only.
 - **Multi-tag cuisines** with two-level grouping (e.g. Bars → Sports Bars, Tiki Bars, Cocktail Bars), search, sort (name/date/rating/distance), and a "haven't been yet" filter.
 - **In-app website popups** — restaurant sites open in a large overlay with an always-available "Open in new tab" fallback.

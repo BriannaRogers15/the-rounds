@@ -32,7 +32,7 @@ function captureDialogs(page) {
 }
 
 test.describe('Log a Visit: validation', () => {
-  test('rating, would-go-back, and (for an account with no name yet) a name are each required', async ({ browser, signedInPage }) => {
+  test('a rating and would-go-back are each required', async ({ browser, signedInPage }) => {
     const r = await arrangeListing(browser, 'lv-validate');
     const dialogs = captureDialogs(signedInPage);
     await openLogVisit(signedInPage, r);
@@ -46,93 +46,89 @@ test.describe('Log a Visit: validation', () => {
 
     await signedInPage.click('#wrNo');
     await signedInPage.click('#saveLog');
-    expect(dialogs.at(-1)).toContain('Add your name');
+    await expect(signedInPage.locator('.visit-item')).toHaveCount(1); // now it saves
+    await signedInPage.evaluate(async (id) => { visits = visits.filter((v) => v.restaurantId !== id); await saveVisits(); }, r.id);
 
     expect(await signedInPage.evaluate((id) => visits.filter((v) => v.restaurantId === id).length, r.id)).toBe(0);
   });
 });
 
 test.describe('Log a Visit: saving', () => {
-  test('a full visit from an unnamed account saves everything, names the account, and adds a new dish to the menu', async ({ browser, signedInPage }) => {
+  test('a full visit saves everything under your username and adds a new dish to the menu', async ({ browser }) => {
     const r = await arrangeListing(browser, 'lv-full');
-    await openLogVisit(signedInPage, r);
-
-    await signedInPage.fill('#vName', 'Probe Reviewer');
-    await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
-    await signedInPage.fill('#vAte', 'Garlic Knots'); // not on the menu yet
-    await pickStars(signedInPage.locator('#starPick'), 4);
-    await signedInPage.click('#wrYes');
-    await signedInPage.fill('#vNotes', 'Ask for extra crispy.');
-
-    // Pick the 15th of the previous month from the calendar.
-    await signedInPage.click('#dateDisplay');
-    await signedInPage.click('#calPrev');
-    const day15 = signedInPage.locator('#calGrid .cal-cell:not(.cal-blank)').nth(14);
-    const chosenDate = await day15.getAttribute('data-date');
-    await day15.click();
-
-    await signedInPage.click('#saveLog');
-
-    // Back on the detail modal, showing the new visit.
-    const item = signedInPage.locator('.visit-item').first();
-    await expect(item).toContainText('Probe Reviewer');
-    await expect(item).toContainText('Ate Cheese Slice, Garlic Knots');
-    await expect(item.locator('.return-pill')).toHaveText('Would go back');
-    await expect(item).toContainText('Review Ask for extra crispy.');
-    await expect(signedInPage.locator('#menuChips')).toContainText('Garlic Knots');
-
-    const uid = await signedInPage.evaluate(() => window.RoundsFirebase.auth.currentUser.uid);
-    const saved = await signedInPage.evaluate((id) => visits.find((v) => v.restaurantId === id), r.id);
-    expect(saved).toMatchObject({ rating: 4, wouldReturn: true, date: chosenDate, reviewer: 'Probe Reviewer', authorUid: uid });
-
-    // Persisted to the shared ledger: the visit, and the menu addition — a
-    // non-owner's menu-only update, which firestore.rules allows.
-    await expect.poll(() => getDoc(`visits/${saved.id}`)).toMatchObject({ authorUid: uid, date: chosenDate });
-    await expect.poll(async () => (await getDoc(`restaurants/${r.id}`))?.menu).toContain('Garlic Knots');
-
-    // The name went to the account itself (not this device): the chip,
-    // the Firebase profile, and the users/{uid} doc all have it.
-    await expect(signedInPage.locator('.signed-in-chip')).toContainText('Probe Reviewer');
-    expect(await signedInPage.evaluate(() => window.RoundsFirebase.auth.currentUser.displayName)).toBe('Probe Reviewer');
-    await expect.poll(async () => (await getDoc(`users/${uid}`))?.displayName).toBe('Probe Reviewer');
-  });
-
-  test('an account with a name logs under it — no name or username question', async ({ browser }) => {
-    const r = await arrangeListing(browser, 'lv-named');
-    const page = await openSignedInPage(browser, { creds: await createRegularTestUser({ displayName: 'Named Probe' }) });
+    const creds = await createRegularTestUser({ username: 'probe_reviewer', displayName: 'My Private Name' });
+    const signedInPage = await openSignedInPage(browser, { creds });
     try {
-      await openLogVisit(page, r);
-      await expect(page.locator('.logged-by')).toContainText('Logging as Named Probe');
-      await expect(page.locator('#vName')).toHaveCount(0);
-      await pickStars(page.locator('#starPick'), 5);
-      await page.click('#wrYes');
-      await page.click('#saveLog');
-      await expect(page.locator('.visit-item').first()).toContainText('Named Probe');
+      await openLogVisit(signedInPage, r);
+      await expect(signedInPage.locator('.logged-by')).toContainText('Logging as probe_reviewer');
+      await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
+      await signedInPage.fill('#vAte', 'Garlic Knots'); // not on the menu yet
+      await pickStars(signedInPage.locator('#starPick'), 4);
+      await signedInPage.click('#wrYes');
+      await signedInPage.fill('#vNotes', 'Ask for extra crispy.');
+
+      // Pick the 15th of the previous month from the calendar.
+      await signedInPage.click('#dateDisplay');
+      await signedInPage.click('#calPrev');
+      const day15 = signedInPage.locator('#calGrid .cal-cell:not(.cal-blank)').nth(14);
+      const chosenDate = await day15.getAttribute('data-date');
+      await day15.click();
+
+      await signedInPage.click('#saveLog');
+
+      // Back on the detail modal, showing the new visit — under the public
+      // username, never the private display name.
+      const item = signedInPage.locator('.visit-item').first();
+      await expect(item.locator('.visit-who')).toHaveText('probe_reviewer');
+      await expect(item).not.toContainText('My Private Name');
+      await expect(item).toContainText('Ate Cheese Slice, Garlic Knots');
+      await expect(item.locator('.return-pill')).toHaveText('Would go back');
+      await expect(item).toContainText('Review Ask for extra crispy.');
+      await expect(signedInPage.locator('#menuChips')).toContainText('Garlic Knots');
+
+      const uid = await signedInPage.evaluate(() => window.RoundsFirebase.auth.currentUser.uid);
+      const saved = await signedInPage.evaluate((id) => visits.find((v) => v.restaurantId === id), r.id);
+      expect(saved).toMatchObject({ rating: 4, wouldReturn: true, date: chosenDate, reviewer: 'probe_reviewer', authorUid: uid });
+      await expect.poll(() => getDoc(`visits/${saved.id}`)).toMatchObject({ authorUid: uid, date: chosenDate });
+      await expect.poll(async () => (await getDoc(`restaurants/${r.id}`))?.menu).toContain('Garlic Knots');
+      // The pill shows the private display name.
+      await expect(signedInPage.locator('.signed-in-chip')).toContainText('My Private Name');
     } finally {
-      await closeSession(page);
+      await closeSession(signedInPage);
     }
   });
 
-  test('renaming yourself moves your past visits to the new name, for everyone', async ({ browser }) => {
+  test('changing your username on Profile changes the name on all your reviews, for everyone', async ({ browser }) => {
     const r = await arrangeListing(browser, 'lv-rename');
-    const page = await openSignedInPage(browser, { creds: await createRegularTestUser({ displayName: 'Old Name Probe' }) });
+    const page = await openSignedInPage(browser, { creds: await createRegularTestUser({ username: 'old_name_probe' }) });
     try {
       await openLogVisit(page, r);
       await pickStars(page.locator('#starPick'), 4);
       await page.click('#wrYes');
       await page.click('#saveLog');
       const visitId = await page.evaluate((id) => visits.find((v) => v.restaurantId === id).id, r.id);
-      await expect.poll(async () => (await getDoc(`visits/${visitId}`))?.reviewer).toBe('Old Name Probe');
+      await expect(page.locator(`.visit-item[data-vid="${visitId}"] .visit-who`)).toHaveText('old_name_probe');
 
-      // The "Signed in as" pill is part of the page, not floating over
-      // windows: close the listing, rename, and the visit follows.
       await page.click('#closeDet');
-      page.once('dialog', (d) => d.accept('New Name Probe'));
-      await page.click('#authRenameBtn');
-      await expect(page.locator('.signed-in-chip')).toContainText('New Name Probe');
-      await expect.poll(async () => (await getDoc(`visits/${visitId}`))?.reviewer).toBe('New Name Probe');
-      await openListingDetail(page, r.id);
-      await expect(page.locator(`.visit-item[data-vid="${visitId}"]`)).toContainText('New Name Probe');
+      await page.click('#chipProfileLink');
+      await page.fill('#profileUsername', 'new_name_probe');
+      await expect(page.locator('#profileUsernameStatus')).toHaveText('new_name_probe is available');
+      await page.click('#profileUsernameSave');
+      await expect(page.locator('#profileUsernameStatus')).toContainText('Saved');
+      const uid = await page.evaluate(() => window.RoundsFirebase.auth.currentUser.uid);
+      await expect.poll(() => getDoc(`profiles/${uid}`)).toEqual({ username: 'new_name_probe' });
+      // The old name is free again; the new one is reserved.
+      await expect.poll(() => getDoc('usernames/old_name_probe')).toBeNull();
+      await expect.poll(async () => (await getDoc('usernames/new_name_probe'))?.uid).toBe(uid);
+
+      // Another person sees the new name on the review.
+      const other = await openSignedInPage(browser);
+      try {
+        await openListingDetail(other, r.id);
+        await expect(other.locator(`.visit-item[data-vid="${visitId}"] .visit-who`)).toHaveText('new_name_probe');
+      } finally {
+        await closeSession(other);
+      }
     } finally {
       await closeSession(page);
     }
@@ -151,7 +147,6 @@ test.describe('Log a Visit: each dish gets its own stars and changes', () => {
   test('rate a dish and note a change; it shows on the visit and the menu, and reaches the ledger', async ({ browser, signedInPage }) => {
     const r = await arrangeListing(browser, 'lv-dish');
     await openLogVisit(signedInPage, r);
-    await signedInPage.fill('#vName', 'Dish Rater');
     // Nothing to rate until the dish is checked.
     await expect(signedInPage.locator('.dish-detail')).toHaveCount(0);
     await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
@@ -188,7 +183,6 @@ test.describe('Log a Visit: each dish gets its own stars and changes', () => {
   test('editing your own visit: it opens filled in, and changes save to the same visit', async ({ browser, signedInPage }) => {
     const r = await arrangeListing(browser, 'lv-edit');
     await openLogVisit(signedInPage, r);
-    await signedInPage.fill('#vName', 'Editor Probe');
     await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
     await pickStars(signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .star-slider'), 2);
     await pickStars(signedInPage.locator('#starPick'), 2);
@@ -228,7 +222,6 @@ test.describe('Log a Visit: half stars', () => {
   test('pick a half star by its left half, nudge it with the keyboard, and see a real half star after saving', async ({ browser, signedInPage }) => {
     const r = await arrangeListing(browser, 'lv-half');
     await openLogVisit(signedInPage, r);
-    await signedInPage.fill('#vName', 'Half Star Probe');
     const overall = signedInPage.locator('#starPick');
     await pickStars(overall, 3.5);
     await expect(overall).toHaveAttribute('aria-valuenow', '3.5');

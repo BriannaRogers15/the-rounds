@@ -51,8 +51,9 @@
       <div class="auth-divider"><span>or</span></div>
 
       <div class="field" id="authNameField" style="display:none;">
-        <label for="authName">Your name <span class="label-note">(shown on your reviews)</span></label>
-        <input type="text" id="authName" placeholder="e.g. Bri" autocomplete="name">
+        <label for="authName">Username <span class="label-note">(shown on your reviews)</span></label>
+        <input type="text" id="authName" placeholder="e.g. briski" autocomplete="username" maxlength="20" autocapitalize="off" spellcheck="false">
+        <div class="username-status" id="authNameStatus" aria-live="polite"></div>
       </div>
       <div class="field">
         <label for="authEmail">Email</label>
@@ -79,6 +80,24 @@
         <a href="#" id="authForgotLink">Forgot password?</a>
       </div>
       <a href="#" class="auth-guest" id="authGuestLink">Just browsing? Continue as a guest</a>
+    </div>
+  </div>
+</div>
+
+<div id="usernameGate" class="auth-gate" style="display:none;">
+  <div class="auth-card paper">
+    <div class="eyebrow">One last thing</div>
+    <h1>Pick your username</h1>
+    <div class="sub">It's shown on your reviews, and nobody else can have it. Your display name is private; it starts as your username and you can change either on your Profile.</div>
+    <div class="auth-card-body">
+      <div class="field">
+        <label for="usernameInput">Username</label>
+        <input type="text" id="usernameInput" placeholder="e.g. briski" autocomplete="username" maxlength="20" autocapitalize="off" spellcheck="false">
+        <div class="username-status" id="usernameStatus" aria-live="polite"></div>
+      </div>
+      <button type="button" class="btn" id="usernameSave">Continue</button>
+      <div class="auth-error" id="usernameError" role="alert" style="display:none;"></div>
+      <a href="#" class="auth-guest" id="usernameSignOut">Sign out</a>
     </div>
   </div>
 </div>
@@ -110,6 +129,8 @@
   <div class="receipt" id="statsReceipt"></div>
 
   <div id="areasPage" style="display:none;"></div>
+
+  <div id="profilePage" style="display:none;"></div>
 
   <div class="area-banner" id="areaBanner" style="display:none;"></div>
 

@@ -166,8 +166,15 @@ function setSharedLedgerStatus(message, isError=false){
 }
 /* The signed-in person's name, as visits are logged under it — set at
    sign-up (or by Google), changed with the pencil on "Signed in as …". */
-function accountName(){
-  return (window.RoundsFirebase?.auth?.currentUser?.displayName || '').trim();
+function myUsername(){
+  return (window.RoundsAccount?.profile?.username || '').trim();
+}
+/* Everyone's public username, live (profiles/{uid}). Reviews show the
+   author's current username; a visit's stored `reviewer` is only the
+   fallback for authors from before usernames. */
+let profilesByUid = {};
+function reviewerName(v){
+  return profilesByUid[v.authorUid]?.username || v.reviewer || 'Someone';
 }
 
 function visitsFor(restaurantId){
@@ -808,6 +815,7 @@ function openArea(area){
    land on the right view. Empty hash = the territory landing. */
 let applyingHash = false;
 function stateToHash(){
+  if(currentPage === 'profile') return '#v=profile';
   if(currentPage !== 'listings') return '';
   const p = new URLSearchParams();
   p.set('v', activeArea ? 'area' : 'all');
@@ -826,7 +834,9 @@ function applyHash(){
   applyingHash = true;
   const p = new URLSearchParams(location.hash.replace(/^#/, ''));
   const v = p.get('v');
-  if(v === 'all' || v === 'area'){
+  if(v === 'profile'){
+    currentPage = 'profile';
+  } else if(v === 'all' || v === 'area'){
     currentPage = 'listings';
     activeArea = (v === 'area' && p.get('t') && p.get('n')) ? { type: p.get('t'), name: p.get('n') } : null;
     if(activeArea && activeArea.type === 'side' && OLD_SIDE_NAMES[activeArea.name]) activeArea.name = OLD_SIDE_NAMES[activeArea.name];
@@ -1625,8 +1635,11 @@ function renderListingsBackdrop(){
 
 function renderPageVisibility(){
   const listings = currentPage === 'listings';
-  $('#areasPage').style.display = listings ? 'none' : '';
+  const profile = currentPage === 'profile';
+  $('#areasPage').style.display = currentPage === 'areas' ? '' : 'none';
   $('#listingsLayout').style.display = listings ? '' : 'none';
+  $('#profilePage').style.display = profile ? '' : 'none';
+  $('#statsReceipt').style.display = profile ? 'none' : '';
   if(!listings){
     closeRail();
     if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
@@ -1639,6 +1652,8 @@ function renderAll(){
   if(currentPage === 'listings'){
     renderCuisineRail();
     renderContent();
+  } else if(currentPage === 'profile'){
+    renderProfilePage();
   } else {
     renderAreasPage();
   }
@@ -1661,24 +1676,144 @@ function nameLinkHtml(r, stopProp){
   return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="name-link"${stopProp ? ' onclick="event.stopPropagation()"' : ''}>${escapeHtml(r.name)}</a>`;
 }
 
-/* Renaming yourself moves your past visits to the new name too, so a
-   review never stays stuck under an old one. (Each visit stores the name it
-   was logged under; only its author may edit it, which is who this is.) */
-window.addEventListener('rounds-name-changed', async (e)=>{
-  const { uid: renamedUid, name } = e.detail || {};
-  if(!renamedUid || !name) return;
-  let changed = false;
-  visits.forEach(v=>{
-    if(v.authorUid === renamedUid && v.reviewer !== name){ v.reviewer = name; changed = true; }
+/* A username or display name change shows at once: the open listing
+   window (reviews) and the Profile page redraw. */
+function redrawForAccountChange(){
+  const openDetailId = $('#modalRoot .modal[data-detail-id]')?.dataset.detailId;
+  if(openDetailId) openDetail(openDetailId);
+  if(currentPage === 'profile') renderProfilePage();
+}
+window.addEventListener('rounds-username-changed', redrawForAccountChange);
+window.addEventListener('rounds-display-name-changed', redrawForAccountChange);
+
+/* ---------- Profile ----------
+   Username (public, unique, on every review), display name (private: only
+   you see it, in your pill and here), the account's email and how it signs
+   in, and your visits. */
+function renderProfilePage(){
+  const el = $('#profilePage');
+  const user = window.RoundsFirebase?.auth?.currentUser;
+  if(!user || window.roundsGuestMode){
+    el.innerHTML = `<div class="profile-card paper paper-panel">
+      <h2 class="profile-title">Your profile</h2>
+      <p class="profile-note">Sign in to see your profile and your visits.</p>
+      <button type="button" class="btn" id="profileSignIn">Sign in</button>
+    </div>`;
+    $('#profileSignIn').addEventListener('click', ()=> window.showRoundsAuthGate && window.showRoundsAuthGate());
+    return;
+  }
+  const acct = window.RoundsAccount || {};
+  const username = myUsername();
+  const display = acct.displayName || username;
+  const method = acct.signInMethod === 'google.com' ? 'Google' : (acct.signInMethod === 'password' ? 'Email and password' : '—');
+  const mine = visits.filter(v => v.authorUid === user.uid).sort((a, b)=> String(b.date).localeCompare(String(a.date)));
+  const avg = avgRating(mine);
+  el.innerHTML = `<div class="profile-card paper paper-panel">
+    <div class="profile-head">
+      <h2 class="profile-title">Your profile</h2>
+      <a href="#" class="text-link" id="profileBack">← Back</a>
+    </div>
+
+    <section class="profile-section">
+      <label class="profile-label" for="profileUsername">Username <span class="label-note">(public: shown on every review)</span></label>
+      <div class="profile-row">
+        <input type="text" id="profileUsername" value="${escapeHtml(username)}" maxlength="20" autocomplete="username" autocapitalize="off" spellcheck="false">
+        <button type="button" class="btn" id="profileUsernameSave">Save</button>
+      </div>
+      <div class="username-status" id="profileUsernameStatus" aria-live="polite"></div>
+    </section>
+
+    <section class="profile-section">
+      <label class="profile-label" for="profileDisplayName">Display name <span class="label-note">(private: only you see it)</span></label>
+      <div class="profile-row">
+        <input type="text" id="profileDisplayName" value="${escapeHtml(display)}" maxlength="80" autocomplete="nickname">
+        <button type="button" class="btn" id="profileDisplaySave">Save</button>
+      </div>
+      <div class="username-status" id="profileDisplayStatus" aria-live="polite"></div>
+    </section>
+
+    <section class="profile-section">
+      <div class="profile-label">Account</div>
+      <dl class="profile-facts">
+        <div><dt>Email</dt><dd>${escapeHtml(user.email || '—')}</dd></div>
+        <div><dt>Signs in with</dt><dd>${method}</dd></div>
+        ${window.RoundsFirebase.isOwner() ? '<div><dt>Role</dt><dd><span class="owner-badge">Owner</span></dd></div>' : ''}
+      </dl>
+    </section>
+
+    <section class="profile-section">
+      <div class="profile-label">Your visits <span class="label-note">${mine.length ? `${mine.length} visit${mine.length===1?'':'s'} · ${avg.toFixed(1)}★ average` : ''}</span></div>
+      ${mine.length ? `<ul class="profile-visits">${mine.map(v=>{
+        const r = restaurants.find(x => x.id === v.restaurantId);
+        return `<li><button type="button" class="profile-visit" data-rid="${escapeHtml(v.restaurantId)}">
+          <span class="pv-name">${escapeHtml(r ? r.name : 'A removed listing')}</span>
+          <span class="pv-meta">${fmtDate(v.date)} ${starsHtml(v.rating)}</span>
+        </button></li>`;
+      }).join('')}</ul>` : '<p class="profile-note">No visits yet. Open a listing and tap "+ Log a visit".</p>'}
+    </section>
+
+    <section class="profile-section profile-actions">
+      <button type="button" class="btn quiet" id="profileSignOut">Sign out</button>
+    </section>
+  </div>`;
+
+  $('#profileBack').addEventListener('click', (e)=>{ e.preventDefault(); currentPage = 'areas'; renderAll(); });
+  $('#profileSignOut').addEventListener('click', ()=> window.RoundsFirebase.signOut(window.RoundsFirebase.auth));
+  $$('.profile-visit', el).forEach(b => b.addEventListener('click', ()=>{ if(restaurants.some(r => r.id === b.dataset.rid)) openDetail(b.dataset.rid); }));
+  const status = (id, text, kind)=>{ const s = $('#' + id); s.textContent = text; s.dataset.kind = kind || ''; };
+  // Username: live availability, then one atomic save.
+  const uInput = $('#profileUsername');
+  let uTimer = null, uSeq = 0;
+  uInput.addEventListener('input', ()=>{
+    clearTimeout(uTimer);
+    const name = uInput.value.trim();
+    if(name === username){ status('profileUsernameStatus', ''); return; }
+    const problem = acct.validateUsername(name);
+    if(problem){ status('profileUsernameStatus', problem, 'bad'); return; }
+    const mineSeq = ++uSeq;
+    status('profileUsernameStatus', 'Checking…');
+    uTimer = setTimeout(async ()=>{
+      const free = await acct.isUsernameFree(name).catch(()=> null);
+      if(mineSeq !== uSeq || free === null) return;
+      status('profileUsernameStatus', free ? `${name} is available` : `${name} is taken`, free ? 'good' : 'bad');
+    }, 300);
   });
-  if(changed){
+  $('#profileUsernameSave').addEventListener('click', async ()=>{
+    const name = uInput.value.trim();
+    if(name === username) return;
+    try{
+      await acct.claimUsername(name);
+      status('profileUsernameStatus', 'Saved. Your reviews now show it.', 'good');
+    }catch(err){ status('profileUsernameStatus', err.message || 'Could not save — try again.', 'bad'); }
+  });
+  $('#profileDisplaySave').addEventListener('click', async ()=>{
+    try{
+      await acct.setDisplayName($('#profileDisplayName').value);
+      status('profileDisplayStatus', 'Saved.', 'good');
+    }catch(err){ status('profileDisplayStatus', err.message || 'Could not save — try again.', 'bad'); }
+  });
+}
+
+/* One-time move (2026-11-16, at Brianna's request): her visits logged
+   from her second Google account belong to the owner account. Runs on the
+   owner's first sign-in once a username is set; each visit is re-created
+   under the owner (same date, dishes, stars, review) and the old copy
+   removed. A no-op once nothing is left to move. */
+const MOVE_VISITS_FROM_UID = '6CU0HDaWexeVbO69buTBECU764R2';
+let movingVisits = false;
+async function moveOldAccountVisits(){
+  if(movingVisits || !appBooted || !bootedAsOwner || !sharedLedgerReady || !myUsername()) return;
+  const ownerUid = window.RoundsFirebase.auth.currentUser?.uid;
+  const old = visits.filter(v => v.authorUid === MOVE_VISITS_FROM_UID);
+  if(!ownerUid || !old.length) return;
+  movingVisits = true;
+  try{
+    const moved = old.map(v => ({ ...v, id: uid(), authorUid: ownerUid, reviewer: myUsername() }));
+    visits = [...visits.filter(v => v.authorUid !== MOVE_VISITS_FROM_UID), ...moved];
     await saveVisits();
     renderAll();
-    // A listing window that's open shows the visits too — redraw it.
-    const openDetailId = $('#modalRoot .modal[data-detail-id]')?.dataset.detailId;
-    if(openDetailId) openDetail(openDetailId);
-  }
-});
+  } finally { movingVisits = false; }
+}
 
 function canWriteLedger(){
   return sharedLedgerReady && !!(window.RoundsFirebase && window.RoundsFirebase.auth && window.RoundsFirebase.auth.currentUser) && !window.roundsGuestMode;
@@ -1720,6 +1855,8 @@ async function reloadIfOwnerSignedInAfterBoot(){
 }
 window.addEventListener('rounds-signed-in', ()=>{
   signInSettled = true;
+  moveOldAccountVisits();
+  if(appBooted) renderAll();
   // If this lands before init() finishes, init() re-checks once it does.
   reloadIfOwnerSignedInAfterBoot();
 });
@@ -2139,7 +2276,7 @@ function openDetail(id){
             ${vs.length ? vs.map(v=>`
               <div class="visit-item" data-vid="${v.id}">
                 <div class="visit-top">
-                  ${v.reviewer ? `<span class="visit-who">${escapeHtml(v.reviewer)}</span>` : ''}
+                  <span class="visit-who">${escapeHtml(reviewerName(v))}</span>
                   <span class="visit-date">${fmtDate(v.date)}</span>
                   ${starsHtml(v.rating)}
                   <span class="return-pill ${v.wouldReturn ? 'yes' : 'no'}">${v.wouldReturn ? 'Would go back' : "Wouldn't go back"}</span>
@@ -2335,18 +2472,12 @@ function openLogVisit(restaurantId, visitId){
         <div class="paper-head">
           <div class="log-who">
             <h2 id="logTitle">${editing ? 'Edit visit' : 'Log a visit'}${rest ? ` · ${escapeHtml(rest.name)}` : ''}</h2>
-            ${accountName()
-              ? `<div class="logged-by">${editing ? 'Your visit, as' : 'Logging as'} <b>${escapeHtml(accountName())}</b></div>`
-              : ''}
+            <div class="logged-by">${editing ? 'Your visit, as' : 'Logging as'} <b>${escapeHtml(myUsername())}</b></div>
           </div>
           <button type="button" class="close-btn" id="closeLog" aria-label="Close">×</button>
         </div>
         <div class="log-grid">
         <div class="log-left">
-        ${accountName() ? '' : `<div class="field log-name">
-            <label for="vName">Your name <span class="label-note">(shown on your reviews, saved to your account)</span></label>
-            <input type="text" id="vName" maxlength="80" placeholder="e.g. Brianna" autocomplete="name">
-          </div>`}
         <div class="field log-date">
           <div class="field-row"><span class="field-label" id="dateLabel">Date</span>
           <button type="button" class="date-display" id="dateDisplay" aria-describedby="dateLabel">${fmtDate(selectedDate)}</button></div>
@@ -2512,15 +2643,10 @@ function openLogVisit(restaurantId, visitId){
     if(!canWriteLedger()) return;
     if(!rating){ alert('Pick a rating.'); return; }
     if(wouldReturn === null){ alert('Let us know if you\'d go back.'); return; }
-    // An account with no name yet (rare: an older email sign-up) names
-    // itself here, once — saved to the account, not this device.
-    const nameInput = $('#vName');
-    if(nameInput){
-      if(!nameInput.value.trim()){ alert('Add your name — it\'s shown on your reviews.'); return; }
-      try{ await window.setRoundsDisplayName(nameInput.value); }
-      catch(err){ alert(err.message || 'Could not save your name — try again.'); return; }
-    }
-    const reviewerName = accountName();
+    // Every account has a username before it can get here (the sign-in
+    // flow asks for one); it's what the review shows.
+    const reviewerName = myUsername();
+    if(!reviewerName){ alert('Pick a username first — it\'s shown on your reviews.'); return; }
     const date = selectedDate || today;
     const typedDish = $('#vAte').value.trim();
     const ate = [...picked, ...keptAte];
@@ -2957,8 +3083,19 @@ async function waitForFirebase(){
     setSharedLedgerStatus('Shared');
   }
 
+  // Everyone's public username, live, for the names on reviews.
+  if(firebase && cloudAvailable){
+    firebase.watchProfiles((byUid)=>{
+      profilesByUid = byUid;
+      if(!dataLoaded) return;
+      const openDetailId = $('#modalRoot .modal[data-detail-id]')?.dataset.detailId;
+      if(openDetailId && !$('#modalRoot .log-modal')) openDetail(openDetailId);
+    });
+  }
+
   applyHash(); // restores the view from the address (empty hash = landing)
   appBooted = true;
+  moveOldAccountVisits();
   reloadIfOwnerSignedInAfterBoot(); // owner signed in while init() was running
   // Signals that restaurants/visits/saveRestaurants/renderAll are safe to
   // touch from outside the app (e.g. test fixtures via page.evaluate),

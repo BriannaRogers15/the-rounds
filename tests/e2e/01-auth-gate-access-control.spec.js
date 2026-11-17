@@ -1,7 +1,8 @@
 const { test, expect, openOwnerPage, closeSession } = require('../fixtures/app-fixture');
 const { injectRestaurants, resetLedger, openListingDetail } = require('../fixtures/ledger-helpers');
 const { probeRestaurants } = require('../fixtures/seed-data');
-const { createRegularTestUser, randomTestEmail } = require('../fixtures/auth-helpers');
+const { createRegularTestUser, randomTestEmail, randomUsername } = require('../fixtures/auth-helpers');
+const { getDoc } = require('../fixtures/firestore-seed');
 const { clearFirestore, clearAuthUsers } = require('../fixtures/emulator-admin');
 
 // Guest mode is the zero-backend access tier, covered below with no
@@ -88,16 +89,25 @@ test.describe('Access control: signed-in owner (smoke check)', () => {
 });
 
 test.describe('Sign-up / sign-in / sign-out', () => {
-  test('sign-up creates an account and shows the signed-in chip with the chosen name', async ({ appPage }) => {
+  test('sign-up asks for a username, reserves it, and the display name starts as the username', async ({ appPage }) => {
     await appPage.click('#authModeToggle'); // switch to signup mode
     const email = randomTestEmail('signup');
+    const username = randomUsername('signup');
     await appPage.fill('#authEmail', email);
     await appPage.fill('#authPassword', 'testpass123');
-    await appPage.fill('#authName', 'Test Signup User');
+    // No username: refused before any account is made.
+    await appPage.click('#authSubmitBtn');
+    await expect(appPage.locator('#authError')).toContainText('Pick a username');
+    await appPage.fill('#authName', username);
+    await expect(appPage.locator('#authNameStatus')).toHaveText(`${username} is available`);
     await appPage.click('#authSubmitBtn');
     await appPage.waitForSelector('.signed-in-chip');
-    await expect(appPage.locator('.signed-in-chip')).toContainText('Test Signup User');
+    await expect(appPage.locator('.signed-in-chip')).toContainText(username);
     await expect(appPage.locator('.wrap')).toBeVisible();
+    const uid = await appPage.evaluate(() => window.RoundsFirebase.auth.currentUser.uid);
+    await expect.poll(() => getDoc(`profiles/${uid}`)).toEqual({ username });
+    await expect.poll(() => getDoc(`usernames/${username.toLowerCase()}`)).toEqual({ uid, username });
+    await expect.poll(async () => (await getDoc(`users/${uid}`))?.displayName).toBe(username);
   });
 
   test('signing in with the wrong password shows a friendly error, not a raw Firebase error', async ({ appPage }) => {
@@ -124,17 +134,10 @@ test.describe('Sign-up / sign-in / sign-out', () => {
     await expect(appPage.locator('#authError')).toContainText('reset email sent');
   });
 
-  test('renaming via the signed-in chip updates the displayed name', async ({ signedInPage }) => {
-    signedInPage.once('dialog', (dialog) => dialog.accept('New Display Name'));
-    await signedInPage.click('#authRenameBtn');
-    await expect(signedInPage.locator('.signed-in-chip')).toContainText('New Display Name');
-  });
-
-  test('canceling the rename prompt leaves the name unchanged', async ({ signedInPage }) => {
-    const before = await signedInPage.locator('.signed-in-chip').textContent();
-    signedInPage.once('dialog', (dialog) => dialog.dismiss());
-    await signedInPage.click('#authRenameBtn');
-    await expect(signedInPage.locator('.signed-in-chip')).toHaveText(before);
+  test('the signed-in pill opens your Profile', async ({ signedInPage }) => {
+    await signedInPage.click('#chipProfileLink');
+    await expect(signedInPage.locator('#profilePage')).toBeVisible();
+    await expect(signedInPage.locator('.profile-title')).toHaveText('Your profile');
   });
 });
 

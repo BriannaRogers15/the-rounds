@@ -14,7 +14,7 @@
       signInWithPopup, signInWithRedirect, getRedirectResult,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail, onAuthStateChanged, signOut, updateProfile,
-      doc, setDoc, getDoc, serverTimestamp,
+      doc, setDoc, getDoc, serverTimestamp, writeBatch,
     } = window.RoundsFirebase;
 
     /* Popup and redirect each fail in a different, specific context — pick
@@ -106,6 +106,7 @@
       mode = next;
       document.getElementById('authNameField').style.display = mode === 'signup' ? '' : 'none';
       document.getElementById('authSubmitBtn').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
+      setUsernameStatus('authNameStatus', '');
       document.getElementById('authModeToggle').textContent = mode === 'signup'
         ? 'Have an account? Sign in'
         : 'Create an account';
@@ -122,6 +123,7 @@
       clearError();
       try{
         await applyChosenPersistence();
+        pendingMethod = 'google.com';
         if(isStandalone) await signInWithRedirect(auth, googleProvider);
         else await signInWithPopup(auth, googleProvider);
       }
@@ -138,24 +140,28 @@
       clearError();
       const email = document.getElementById('authEmail').value.trim();
       const password = passwordInput.value;
-      const name = document.getElementById('authName').value.trim();
+      const username = document.getElementById('authName').value.trim();
       const emailInput = document.getElementById('authEmail');
+      if(mode === 'signup'){
+        const problem = validateUsername(username);
+        if(problem){ showError(problem); return; }
+      }
       if(!email || !emailInput.validity.valid){ showError('Enter a valid email address.'); return; }
       if(!password){ showError('Enter your password.'); return; }
       try{
         await applyChosenPersistence();
         if(mode === 'signup'){
-          if(!name){ showError('Enter a name — it\'s shown on your reviews.'); return; }
-          if(name.length > MAX_NAME_LENGTH){ showError(`Keep your name under ${MAX_NAME_LENGTH} characters.`); return; }
+          if(!(await isUsernameFree(username))){ showError(`"${username}" is taken — try another.`); return; }
+          // The account exists first; reserving the username needs it. If
+          // someone grabs the name in between, the username step catches it.
+          signupUsername = username;
+          pendingMethod = 'password';
           await createUserWithEmailAndPassword(auth, email, password);
-          // onAuthStateChanged already fired (with the not-yet-named user),
-          // so the chip and users/{uid} doc it wrote say the email —
-          // setting the name now fixes both.
-          await window.setRoundsDisplayName(name);
         } else {
+          pendingMethod = 'password';
           await signInWithEmailAndPassword(auth, email, password);
         }
-      }catch(err){ showError(friendlyAuthError(err)); }
+      }catch(err){ pendingMethod = null; signupUsername = null; showError(friendlyAuthError(err)); }
     });
     passwordInput.addEventListener('keydown', (event)=>{
       if(event.key === 'Enter') document.getElementById('authSubmitBtn').click();
@@ -183,19 +189,73 @@
         'auth/user-not-found': 'No account with that email — try creating one.',
         'auth/wrong-password': 'Wrong password.',
         'auth/invalid-credential': 'Email or password is wrong.',
-        'auth/email-already-in-use': 'That email already has an account — try signing in instead.',
+        'auth/email-already-in-use': 'That email already has an account — sign in instead (or use Continue with Google if that\'s how it was made).',
+        'auth/account-exists-with-different-credential': 'That email already has an account that signs in with its password.',
         'auth/weak-password': 'Password needs to be at least 6 characters.',
         'auth/popup-closed-by-user': 'Sign-in was closed before finishing.',
       };
       return map[err.code] || (err.message || 'Something went wrong.');
     }
 
-    /* The one place a person's name is set: their Firebase profile (what
-       their visits are logged under), their users/{uid} doc, and the chip.
-       app.js hears 'rounds-name-changed' and moves their past visits to the
-       new name. Used by sign-up, the chip's pencil (rename), and Log a Visit
-       (for an account that somehow has no name yet). */
-    const MAX_NAME_LENGTH = 80; // firestore.rules caps a visit's reviewer name at 80
+    /* ---------- Accounts: username (public) and display name (private) ----------
+       Every account has a username: unique, shown on its reviews, reserved
+       in usernames/{lowercased} so the database itself refuses a duplicate.
+       The display name is private (only the account sees it, in the pill
+       and on Profile) and starts out as the username. */
+    const USERNAME_RE = /^[A-Za-z0-9_.]{3,20}$/;
+    // Usernames are public, so a short list of words is refused outright
+    // (firestore.rules refuses the same list).
+    const BLOCKED_USERNAME_PARTS = ['fuck', 'shit', 'bitch', 'cunt', 'nigg', 'fag', 'whore', 'slut', 'rape', 'nazi', 'hitler', 'retard', 'pussy', 'cock', 'dick', 'porn'];
+    const RESERVED_USERNAMES = ['admin', 'owner', 'moderator', 'support', 'therounds', 'rounds', 'guest'];
+    function validateUsername(raw){
+      const name = String(raw || '').trim();
+      if(!name) return 'Pick a username — it\'s shown on your reviews.';
+      if(!USERNAME_RE.test(name)) return 'Usernames are 3–20 letters, numbers, _ or . (no spaces).';
+      const flat = name.toLowerCase().replace(/[._]/g, '');
+      if(RESERVED_USERNAMES.includes(flat) || BLOCKED_USERNAME_PARTS.some(w => flat.includes(w))) return 'That username isn\'t allowed — try another.';
+      return null;
+    }
+    async function isUsernameFree(name){
+      const snap = await getDoc(doc(db, 'usernames', name.toLowerCase()));
+      return !snap.exists() || snap.data().uid === auth.currentUser?.uid;
+    }
+    const account = { profile: null, displayName: '', signInMethod: null };
+    window.RoundsAccount = {
+      get profile(){ return account.profile; },
+      get displayName(){ return account.displayName; },
+      get signInMethod(){ return account.signInMethod; },
+      validateUsername, isUsernameFree,
+      claimUsername: (name)=> claimUsername(name),
+      setDisplayName: (name)=> window.setRoundsDisplayName(name),
+    };
+    /* One atomic write: the profile's username, the new reservation, and
+       releasing the old one. If the name was just taken, the database
+       refuses the whole write. */
+    async function claimUsername(raw){
+      const user = auth.currentUser;
+      if(!user) throw new Error('Not signed in.');
+      const username = String(raw || '').trim();
+      const problem = validateUsername(username);
+      if(problem) throw new Error(problem);
+      const key = username.toLowerCase();
+      const current = account.profile?.username;
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'profiles', user.uid), { username });
+      batch.set(doc(db, 'usernames', key), { uid: user.uid, username });
+      if(current && current.toLowerCase() !== key) batch.delete(doc(db, 'usernames', current.toLowerCase()));
+      try{ await batch.commit(); }
+      catch(err){
+        if(err && err.code === 'permission-denied') throw new Error(`"${username}" is taken — try another.`);
+        throw err;
+      }
+      account.profile = { username };
+      window.dispatchEvent(new CustomEvent('rounds-username-changed', { detail: { uid: user.uid, username } }));
+      return username;
+    }
+
+    /* The private display name: the Firebase profile (so it follows the
+       account) and users/{uid}, which only the account itself can read. */
+    const MAX_NAME_LENGTH = 80;
     window.setRoundsDisplayName = async (rawName)=>{
       const user = auth.currentUser;
       const name = String(rawName || '').trim();
@@ -204,31 +264,106 @@
       if(name.length > MAX_NAME_LENGTH) throw new Error(`Keep it under ${MAX_NAME_LENGTH} characters.`);
       await updateProfile(user, { displayName: name });
       await setDoc(doc(db, 'users', user.uid), { displayName: name }, { merge: true });
-      renderSignedInChip(user);
-      window.dispatchEvent(new CustomEvent('rounds-name-changed', { detail: { uid: user.uid, name } }));
+      account.displayName = name;
+      renderSignedInChip();
+      window.dispatchEvent(new CustomEvent('rounds-display-name-changed', { detail: { uid: user.uid, name } }));
       return name;
     };
 
-    let signedInChip = null;
-    function renderSignedInChip(user){
-      if(signedInChip) signedInChip.remove();
-      signedInChip = document.createElement('div');
-      signedInChip.className = 'signed-in-chip';
-      // The name itself is the rename button, marked with a pencil.
-      signedInChip.innerHTML = `<span class="chip-label">Signed in as</span><button type="button" id="authRenameBtn" class="chip-name" aria-label="Change your name (${escapeHtml(user.displayName || user.email)})"><span class="chip-name-text">${escapeHtml(user.displayName || user.email)}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button type="button" id="authSignOutBtn">Sign out</button>`;
-      // Part of the page header (scrolls with the page), never floating
-      // over windows or content.
-      (document.getElementById('accountSlot') || document.body).appendChild(signedInChip);
-      document.getElementById('authSignOutBtn').addEventListener('click', ()=> signOut(auth));
-      document.getElementById('authRenameBtn').addEventListener('click', async ()=>{
-        const next = prompt('Your name (shown on your reviews):', user.displayName || '');
-        if(next === null) return; // cancelled
-        const name = next.trim();
-        if(!name || name === user.displayName) return;
-        try{ await window.setRoundsDisplayName(name); }
-        catch(err){ console.error('Could not update name:', err); alert(err.message.startsWith('Keep it') ? err.message : 'Could not save that name — try again.'); }
+    function setUsernameStatus(id, text, kind){
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.textContent = text;
+      el.dataset.kind = kind || '';
+    }
+    /* Live "available / taken" under a username box. */
+    function wireUsernameCheck(inputId, statusId){
+      const input = document.getElementById(inputId);
+      let t = null, seq = 0;
+      input.addEventListener('input', ()=>{
+        clearTimeout(t);
+        const name = input.value.trim();
+        if(!name){ setUsernameStatus(statusId, ''); return; }
+        const problem = validateUsername(name);
+        if(problem){ setUsernameStatus(statusId, problem, 'bad'); return; }
+        const mine = ++seq;
+        setUsernameStatus(statusId, 'Checking…');
+        t = setTimeout(async ()=>{
+          try{
+            const free = await isUsernameFree(name);
+            if(mine !== seq) return;
+            setUsernameStatus(statusId, free ? `${name} is available` : `${name} is taken`, free ? 'good' : 'bad');
+          }catch(_e){ if(mine === seq) setUsernameStatus(statusId, ''); }
+        }, 300);
       });
     }
+    wireUsernameCheck('authName', 'authNameStatus');
+    wireUsernameCheck('usernameInput', 'usernameStatus');
+
+    let signedInChip = null;
+    function renderSignedInChip(){
+      const user = auth.currentUser;
+      if(!user) return;
+      if(signedInChip) signedInChip.remove();
+      const name = account.displayName || account.profile?.username || user.email;
+      signedInChip = document.createElement('div');
+      signedInChip.className = 'signed-in-chip';
+      // The name opens Profile (username, display name, account, visits).
+      signedInChip.innerHTML = `<span class="chip-label">Signed in as</span><a href="#v=profile" id="chipProfileLink" class="chip-name" aria-label="Your profile (${escapeHtml(name)})"><span class="chip-name-text">${escapeHtml(name)}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></a><button type="button" id="authSignOutBtn">Sign out</button>`;
+      (document.getElementById('accountSlot') || document.body).appendChild(signedInChip);
+      document.getElementById('authSignOutBtn').addEventListener('click', ()=> signOut(auth));
+    }
+
+    // Which way the current sign-in started ('password' | 'google.com'),
+    // and the username typed on the sign-up form, if any.
+    let pendingMethod = null;
+    let signupUsername = null;
+    const methodLabel = (m)=> m === 'google.com' ? 'Continue with Google' : 'your email and password';
+
+    function showApp(){
+      const gate = document.getElementById('authGate');
+      const wrap = document.querySelector('.wrap');
+      document.getElementById('usernameGate').style.display = 'none';
+      gate.style.display = 'none';
+      if(wrap) wrap.style.display = '';
+      window.dispatchEvent(new Event('rounds-access-changed'));
+      renderSignedInChip();
+      // Sign-in bookkeeping is done. app.js waits for this before
+      // reloading for the owner's startup.
+      window.dispatchEvent(new Event('rounds-signed-in'));
+    }
+    /* Every account picks a username before using the app: sign-ups whose
+       name was grabbed in the meantime, first Google sign-ins, and accounts
+       from before usernames existed. */
+    function showUsernameGate(suggestion){
+      document.getElementById('authGate').style.display = 'none';
+      const wrap = document.querySelector('.wrap');
+      if(wrap) wrap.style.display = 'none';
+      const gateEl = document.getElementById('usernameGate');
+      gateEl.style.display = '';
+      const input = document.getElementById('usernameInput');
+      if(suggestion && !input.value) input.value = suggestion;
+      input.dispatchEvent(new Event('input'));
+      input.focus();
+    }
+    document.getElementById('usernameSave').addEventListener('click', async ()=>{
+      const input = document.getElementById('usernameInput');
+      const errEl = document.getElementById('usernameError');
+      errEl.style.display = 'none';
+      try{
+        const username = await claimUsername(input.value);
+        // The display name starts out as the username (private; change it
+        // any time on Profile).
+        await window.setRoundsDisplayName(username);
+        showApp();
+      }catch(err){
+        console.error('Could not save username:', err);
+        errEl.textContent = err.message || 'Could not save that — try again.';
+        errEl.style.display = '';
+      }
+    });
+    document.getElementById('usernameInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('usernameSave').click(); });
+    document.getElementById('usernameSignOut').addEventListener('click', (e)=>{ e.preventDefault(); signOut(auth); });
 
     onAuthStateChanged(auth, async (user)=>{
       const loading = document.getElementById('authLoading');
@@ -240,37 +375,77 @@
         window.roundsGuestMode = false;
         document.body.classList.remove('guest-mode');
         document.getElementById('guestNotice').hidden = true;
+        const method = pendingMethod;
+        pendingMethod = null;
+        // Checking the account's username takes a moment; say so rather
+        // than show a blank page.
         gate.style.display = 'none';
-        if(wrap) wrap.style.display = '';
-        window.dispatchEvent(new Event('rounds-access-changed'));
-        renderSignedInChip(user);
+        if(wrap) wrap.style.display = 'none';
+        if(loading){ loading.textContent = 'Signing you in…'; loading.style.display = ''; }
+        let userDoc = null, profileDoc = null;
         try{
-          const userRef = doc(db, 'users', user.uid);
-          const existing = await getDoc(userRef);
-          const payload = {
-            displayName: user.displayName || user.email,
-            email: user.email,
-            photoURL: user.photoURL || null,
-          };
-          if(!existing.exists()) payload.createdAt = serverTimestamp();
-          await setDoc(userRef, payload, { merge: true });
+          [userDoc, profileDoc] = await Promise.all([getDoc(doc(db, 'users', user.uid)), getDoc(doc(db, 'profiles', user.uid))]);
+        }catch(err){ console.warn('Could not read the account records', err); }
+        const data = userDoc && userDoc.exists() ? userDoc.data() : {};
+        // One way in per email: an account made with a password signs in
+        // with its password, a Google account with Google.
+        const createdWith = data.signInMethod || null;
+        if(method && createdWith && method !== createdWith && user.providerData.some(p => p.providerId === createdWith)){
+          await signOut(auth);
+          if(loading) loading.style.display = 'none';
+          gate.style.display = '';
+          if(wrap) wrap.style.display = 'none';
+          showError(`This email signs in with ${methodLabel(createdWith)}.`);
+          return;
+        }
+        if(loading) loading.style.display = 'none';
+        account.signInMethod = createdWith || method || user.providerData[0]?.providerId || null;
+        account.profile = profileDoc && profileDoc.exists() ? profileDoc.data() : null;
+        account.displayName = data.displayName || user.displayName || '';
+        try{
+          const payload = { email: user.email, photoURL: null };
+          if(!userDoc || !userDoc.exists()) payload.createdAt = serverTimestamp();
+          if(!createdWith && account.signInMethod) payload.signInMethod = account.signInMethod;
+          await setDoc(doc(db, 'users', user.uid), payload, { merge: true });
         }catch(err){ console.warn('Could not write users/{uid} doc', err); }
-        // Sign-in bookkeeping is done (profile write settled). app.js waits
-        // for this — not rounds-access-changed above — before reloading for
-        // the owner's startup, so the reload never cuts this write off.
-        window.dispatchEvent(new Event('rounds-signed-in'));
+
+        if(account.profile && account.profile.username){
+          showApp();
+          return;
+        }
+        // A fresh sign-up reserves the username it typed; if that fails
+        // (taken meanwhile) — or there's none yet — ask for one.
+        if(signupUsername){
+          const wanted = signupUsername;
+          signupUsername = null;
+          try{
+            await claimUsername(wanted);
+            await window.setRoundsDisplayName(wanted);
+            showApp();
+            return;
+          }catch(err){
+            document.getElementById('usernameError').textContent = err.message;
+            document.getElementById('usernameError').style.display = '';
+          }
+        }
+        const suggestion = (account.displayName || '').replace(/[^A-Za-z0-9_.]/g, '').slice(0, 20);
+        showUsernameGate(suggestion);
       } else if(window.roundsGuestMode){
+        document.getElementById('usernameGate').style.display = 'none';
         gate.style.display = 'none';
         if(wrap) wrap.style.display = '';
         document.getElementById('guestNotice').hidden = false;
         document.body.classList.add('guest-mode');
+        account.profile = null; account.displayName = '';
         window.dispatchEvent(new Event('rounds-access-changed'));
         if(signedInChip){ signedInChip.remove(); signedInChip = null; }
       } else {
+        document.getElementById('usernameGate').style.display = 'none';
         document.body.classList.remove('guest-mode');
         document.getElementById('guestNotice').hidden = true;
         gate.style.display = '';
         if(wrap) wrap.style.display = 'none';
+        account.profile = null; account.displayName = '';
         window.dispatchEvent(new Event('rounds-access-changed'));
         if(signedInChip){ signedInChip.remove(); signedInChip = null; }
       }

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { seedDoc } = require('./firestore-seed');
 const { PROJECT_ID } = require('./emulator-admin');
 
 // Extracted from firestore.rules rather than re-typed, so this can never
@@ -72,21 +73,38 @@ async function batchCreateUser(user, { ignoreIfExists = false } = {}) {
 const OWNER_TEST_EMAIL = 'owner-test@example.test';
 const OWNER_TEST_PASSWORD = 'owner-testpass-123';
 
+// Every account picks a username before it can use the app. Test accounts
+// get theirs arranged server-side (profile + reservation + private record),
+// exactly the shape the app's sign-up writes, so they go straight in.
+// `username: null` leaves it unset, to exercise the "Pick your username" step.
+async function giveUsername(uid, username, { displayName = username, signInMethod = 'password' } = {}) {
+  await seedDoc(`profiles/${uid}`, { username });
+  await seedDoc(`usernames/${username.toLowerCase()}`, { uid, username });
+  await seedDoc(`users/${uid}`, { displayName, signInMethod });
+}
+const OWNER_TEST_USERNAME = 'owner_test';
+
 async function createOwnerTestUser() {
   const uid = getOwnerUid();
   await batchCreateUser(
-    { localId: uid, email: OWNER_TEST_EMAIL, rawPassword: OWNER_TEST_PASSWORD, emailVerified: true },
+    { localId: uid, email: OWNER_TEST_EMAIL, rawPassword: OWNER_TEST_PASSWORD, emailVerified: true, displayName: OWNER_TEST_USERNAME },
     { ignoreIfExists: true }
   );
-  return { uid, email: OWNER_TEST_EMAIL, password: OWNER_TEST_PASSWORD };
+  await giveUsername(uid, OWNER_TEST_USERNAME);
+  return { uid, email: OWNER_TEST_EMAIL, password: OWNER_TEST_PASSWORD, username: OWNER_TEST_USERNAME };
 }
 
-// `displayName` gives the account a name (as sign-up or Google would);
-// without one it's the rare unnamed account Log a Visit asks to name.
-async function createRegularTestUser({ email = randomTestEmail('user'), password = 'testpass123', displayName } = {}) {
+let usernameCounter = 0;
+function randomUsername(prefix = 'user') {
+  usernameCounter += 1;
+  return `${prefix}_${Date.now().toString(36).slice(-5)}${usernameCounter}`.slice(0, 20);
+}
+
+async function createRegularTestUser({ email = randomTestEmail('user'), password = 'testpass123', username = randomUsername(), displayName } = {}) {
   const uid = crypto.randomUUID();
-  await batchCreateUser({ localId: uid, email, rawPassword: password, emailVerified: true, ...(displayName ? { displayName } : {}) });
-  return { uid, email, password, displayName };
+  await batchCreateUser({ localId: uid, email, rawPassword: password, emailVerified: true, ...(displayName || username ? { displayName: displayName || username } : {}) });
+  if (username) await giveUsername(uid, username, { displayName: displayName || username });
+  return { uid, email, password, username, displayName: displayName || username };
 }
 
-module.exports = { getOwnerUid, randomTestEmail, createOwnerTestUser, createRegularTestUser };
+module.exports = { getOwnerUid, randomTestEmail, randomUsername, createOwnerTestUser, createRegularTestUser, giveUsername, OWNER_TEST_USERNAME };
