@@ -32,6 +32,8 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] Edit your own visit — "Edit" on your visits reopens Log a Visit filled in; changes save to the same visit
 - [x] Menu "checked" dates — every curated menu carries the date it was last checked against its source (`asOf`, recovered from git history); shown in the listing window and stored as `menuUpdated` for staleness checks
 - [x] Usernames — every account has a public, unique username (required at email sign-up and on a first Google sign-in, or for accounts from before). Reviews show the author's current username, live from their profile, so a change shows everywhere and nobody can post as someone else. Reserved in `usernames/{lowercased}`; the database refuses duplicates and a short blocked-word list
+- [x] Username rules — 7–20 letters, numbers, `_` or `.` (a `.` never first, last, or doubled). After the first pick: one free change, then one per 90 days (`profiles/{uid}.usernameChangedAt`, server time; the rules enforce it). Capitalization changes any time
+- [x] Passwords — at least 8 characters, no required symbols (Firebase password policy, enforced; the sign-up form says so)
 - [x] Private display name — starts as the username; only you see it (the "Signed in as" pill, Profile)
 - [x] Profile page (tap your name in the pill): username, display name, email, how you sign in, Owner role, your visits, sign out. No photos (nothing to moderate)
 - [x] One way in per email — a second password sign-up for an email is refused (Firebase), and a Google sign-in on an email made with a password is refused by the app

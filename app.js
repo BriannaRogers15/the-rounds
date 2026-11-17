@@ -22,6 +22,7 @@ let viewMode = 'grid';
 let leafletMap = null;
 let mapRenderToken = 0;
 let currentPage = 'areas';   // 'areas' = neighborhood landing, 'listings' = classic page
+let lastRenderedPage = null; // the page renderAll last drew (Profile redraws whole only on entry)
 let activeArea = null;       // {type:'neighborhood'|'town'|'other', name} or null = everywhere
 let showGhosts = false;      // landing toggle: reveal neighborhoods with no listings yet
 let hoodGeo = null;          // Chicago neighborhood boundary GeoJSON, loaded once (block silhouettes + assigning new listings)
@@ -1653,7 +1654,10 @@ function renderAll(){
     renderCuisineRail();
     renderContent();
   } else if(currentPage === 'profile'){
-    renderProfilePage();
+    // Opening Profile draws it whole; while it's open, updates to shared
+    // data refresh only the visits, so a half-typed name isn't wiped.
+    if(lastRenderedPage === 'profile' && $('#profilePage').dataset.drawnFor === profileOwnerKey()) renderProfileVisits();
+    else renderProfilePage();
   } else {
     renderAreasPage();
   }
@@ -1661,6 +1665,7 @@ function renderAll(){
   renderListingsBackdrop();
   updateAccessControls();
   syncHash();
+  lastRenderedPage = currentPage;
 }
 
 /* ---------- Modals ---------- */
@@ -1689,10 +1694,36 @@ window.addEventListener('rounds-display-name-changed', redrawForAccountChange);
 /* ---------- Profile ----------
    Username (public, unique, on every review), display name (private: only
    you see it, in your pill and here), the account's email and how it signs
-   in, and your visits. */
+   in, and your visits.
+   renderProfilePage draws it whole: on opening the page, on signing in or
+   out, and after a save. Anything else (a friend's visit arriving, the
+   map boundaries finishing loading) goes through renderAll, which only
+   refreshes the visits section (renderProfileVisits) — redrawing the whole
+   page reset what you were typing in the name boxes. */
+function profileOwnerKey(){
+  const user = window.RoundsFirebase?.auth?.currentUser;
+  return user && !window.roundsGuestMode ? user.uid : 'signed-out';
+}
+function renderProfileVisits(){
+  const box = $('#profileVisits');
+  const user = window.RoundsFirebase?.auth?.currentUser;
+  if(!box || !user) return;
+  const mine = visits.filter(v => v.authorUid === user.uid).sort((a, b)=> String(b.date).localeCompare(String(a.date)));
+  const avg = avgRating(mine);
+  box.innerHTML = `<div class="profile-label">Your visits <span class="label-note">${mine.length ? `${mine.length} visit${mine.length===1?'':'s'} · ${avg.toFixed(1)}★ average` : ''}</span></div>
+      ${mine.length ? `<ul class="profile-visits">${mine.map(v=>{
+        const r = restaurants.find(x => x.id === v.restaurantId);
+        return `<li><button type="button" class="profile-visit" data-rid="${escapeHtml(v.restaurantId)}">
+          <span class="pv-name">${escapeHtml(r ? r.name : 'A removed listing')}</span>
+          <span class="pv-meta">${fmtDate(v.date)} ${starsHtml(v.rating)}</span>
+        </button></li>`;
+      }).join('')}</ul>` : '<p class="profile-note">No visits yet. Open a listing and tap "+ Log a visit".</p>'}`;
+  $$('.profile-visit', box).forEach(b => b.addEventListener('click', ()=>{ if(restaurants.some(r => r.id === b.dataset.rid)) openDetail(b.dataset.rid); }));
+}
 function renderProfilePage(){
   const el = $('#profilePage');
   const user = window.RoundsFirebase?.auth?.currentUser;
+  el.dataset.drawnFor = profileOwnerKey();
   if(!user || window.roundsGuestMode){
     el.innerHTML = `<div class="profile-card paper paper-panel">
       <h2 class="profile-title">Your profile</h2>
@@ -1706,8 +1737,13 @@ function renderProfilePage(){
   const username = myUsername();
   const display = acct.displayName || username;
   const method = acct.signInMethod === 'google.com' ? 'Google' : (acct.signInMethod === 'password' ? 'Email and password' : '—');
-  const mine = visits.filter(v => v.authorUid === user.uid).sort((a, b)=> String(b.date).localeCompare(String(a.date)));
-  const avg = avgRating(mine);
+  // One free username change, then one per 90 days (capitalization is free).
+  const lockedUntil = acct.usernameLockedUntil ? acct.usernameLockedUntil() : null;
+  const usernameRule = lockedUntil
+    ? `You can change your username again on ${acct.formatDay(lockedUntil)}. Capitalization changes are fine any time.`
+    : (acct.profile?.usernameChangedAt
+      ? `You can change your username once every ${acct.USERNAME_CHANGE_DAYS} days.`
+      : `Your first change is free; after that, once every ${acct.USERNAME_CHANGE_DAYS} days.`);
   el.innerHTML = `<div class="profile-card paper paper-panel">
     <div class="profile-head">
       <h2 class="profile-title">Your profile</h2>
@@ -1721,6 +1757,7 @@ function renderProfilePage(){
         <button type="button" class="btn" id="profileUsernameSave">Save</button>
       </div>
       <div class="username-status" id="profileUsernameStatus" aria-live="polite"></div>
+      <p class="field-hint" id="profileUsernameRule">${escapeHtml(usernameRule)}</p>
     </section>
 
     <section class="profile-section">
@@ -1741,16 +1778,7 @@ function renderProfilePage(){
       </dl>
     </section>
 
-    <section class="profile-section">
-      <div class="profile-label">Your visits <span class="label-note">${mine.length ? `${mine.length} visit${mine.length===1?'':'s'} · ${avg.toFixed(1)}★ average` : ''}</span></div>
-      ${mine.length ? `<ul class="profile-visits">${mine.map(v=>{
-        const r = restaurants.find(x => x.id === v.restaurantId);
-        return `<li><button type="button" class="profile-visit" data-rid="${escapeHtml(v.restaurantId)}">
-          <span class="pv-name">${escapeHtml(r ? r.name : 'A removed listing')}</span>
-          <span class="pv-meta">${fmtDate(v.date)} ${starsHtml(v.rating)}</span>
-        </button></li>`;
-      }).join('')}</ul>` : '<p class="profile-note">No visits yet. Open a listing and tap "+ Log a visit".</p>'}
-    </section>
+    <section class="profile-section" id="profileVisits"></section>
 
     <section class="profile-section profile-actions">
       <button type="button" class="btn quiet" id="profileSignOut">Sign out</button>
@@ -1759,17 +1787,22 @@ function renderProfilePage(){
 
   $('#profileBack').addEventListener('click', (e)=>{ e.preventDefault(); currentPage = 'areas'; renderAll(); });
   $('#profileSignOut').addEventListener('click', ()=> window.RoundsFirebase.signOut(window.RoundsFirebase.auth));
-  $$('.profile-visit', el).forEach(b => b.addEventListener('click', ()=>{ if(restaurants.some(r => r.id === b.dataset.rid)) openDetail(b.dataset.rid); }));
+  renderProfileVisits();
   const status = (id, text, kind)=>{ const s = $('#' + id); s.textContent = text; s.dataset.kind = kind || ''; };
   // Username: live availability, then one atomic save.
   const uInput = $('#profileUsername');
   let uTimer = null, uSeq = 0;
   uInput.addEventListener('input', ()=>{
     clearTimeout(uTimer);
+    uSeq++; // any availability check still in flight is now stale
     const name = uInput.value.trim();
     if(name === username){ status('profileUsernameStatus', ''); return; }
     const problem = acct.validateUsername(name);
     if(problem){ status('profileUsernameStatus', problem, 'bad'); return; }
+    if(lockedUntil && name.toLowerCase() !== username.toLowerCase()){
+      status('profileUsernameStatus', `You can change it again on ${acct.formatDay(lockedUntil)}.`, 'bad');
+      return;
+    }
     const mineSeq = ++uSeq;
     status('profileUsernameStatus', 'Checking…');
     uTimer = setTimeout(async ()=>{

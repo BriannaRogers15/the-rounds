@@ -116,7 +116,8 @@ test.describe('Log a Visit: saving', () => {
       await page.click('#profileUsernameSave');
       await expect(page.locator('#profileUsernameStatus')).toContainText('Saved');
       const uid = await page.evaluate(() => window.RoundsFirebase.auth.currentUser.uid);
-      await expect.poll(() => getDoc(`profiles/${uid}`)).toEqual({ username: 'new_name_probe' });
+      await expect.poll(async () => (await getDoc(`profiles/${uid}`))?.username).toBe('new_name_probe');
+      expect((await getDoc(`profiles/${uid}`)).usernameChangedAt).toBeTruthy(); // starts the 90-day wait
       // The old name is free again; the new one is reserved.
       await expect.poll(() => getDoc('usernames/old_name_probe')).toBeNull();
       await expect.poll(async () => (await getDoc('usernames/new_name_probe'))?.uid).toBe(uid);

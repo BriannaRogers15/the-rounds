@@ -40,6 +40,11 @@
     }
 
     let mode = 'signin'; // 'signin' | 'signup'
+    // New passwords: at least 8 characters, no required symbols (length
+    // matters more). Firebase's password policy for the project enforces
+    // the same; this gives the message before the request.
+    const MIN_PASSWORD_LENGTH = 8;
+    const PASSWORD_RULE = `Passwords need at least ${MIN_PASSWORD_LENGTH} characters.`;
     const rememberMe = document.getElementById('rememberMe');
     const passwordInput = document.getElementById('authPassword');
     try{
@@ -105,6 +110,7 @@
     function setMode(next){
       mode = next;
       document.getElementById('authNameField').style.display = mode === 'signup' ? '' : 'none';
+      document.getElementById('authPasswordHint').hidden = mode !== 'signup';
       document.getElementById('authSubmitBtn').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
       setUsernameStatus('authNameStatus', '');
       document.getElementById('authModeToggle').textContent = mode === 'signup'
@@ -147,6 +153,7 @@
       }
       if(!email || !emailInput.validity.valid){ showError('Enter a valid email address.'); return; }
       if(!password){ showError('Enter your password.'); return; }
+      if(mode === 'signup' && password.length < MIN_PASSWORD_LENGTH){ showError(PASSWORD_RULE); return; }
       try{
         await applyChosenPersistence();
         if(mode === 'signup'){
@@ -188,7 +195,8 @@
         'auth/invalid-credential': 'Email or password is wrong.',
         'auth/email-already-in-use': 'That email already has an account — sign in instead (or use Continue with Google if that\'s how it was made).',
         'auth/account-exists-with-different-credential': 'That email already has an account that signs in with its password.',
-        'auth/weak-password': 'Password needs to be at least 6 characters.',
+        'auth/weak-password': PASSWORD_RULE,
+        'auth/password-does-not-meet-requirements': PASSWORD_RULE,
         'auth/popup-closed-by-user': 'Sign-in was closed before finishing.',
       };
       return map[err.code] || (err.message || 'Something went wrong.');
@@ -199,7 +207,11 @@
        in usernames/{lowercased} so the database itself refuses a duplicate.
        The display name is private (only the account sees it, in the pill
        and on Profile) and starts out as the username. */
-    const USERNAME_RE = /^[A-Za-z0-9_.]{3,20}$/;
+    // 7–20 letters, numbers, _ or .; a . never first, last, or doubled.
+    // firestore.rules refuses the same; this is for the message.
+    const USERNAME_MIN = 7, USERNAME_MAX = 20;
+    const USERNAME_CHARS_RE = /^[A-Za-z0-9_.]*$/;
+    const USERNAME_DOTS_RE = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
     // Usernames are public, so a short list of words is refused outright
     // (firestore.rules refuses the same list).
     const BLOCKED_USERNAME_PARTS = ['fuck', 'shit', 'bitch', 'cunt', 'nigg', 'fag', 'whore', 'slut', 'rape', 'nazi', 'hitler', 'retard', 'pussy', 'cock', 'dick', 'porn'];
@@ -207,7 +219,9 @@
     function validateUsername(raw){
       const name = String(raw || '').trim();
       if(!name) return 'Pick a username — it\'s shown on your reviews.';
-      if(!USERNAME_RE.test(name)) return 'Usernames are 3–20 letters, numbers, _ or . (no spaces).';
+      if(!USERNAME_CHARS_RE.test(name)) return 'Usernames use only letters, numbers, _ or . (no spaces).';
+      if(name.length < USERNAME_MIN || name.length > USERNAME_MAX) return `Usernames are ${USERNAME_MIN}–${USERNAME_MAX} characters.`;
+      if(!USERNAME_DOTS_RE.test(name)) return 'A . can\'t start or end a username, or come twice in a row.';
       const flat = name.toLowerCase().replace(/[._]/g, '');
       if(RESERVED_USERNAMES.includes(flat) || BLOCKED_USERNAME_PARTS.some(w => flat.includes(w))) return 'That username isn\'t allowed — try another.';
       return null;
@@ -216,12 +230,23 @@
       const snap = await getDoc(doc(db, 'usernames', name.toLowerCase()));
       return !snap.exists() || snap.data().uid === auth.currentUser?.uid;
     }
+    /* After the first username: one free change, then one per 90 days
+       (firestore.rules enforces it). Capitalization alone isn't a change. */
+    const USERNAME_CHANGE_DAYS = 90;
+    function usernameLockedUntil(){
+      const last = account.profile?.usernameChangedAt;
+      if(!last || typeof last.toMillis !== 'function') return null;
+      const until = new Date(last.toMillis() + USERNAME_CHANGE_DAYS * 24 * 60 * 60 * 1000);
+      return until > new Date() ? until : null;
+    }
+    const formatDay = (d)=> d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const account = { profile: null, displayName: '', signInMethod: null };
     window.RoundsAccount = {
       get profile(){ return account.profile; },
       get displayName(){ return account.displayName; },
       get signInMethod(){ return account.signInMethod; },
-      validateUsername, isUsernameFree,
+      USERNAME_CHANGE_DAYS,
+      validateUsername, isUsernameFree, usernameLockedUntil, formatDay,
       claimUsername: (name)=> claimUsername(name),
       setDisplayName: (name)=> window.setRoundsDisplayName(name),
     };
@@ -236,16 +261,26 @@
       if(problem) throw new Error(problem);
       const key = username.toLowerCase();
       const current = account.profile?.username;
+      const isChange = !!current && current.toLowerCase() !== key;
+      const lockedUntil = isChange ? usernameLockedUntil() : null;
+      if(lockedUntil) throw new Error(`You can change your username again on ${formatDay(lockedUntil)}.`);
+      const profile = { username };
+      if(isChange) profile.usernameChangedAt = serverTimestamp();
+      else if(account.profile?.usernameChangedAt) profile.usernameChangedAt = account.profile.usernameChangedAt;
       const batch = writeBatch(db);
-      batch.set(doc(db, 'profiles', user.uid), { username });
+      batch.set(doc(db, 'profiles', user.uid), profile);
       batch.set(doc(db, 'usernames', key), { uid: user.uid, username });
-      if(current && current.toLowerCase() !== key) batch.delete(doc(db, 'usernames', current.toLowerCase()));
+      if(isChange) batch.delete(doc(db, 'usernames', current.toLowerCase()));
       try{ await batch.commit(); }
       catch(err){
         if(err && err.code === 'permission-denied') throw new Error(`"${username}" is taken — try another.`);
         throw err;
       }
-      account.profile = { username };
+      // Read it back for the server's time of the change.
+      try{
+        const snap = await getDoc(doc(db, 'profiles', user.uid));
+        account.profile = snap.exists() ? snap.data() : { username };
+      }catch(_e){ account.profile = { username }; }
       window.dispatchEvent(new CustomEvent('rounds-username-changed', { detail: { uid: user.uid, username } }));
       return username;
     }

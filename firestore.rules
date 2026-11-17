@@ -19,8 +19,11 @@ service cloud.firestore {
     // picking it at the same moment). profiles/{uid} holds the account's
     // username for everyone to read (reviews show it); it must point at a
     // reservation the account owns, so nobody can show another's name.
+    // 7–20 letters, numbers, _ or . — a . never first, last, or doubled
+    // (auth-gate.js checks the same, for the message).
     function validUsername(name) {
-      return name is string && name.matches('^[A-Za-z0-9_.]{3,20}$')
+      return name is string && name.size() >= 7 && name.size() <= 20
+        && name.matches('^[A-Za-z0-9_]+([.][A-Za-z0-9_]+)*$')
         // Same short list the app refuses (public names, so no slurs).
         && !name.lower().matches('.*(fuck|shit|bitch|cunt|nigg|fag|whore|slut|rape|nazi|hitler|retard|pussy|cock|dick|porn).*');
     }
@@ -44,12 +47,32 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid
         && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username.lower() != name;
     }
+    // A profile names a reservation its own account holds. The first
+    // username is picked on create; after that, one free change, then one
+    // per 90 days. usernameChangedAt is the server's time of the last
+    // change; a change of capitalization alone isn't a change and leaves it
+    // as it was.
+    function ownsReservation(uid) {
+      return getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username.lower())).data.uid == uid;
+    }
     match /profiles/{uid} {
       allow read: if true;
-      allow create, update: if request.auth != null && request.auth.uid == uid
+      allow create: if request.auth != null && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['username'])
         && validUsername(request.resource.data.username)
-        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username.lower())).data.uid == uid;
+        && ownsReservation(uid);
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['username', 'usernameChangedAt'])
+        && validUsername(request.resource.data.username)
+        && ownsReservation(uid)
+        && (
+          (request.resource.data.username.lower() == resource.data.username.lower()
+            && request.resource.data.get('usernameChangedAt', null) == resource.data.get('usernameChangedAt', null))
+          || (request.resource.data.username.lower() != resource.data.username.lower()
+            && request.resource.data.get('usernameChangedAt', null) == request.time
+            && (!('usernameChangedAt' in resource.data)
+              || request.time >= resource.data.usernameChangedAt + duration.value(90, 'd')))
+        );
       allow delete: if false;
     }
 

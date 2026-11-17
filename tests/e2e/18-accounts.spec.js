@@ -33,15 +33,42 @@ test.describe('Usernames at sign-up', () => {
     }
   });
 
-  test('usernames with spaces, too short, or with a blocked word are refused', async ({ browser }) => {
+  test('usernames with spaces, too short or long, misplaced dots, or a blocked word are refused', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await openAppPage(context);
     try {
       await page.click('#authModeToggle');
-      for (const [name, msg] of [['has space', '3–20 letters'], ['ab', '3–20 letters'], ['xx_fuck_xx', "isn't allowed"], ['admin', "isn't allowed"]]) {
+      for (const [name, msg] of [
+        ['has space', 'only letters, numbers'],
+        ['briski', '7–20 characters'],
+        ['.dotfirst', "can't start or end"],
+        ['two..dots', "can't start or end"],
+        ['xx_fuck_xx', "isn't allowed"],
+        ['the.rounds', "isn't allowed"],
+      ]) {
         await page.fill('#authName', name);
         await expect(page.locator('#authNameStatus')).toContainText(msg);
       }
+    } finally {
+      await closeContext(context);
+    }
+  });
+
+  test('a password under 8 characters is refused before any account is made', async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await openAppPage(context);
+    try {
+      await page.click('#authModeToggle');
+      await expect(page.locator('#authPasswordHint')).toHaveText('At least 8 characters.');
+      await page.fill('#authName', randomUsername('pwshort'));
+      await page.fill('#authEmail', randomTestEmail('pwshort'));
+      await page.fill('#authPassword', 'seven77');
+      await page.click('#authSubmitBtn');
+      await expect(page.locator('#authError')).toHaveText('Passwords need at least 8 characters.');
+      expect(await page.evaluate(() => window.RoundsFirebase.auth.currentUser)).toBeNull();
+      // Signing in (not up) shows no rule: existing passwords still work.
+      await page.click('#authModeToggle');
+      await expect(page.locator('#authPasswordHint')).toBeHidden();
     } finally {
       await closeContext(context);
     }
@@ -97,6 +124,61 @@ test.describe('Profile', () => {
       await expect(page.locator('.signed-in-chip')).toContainText('Only Me Sees This');
       // Public profile holds only the username.
       expect(await getDoc(`profiles/${creds.uid}`)).toEqual({ username: creds.username });
+    } finally {
+      await closeSession(page);
+    }
+  });
+
+  test('a visit arriving while you type on Profile shows up without wiping what you typed', async ({ browser }) => {
+    const creds = await createRegularTestUser({ username: randomUsername('typing') });
+    await seedDoc('restaurants/typing-probe', { id: 'typing-probe', name: 'Probe Typing Spot', categories: ['Pizza'], address: '2 Probe St, Chicago, IL 60607', menu: ['Cheese Slice'], createdAt: Date.now() });
+    const page = await openSignedInPage(browser, { creds });
+    try {
+      await page.click('#chipProfileLink');
+      await expect(page.locator('#profileVisits')).toContainText('No visits yet');
+      await page.fill('#profileUsername', 'half_typed_name');
+      await page.fill('#profileDisplayName', 'Half Typed');
+      // A visit lands from the shared ledger (live listener → renderAll).
+      await seedDoc('visits/typing-1', { id: 'typing-1', restaurantId: 'typing-probe', authorUid: creds.uid, reviewer: creds.username, date: '2026-11-10', rating: 4, wouldReturn: true, ate: [], createdAt: Date.now() });
+      await expect(page.locator('#profileVisits')).toContainText('Probe Typing Spot');
+      await expect(page.locator('#profileVisits')).toContainText('1 visit');
+      await expect(page.locator('#profileUsername')).toHaveValue('half_typed_name');
+      await expect(page.locator('#profileDisplayName')).toHaveValue('Half Typed');
+      // Leaving and coming back starts fresh from what's saved.
+      await page.click('#profileBack');
+      await page.click('#chipProfileLink');
+      await expect(page.locator('#profileUsername')).toHaveValue(creds.username);
+    } finally {
+      await closeSession(page);
+    }
+  });
+
+  test('the first username change is free; the next waits 90 days (capitalization any time)', async ({ browser }) => {
+    const creds = await createRegularTestUser({ username: randomUsername('first') });
+    const page = await openSignedInPage(browser, { creds });
+    try {
+      await page.click('#chipProfileLink');
+      await expect(page.locator('#profileUsernameRule')).toHaveText('Your first change is free; after that, once every 90 days.');
+      const renamed = randomUsername('renamed');
+      await page.fill('#profileUsername', renamed);
+      await expect(page.locator('#profileUsernameStatus')).toHaveText(`${renamed} is available`);
+      await page.click('#profileUsernameSave');
+      await expect(page.locator('#profileUsernameStatus')).toHaveText('Saved. Your reviews now show it.');
+      await expect.poll(async () => (await getDoc(`profiles/${creds.uid}`))?.username).toBe(renamed);
+      expect((await getDoc(`profiles/${creds.uid}`)).usernameChangedAt).toBeTruthy();
+      expect(await getDoc(`usernames/${creds.username.toLowerCase()}`)).toBeNull(); // old name released
+      // Now locked: a new name is refused, with the date it opens up.
+      await expect(page.locator('#profileUsernameRule')).toContainText('You can change your username again on');
+      await page.fill('#profileUsername', randomUsername('again'));
+      await expect(page.locator('#profileUsernameStatus')).toContainText('You can change it again on');
+      await page.click('#profileUsernameSave');
+      await expect(page.locator('#profileUsernameStatus')).toContainText('You can change your username again on');
+      expect((await getDoc(`profiles/${creds.uid}`)).username).toBe(renamed);
+      // Capitalization alone is still fine.
+      await page.fill('#profileUsername', renamed.toUpperCase());
+      await page.click('#profileUsernameSave');
+      await expect(page.locator('#profileUsernameStatus')).toHaveText('Saved. Your reviews now show it.');
+      await expect.poll(async () => (await getDoc(`profiles/${creds.uid}`))?.username).toBe(renamed.toUpperCase());
     } finally {
       await closeSession(page);
     }

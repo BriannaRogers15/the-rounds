@@ -1148,6 +1148,7 @@ h1{
 .rename-form input:focus{ outline:none; box-shadow: 0 0 0 3px rgba(31,111,163,0.15); }
 
 /* ---- Username availability (sign-up, username step, Profile) ---- */
+.field-hint{ margin-top:6px; font-size:14px; color: var(--paper-muted); }
 .username-status{ min-height:20px; margin-top:6px; font-size:14px; font-weight:600; color: var(--paper-muted); }
 .username-status[data-kind="good"]{ color: var(--good); }
 .username-status[data-kind="bad"]{ color: var(--danger); }

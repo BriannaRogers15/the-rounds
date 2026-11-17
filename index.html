@@ -52,7 +52,7 @@
 
       <div class="field" id="authNameField" style="display:none;">
         <label for="authName">Username <span class="label-note">(shown on your reviews)</span></label>
-        <input type="text" id="authName" placeholder="e.g. briski" autocomplete="username" maxlength="20" autocapitalize="off" spellcheck="false">
+        <input type="text" id="authName" placeholder="e.g. tacotuesday" autocomplete="username" maxlength="20" autocapitalize="off" spellcheck="false">
         <div class="username-status" id="authNameStatus" aria-live="polite"></div>
       </div>
       <div class="field">
@@ -65,6 +65,7 @@
           <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
           <button type="button" class="auth-password-toggle" id="togglePassword" aria-label="Show password" aria-pressed="false">Show</button>
         </div>
+        <div class="field-hint" id="authPasswordHint" hidden>At least 8 characters.</div>
       </div>
 
       <label class="auth-remember" for="rememberMe">
@@ -92,7 +93,7 @@
     <div class="auth-card-body">
       <div class="field">
         <label for="usernameInput">Username</label>
-        <input type="text" id="usernameInput" placeholder="e.g. briski" autocomplete="username" maxlength="20" autocapitalize="off" spellcheck="false">
+        <input type="text" id="usernameInput" placeholder="e.g. tacotuesday" autocomplete="username" maxlength="20" autocapitalize="off" spellcheck="false">
         <div class="username-status" id="usernameStatus" aria-live="polite"></div>
       </div>
       <button type="button" class="btn" id="usernameSave">Continue</button>
