@@ -39,7 +39,7 @@ service cloud.firestore {
     function isValidVisit(visitId) {
       let d = request.resource.data;
       return d.keys().hasAll(['restaurantId', 'date', 'rating', 'wouldReturn', 'authorUid'])
-        && d.keys().hasOnly(['id', 'restaurantId', 'date', 'ate', 'rating', 'wouldReturn',
+        && d.keys().hasOnly(['id', 'restaurantId', 'date', 'ate', 'dishDetails', 'rating', 'wouldReturn',
                              'notes', 'reviewer', 'authorUid', 'createdAt'])
         && (!('id' in d) || d.id == visitId)
         && d.restaurantId is string
@@ -49,6 +49,9 @@ service cloud.firestore {
         && d.wouldReturn is bool
         // Older visits stored `ate` as one free-typed string.
         && (!('ate' in d) || (d.ate is list && d.ate.size() <= 100) || (d.ate is string && d.ate.size() <= 500))
+        // Per-dish stars and changes ("no onions"): one small entry per dish
+        // eaten, so never more entries than `ate` allows.
+        && (!('dishDetails' in d) || (d.dishDetails is list && d.dishDetails.size() <= 100))
         && (!('notes' in d) || (d.notes is string && d.notes.size() <= 2000))
         && (!('reviewer' in d) || (d.reviewer is string && d.reviewer.size() <= 80))
         && (!('createdAt' in d) || d.createdAt is number);

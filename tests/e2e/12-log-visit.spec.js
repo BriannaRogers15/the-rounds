@@ -77,7 +77,7 @@ test.describe('Log a Visit: saving', () => {
     await expect(item).toContainText('Probe Reviewer');
     await expect(item).toContainText('Ate Cheese Slice, Garlic Knots');
     await expect(item.locator('.return-pill')).toHaveText('Would go back');
-    await expect(item).toContainText('Notes Ask for extra crispy.');
+    await expect(item).toContainText('Review Ask for extra crispy.');
     await expect(signedInPage.locator('#menuChips')).toContainText('Garlic Knots');
 
     const uid = await signedInPage.evaluate(() => window.RoundsFirebase.auth.currentUser.uid);
@@ -139,6 +139,81 @@ test.describe('Log a Visit: saving', () => {
     await signedInPage.click('#cancelLog');
     await expect(signedInPage.locator('.modal .detail-name')).toBeVisible();
     await expect(signedInPage.locator('.no-visits')).toBeVisible();
+  });
+});
+
+test.describe('Log a Visit: each dish gets its own stars and changes', () => {
+  test('rate a dish and note a change; it shows on the visit and the menu, and reaches the ledger', async ({ browser, signedInPage }) => {
+    const r = await arrangeListing(browser, 'lv-dish');
+    await openLogVisit(signedInPage, r);
+    await signedInPage.fill('#vName', 'Dish Rater');
+    // Nothing to rate until the dish is checked.
+    await expect(signedInPage.locator('.dish-detail')).toHaveCount(0);
+    await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
+    const detail = signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .dish-detail');
+    await expect(detail).toBeVisible();
+    await detail.locator('.dish-star[data-n="5"]').click();
+    await expect(detail.locator('.dish-star.on')).toHaveCount(5);
+    await detail.locator('.dish-mod').fill('extra crispy, no oregano');
+    await signedInPage.locator('.dish-check input[data-dish="Pepperoni Pie"]').check(); // had it, didn't rate it
+    await expect(signedInPage.locator('label[for="vNotes"]')).toContainText('Overall review');
+    await signedInPage.fill('#vNotes', 'Great spot, slow on weekends.');
+    await signedInPage.click('#starPick [data-n="4"]');
+    await signedInPage.click('#wrYes');
+    await signedInPage.click('#saveLog');
+
+    const item = signedInPage.locator('.visit-item').first();
+    const cheese = item.locator('.ate-list li', { hasText: 'Cheese Slice' });
+    await expect(cheese.locator('.stars')).toHaveText('★★★★★');
+    await expect(cheese.locator('.ate-mod')).toHaveText('extra crispy, no oregano');
+    await expect(item.locator('.ate-list li', { hasText: 'Pepperoni Pie' }).locator('.stars')).toHaveCount(0);
+    await expect(item).toContainText('Review Great spot, slow on weekends.');
+    // The menu averages the dish's own stars.
+    const row = signedInPage.locator('#menuChips .menu-row', { hasText: 'Cheese Slice' });
+    await expect(row.locator('.dish-avg')).toHaveText('★ 5.0');
+    await expect(row.locator('.ordered-badge')).toHaveText('ordered 1×');
+
+    const saved = await signedInPage.evaluate((id) => visits.find((v) => v.restaurantId === id), r.id);
+    expect(saved.dishDetails).toEqual([{ dish: 'Cheese Slice', rating: 5, mod: 'extra crispy, no oregano' }]);
+    expect(saved.ate).toEqual(['Cheese Slice', 'Pepperoni Pie']);
+    await expect.poll(async () => (await getDoc(`visits/${saved.id}`))?.dishDetails).toEqual(saved.dishDetails);
+  });
+
+  test('editing your own visit: it opens filled in, and changes save to the same visit', async ({ browser, signedInPage }) => {
+    const r = await arrangeListing(browser, 'lv-edit');
+    await openLogVisit(signedInPage, r);
+    await signedInPage.fill('#vName', 'Editor Probe');
+    await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
+    await signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .dish-star[data-n="2"]').click();
+    await signedInPage.click('#starPick [data-n="2"]');
+    await signedInPage.click('#wrNo');
+    await signedInPage.fill('#vNotes', 'First take.');
+    await signedInPage.click('#saveLog');
+    await expect(signedInPage.locator('.visit-item')).toHaveCount(1); // saved, back on the listing
+    const before = await signedInPage.evaluate((id) => visits.filter((v) => v.restaurantId === id), r.id);
+    expect(before).toHaveLength(1);
+
+    await signedInPage.locator(`.visit-item[data-vid="${before[0].id}"] .visit-edit`).click();
+    await expect(signedInPage.locator('#logTitle')).toContainText('Edit visit');
+    await expect(signedInPage.locator('#vNotes')).toHaveValue('First take.');
+    await expect(signedInPage.locator('#wrNo')).toHaveAttribute('aria-pressed', 'true');
+    await expect(signedInPage.locator('#starPick [data-n="2"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]')).toBeChecked();
+    const star2 = signedInPage.locator('.dish-pick[data-dish="Cheese Slice"] .dish-star[data-n="2"]');
+    await expect(star2).toHaveAttribute('aria-pressed', 'true');
+    // Tapping the same star again clears that dish's rating.
+    await star2.click();
+    await signedInPage.click('#starPick [data-n="5"]');
+    await signedInPage.click('#wrYes');
+    await signedInPage.fill('#vNotes', 'Second visit was better.');
+    await signedInPage.click('#saveLog');
+    await expect(signedInPage.locator('.visit-item').first()).toContainText('Second visit was better.');
+
+    const after = await signedInPage.evaluate((id) => visits.filter((v) => v.restaurantId === id), r.id);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ id: before[0].id, rating: 5, wouldReturn: true, notes: 'Second visit was better.', dishDetails: [], createdAt: before[0].createdAt });
+    await expect.poll(async () => (await getDoc(`visits/${before[0].id}`))?.notes).toBe('Second visit was better.');
+    expect((await getDoc(`visits/${before[0].id}`)).dishDetails).toEqual([]);
   });
 });
 

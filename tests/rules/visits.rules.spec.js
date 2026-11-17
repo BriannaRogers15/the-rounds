@@ -68,6 +68,16 @@ test.describe('visits: create — shape validation', () => {
     await assertSucceeds(bob({ id: 'new', notes: 'Great crust.', createdAt: Date.now(), ate: ['Cheese Slice'] }));
   });
 
+  test('per-dish stars and changes (`dishDetails`) are accepted, including an empty list', async () => {
+    await assertSucceeds(bob({ ate: ['Cheese Slice'], dishDetails: [{ dish: 'Cheese Slice', rating: 5, mod: 'extra crispy' }] }));
+    await assertSucceeds(bob({ ate: [], dishDetails: [] }));
+  });
+
+  test('`dishDetails` that is not a list, or has more than 100 entries, is rejected', async () => {
+    await assertFails(bob({ dishDetails: { 'Cheese Slice': 5 } }));
+    await assertFails(bob({ dishDetails: Array.from({ length: 101 }, (_, i) => ({ dish: `dish ${i}`, rating: 3 })) }));
+  });
+
   test('a legacy free-typed `ate` string is accepted', async () => {
     await assertSucceeds(bob({ ate: 'cheese slice' }));
   });

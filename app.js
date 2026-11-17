@@ -365,24 +365,45 @@ function defaultOpenSection(groups){
   const popular = groups.find(g => /^most popular$/i.test(g.title || ''));
   return (popular || groups[0] || {}).title;
 }
-/* How many logged visits included each dish (lowercased name -> count).
-   Real visits only; a dish counts once per visit. */
-function menuDishCounts(r){
-  const counts = {};
+/* Per dish (lowercased name), from logged visits only: how many visits
+   had it (once per visit), and the stars people gave that dish. */
+function menuDishStats(r){
+  const stats = {};
+  const get = (d)=> stats[d] || (stats[d] = { count: 0, ratingSum: 0, ratingN: 0 });
   visitsFor(r.id).forEach(v=>{
-    new Set(ateList(v).map(d => String(d).toLowerCase())).forEach(d => counts[d] = (counts[d] || 0) + 1);
+    new Set(ateList(v).map(d => String(d).toLowerCase())).forEach(d => get(d).count++);
+    (v.dishDetails || []).forEach(x=>{
+      if(Number.isInteger(x.rating) && x.rating >= 1 && x.rating <= 5){
+        const s = get(String(x.dish || '').toLowerCase());
+        s.ratingSum += x.rating; s.ratingN++;
+      }
+    });
   });
-  return counts;
+  return stats;
+}
+/* "What I had" on a visit card: each dish with its own stars and the
+   changes asked for, when the visit recorded them. */
+function visitAteHtml(v){
+  const ate = ateList(v);
+  if(!ate.length) return '';
+  const byDish = new Map((v.dishDetails || []).map(x => [String(x.dish || '').toLowerCase(), x]));
+  if(!byDish.size) return `<div class="visit-line"><span class="visit-lbl">Ate</span> ${escapeHtml(ate.join(', '))}</div>`;
+  return `<div class="visit-line"><span class="visit-lbl">Ate</span>
+    <ul class="ate-list">${ate.map(d=>{
+      const x = byDish.get(String(d).toLowerCase()) || {};
+      return `<li><span class="ate-dish">${escapeHtml(d)}</span>${x.rating ? starsHtml(x.rating) : ''}${x.mod ? `<span class="ate-mod">${escapeHtml(x.mod)}</span>` : ''}</li>`;
+    }).join('')}</ul></div>`;
 }
 /* Sections past this many sit behind "Show N more sections". */
 const MENU_SECTIONS_SHOWN = 8;
 function menuAccordionHtml(r, state, rowHtml){
   const groups = menuGroupsFor(r);
   if(!groups.length) return `<div class="no-menu">No dishes on file yet — they'll collect as visits get logged.</div>`;
-  const counts = menuDishCounts(r);
+  const stats = menuDishStats(r);
   const row = rowHtml || ((d)=>{
-    const n = counts[d.toLowerCase()];
-    return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${n ? `<span class="ordered-badge">ordered ${n}×</span>` : ''}</div>`;
+    const st = stats[d.toLowerCase()];
+    const avg = st && st.ratingN ? st.ratingSum / st.ratingN : null;
+    return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${st && st.count ? `<span class="dish-badges">${avg ? `<span class="dish-avg" title="Average of ${st.ratingN} rating${st.ratingN===1?'':'s'}">★ ${avg.toFixed(1)}</span>` : ''}<span class="ordered-badge">ordered ${st.count}×</span></span>` : ''}</div>`;
   });
   const section = (g, open, searching)=>{
     if(!g.title) return `<div class="menu-group open" data-section=""><div class="menu-sec-body">${g.dishes.map(row).join('')}</div></div>`;
@@ -1983,10 +2004,13 @@ function openDetail(id){
                   <span class="visit-date">${fmtDate(v.date)}</span>
                   ${starsHtml(v.rating)}
                   <span class="return-pill ${v.wouldReturn ? 'yes' : 'no'}">${v.wouldReturn ? 'Would go back' : "Wouldn't go back"}</span>
-                  ${(canLogVisit && v.authorUid === currentUid) || canEditListing ? `<button class="trash" data-vid="${v.id}">Remove</button>` : ''}
+                  <span class="visit-tools">
+                    ${canLogVisit && v.authorUid === currentUid ? `<button type="button" class="visit-edit" data-vid="${v.id}">Edit</button>` : ''}
+                    ${(canLogVisit && v.authorUid === currentUid) || canEditListing ? `<button type="button" class="trash" data-vid="${v.id}">Remove</button>` : ''}
+                  </span>
                 </div>
-                ${ateList(v).length ? `<div class="visit-line"><span class="visit-lbl">Ate</span> ${escapeHtml(ateList(v).join(', '))}</div>` : ''}
-                ${v.notes ? `<div class="visit-line"><span class="visit-lbl">Notes</span> ${escapeHtml(v.notes)}</div>` : ''}
+                ${visitAteHtml(v)}
+                ${v.notes ? `<div class="visit-line"><span class="visit-lbl">Review</span> ${escapeHtml(v.notes)}</div>` : ''}
               </div>
             `).join('') : `<div class="no-visits">No visits logged yet.</div>`}
           </div>
@@ -2022,6 +2046,7 @@ function openDetail(id){
   if(menuSearch) menuSearch.addEventListener('input', ()=>{ menuState.query = menuSearch.value; renderMenu(); });
   $('#closeDet').addEventListener('click', closeModal);
   $('#ov').addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
+  $$('.visit-edit', $('#modalRoot')).forEach(btn => btn.addEventListener('click', ()=> openLogVisit(id, btn.dataset.vid)));
   const logVisitButton = $('#logVisitBtn');
   if(logVisitButton) logVisitButton.addEventListener('click', ()=> openLogVisit(id));
   const deleteRestaurantButton = $('#deleteRestBtn');
@@ -2093,29 +2118,57 @@ function openDetail(id){
   });
 }
 
-function openLogVisit(restaurantId){
+/* Log a Visit, or edit one of your own (visitId). Each dish you check can
+   carry its own stars and the changes you asked for ("no onions"); the
+   visit's notes are the overall review. */
+const DISH_MOD_MAX = 200;
+function openLogVisit(restaurantId, visitId){
   if(!canWriteLedger()){
     alert('Sign in to log a visit.');
     return;
   }
-  let rating = 0;
-  let wouldReturn = null;
-  const today = localDateStr();
-  let selectedDate = today;
-  let calViewYear = parseInt(today.slice(0,4));
-  let calViewMonth = parseInt(today.slice(5,7)) - 1;
-
+  const myUid = window.RoundsFirebase.auth.currentUser.uid;
+  const editing = visitId ? visits.find(v => v.id === visitId) : null;
+  if(visitId && (!editing || editing.authorUid !== myUid)){
+    alert('You can only edit your own visits.');
+    return;
+  }
   const rest = restaurants.find(x=>x.id===restaurantId);
   const menu = rest ? menuOf(rest) : [];
+  const today = localDateStr();
+  let rating = editing ? editing.rating : 0;
+  let wouldReturn = editing ? editing.wouldReturn : null;
+  let selectedDate = editing ? editing.date : today;
+  let calViewYear = parseInt(selectedDate.slice(0,4));
+  let calViewMonth = parseInt(selectedDate.slice(5,7)) - 1;
+
+  // What's checked, and each checked dish's stars and changes. Lives here,
+  // so closing a section or searching never loses any of it.
+  const picked = new Set();
+  const details = new Map(); // dish -> { rating, mod }
+  // Dishes an older visit recorded that aren't on the menu any more stay
+  // on the visit untouched.
+  const keptAte = [];
+  if(editing){
+    const byLower = new Map(menu.map(d => [d.toLowerCase(), d]));
+    ateList(editing).forEach(d=>{
+      const onMenu = byLower.get(String(d).toLowerCase());
+      if(onMenu) picked.add(onMenu); else keptAte.push(d);
+    });
+    (editing.dishDetails || []).forEach(x=>{
+      const onMenu = byLower.get(String(x.dish || '').toLowerCase());
+      if(onMenu) details.set(onMenu, { rating: x.rating || 0, mod: x.mod || '' });
+    });
+  }
 
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov2">
       <div class="modal paper log-modal" role="dialog" aria-modal="true" aria-labelledby="logTitle">
         <div class="paper-head">
           <div class="log-who">
-            <h2 id="logTitle">Log a visit${rest ? ` · ${escapeHtml(rest.name)}` : ''}</h2>
+            <h2 id="logTitle">${editing ? 'Edit visit' : 'Log a visit'}${rest ? ` · ${escapeHtml(rest.name)}` : ''}</h2>
             ${accountName()
-              ? `<div class="logged-by">Logging as <b>${escapeHtml(accountName())}</b><span class="logged-by-hint"> — change your name with the pencil by "Signed in as"</span></div>`
+              ? `<div class="logged-by">${editing ? 'Your visit, as' : 'Logging as'} <b>${escapeHtml(accountName())}</b></div>`
               : ''}
           </div>
           <button type="button" class="close-btn" id="closeLog" aria-label="Close">×</button>
@@ -2139,9 +2192,9 @@ function openLogVisit(restaurantId){
           </div>
         </div>
         <div class="field log-rating">
-          <span class="field-label" id="ratingLabel">Rating</span>
+          <span class="field-label" id="ratingLabel">Overall rating</span>
           <div class="star-pick" id="starPick" role="group" aria-labelledby="ratingLabel">
-            ${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" aria-label="${n} star${n===1?'':'s'}" aria-pressed="false">★</button>`).join('')}
+            ${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" aria-label="${n} star${n===1?'':'s'}" aria-pressed="${n === rating}">${n <= rating ? '★' : '☆'}</button>`).join('')}
           </div>
         </div>
         <div class="field log-return">
@@ -2152,8 +2205,8 @@ function openLogVisit(restaurantId){
           </div>
         </div>
         <div class="field log-notes">
-          <label for="vNotes">Notes <span class="label-note">(optional)</span></label>
-          <textarea id="vNotes" placeholder="e.g. sub fries for rice, no onions, ask for Jesse"></textarea>
+          <label for="vNotes">Overall review <span class="label-note">(optional)</span></label>
+          <textarea id="vNotes" maxlength="2000" placeholder="How was it overall? Service, vibe, the wait…">${editing ? escapeHtml(editing.notes || '') : ''}</textarea>
         </div>
         </div>
         <div class="field log-ate">
@@ -2161,36 +2214,73 @@ function openLogVisit(restaurantId){
             <span class="field-label">What did you eat?</span>
             ${menu.length ? `<label class="search-pill dish-search">${SEARCH_ICON}<input type="search" id="dishSearch" placeholder="Find a dish" aria-label="Find a dish" autocomplete="off"></label>` : ''}
           </div>
-          ${menu.length ? `<div class="dish-checklist menu-acc" id="dishArea"></div>` : '<div class="no-dishes">No menu on file yet. Type what you had below.</div>'}
+          ${menu.length ? `<div class="dish-hint">Check a dish to rate it and note any changes you asked for.</div><div class="dish-checklist menu-acc" id="dishArea"></div>` : '<div class="no-dishes">No menu on file yet. Type what you had below.</div>'}
           <input type="text" id="vAte" class="something-else" placeholder="+ Something not on the menu" aria-label="Something not on the menu">
         </div>
         </div>
         <div class="paper-actions">
           <button type="button" class="btn quiet" id="cancelLog">Cancel</button>
-          <button type="button" class="btn" id="saveLog">Save visit</button>
+          <button type="button" class="btn" id="saveLog">${editing ? 'Save changes' : 'Save visit'}</button>
         </div>
       </div>
     </div>
   `;
 
-  // The dish picker: the same open-and-close sections as the listing's
-  // menu, with a box per dish. What's checked lives here, so closing a
-  // section or searching never loses a pick.
-  const picked = new Set();
   const dishState = { query: '', open: new Set([defaultOpenSection(rest ? menuGroupsFor(rest) : [])]), showAll: false };
+  // Editing: open every section that holds a dish you had, so it's visible.
+  if(editing && rest) menuGroupsFor(rest).forEach(g=>{ if(g.title && g.dishes.some(d => picked.has(d))) dishState.open.add(g.title); });
   const dishArea = $('#dishArea');
-  const pickRow = (d)=> `<label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"${picked.has(d) ? ' checked' : ''}><span>${escapeHtml(d)}</span></label>`;
+  const detailHtml = (d)=>{
+    const x = details.get(d) || { rating: 0, mod: '' };
+    return `<div class="dish-detail">
+      <div class="dish-stars" role="group" aria-label="Your rating for ${escapeHtml(d)}">${[1,2,3,4,5].map(n=>`<button type="button" class="dish-star${n <= x.rating ? ' on' : ''}" data-n="${n}" aria-label="${n} star${n===1?'':'s'} for ${escapeHtml(d)}" aria-pressed="${n === x.rating}">${n <= x.rating ? '★' : '☆'}</button>`).join('')}</div>
+      <input type="text" class="dish-mod" maxlength="${DISH_MOD_MAX}" value="${escapeHtml(x.mod)}" placeholder="Any changes? e.g. no onions" aria-label="Changes to ${escapeHtml(d)}">
+    </div>`;
+  };
+  const pickRow = (d)=> `<div class="dish-pick" data-dish="${escapeHtml(d)}"><label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"${picked.has(d) ? ' checked' : ''}><span>${escapeHtml(d)}</span></label>${picked.has(d) ? detailHtml(d) : ''}</div>`;
   const renderDishes = ()=>{ if(dishArea) dishArea.innerHTML = menuAccordionHtml(rest, dishState, pickRow); };
+  // A dish listed in two sections has two rows; every change goes to both.
+  const rowsFor = (d)=> [...dishArea.querySelectorAll('.dish-pick')].filter(el => el.dataset.dish === d);
+  const paintDishStars = (d)=>{
+    const n = (details.get(d) || {}).rating || 0;
+    rowsFor(d).forEach(row => row.querySelectorAll('.dish-star').forEach(st=>{
+      st.classList.toggle('on', parseInt(st.dataset.n) <= n);
+      st.textContent = parseInt(st.dataset.n) <= n ? '★' : '☆';
+      st.setAttribute('aria-pressed', String(parseInt(st.dataset.n) === n));
+    }));
+  };
   renderDishes();
   if(dishArea){
     dishArea.addEventListener('change', (e)=>{
-      const box = e.target.closest('input[data-dish]');
+      const box = e.target.closest('input[type="checkbox"][data-dish]');
       if(!box) return;
-      if(box.checked) picked.add(box.dataset.dish); else picked.delete(box.dataset.dish);
-      // A dish listed in two sections has two boxes; keep them in step.
-      dishArea.querySelectorAll('input[data-dish]').forEach(other=>{ if(other.dataset.dish === box.dataset.dish) other.checked = box.checked; });
+      const d = box.dataset.dish;
+      if(box.checked) picked.add(d); else picked.delete(d);
+      rowsFor(d).forEach(row=>{
+        row.querySelector('input[type="checkbox"]').checked = box.checked;
+        const open = row.querySelector('.dish-detail');
+        if(box.checked && !open) row.insertAdjacentHTML('beforeend', detailHtml(d));
+        if(!box.checked && open) open.remove();
+      });
+    });
+    dishArea.addEventListener('input', (e)=>{
+      const mod = e.target.closest('.dish-mod');
+      if(!mod) return;
+      const d = mod.closest('.dish-pick').dataset.dish;
+      details.set(d, { ...(details.get(d) || { rating: 0 }), mod: mod.value });
+      rowsFor(d).forEach(row=>{ const other = row.querySelector('.dish-mod'); if(other && other !== mod) other.value = mod.value; });
     });
     dishArea.addEventListener('click', (e)=>{
+      const star = e.target.closest('.dish-star');
+      if(star){
+        const d = star.closest('.dish-pick').dataset.dish;
+        const n = parseInt(star.dataset.n);
+        const cur = (details.get(d) || {}).rating || 0;
+        // Tapping the same star again clears the dish's rating.
+        details.set(d, { mod: '', ...(details.get(d) || {}), rating: cur === n ? 0 : n });
+        paintDishStars(d);
+        return;
+      }
       const head = e.target.closest('.menu-sec-head');
       if(head && !head.classList.contains('static')){
         const sec = head.closest('.menu-group').dataset.section;
@@ -2248,7 +2338,12 @@ function openLogVisit(restaurantId){
   });
 
   const starEls = $$('#starPick button');
-  const paintStars = (n)=> starEls.forEach(x=> x.classList.toggle('on', parseInt(x.dataset.n) <= n));
+  // Solid when picked, outline when not — told apart by shape, not color alone.
+  const paintStars = (n)=> starEls.forEach(x=>{
+    x.classList.toggle('on', parseInt(x.dataset.n) <= n);
+    x.textContent = parseInt(x.dataset.n) <= n ? '★' : '☆';
+  });
+  paintStars(rating);
   starEls.forEach(s=>{
     s.addEventListener('mouseenter', ()=> paintStars(parseInt(s.dataset.n)));
     s.addEventListener('click', ()=>{
@@ -2263,6 +2358,7 @@ function openLogVisit(restaurantId){
     $('#wrYes').classList.toggle('on', yes); $('#wrYes').setAttribute('aria-pressed', String(yes));
     $('#wrNo').classList.toggle('on', !yes); $('#wrNo').setAttribute('aria-pressed', String(!yes));
   };
+  if(wouldReturn !== null) setReturn(wouldReturn);
   $('#wrYes').addEventListener('click', ()=> setReturn(true));
   $('#wrNo').addEventListener('click', ()=> setReturn(false));
   $('#closeLog').addEventListener('click', ()=> openDetail(restaurantId));
@@ -2283,18 +2379,32 @@ function openLogVisit(restaurantId){
     }
     const reviewerName = accountName();
     const date = selectedDate || today;
-    // A dish listed in two sections has two boxes; record it once.
-    // Picks survive closed sections and searches (see the dish picker).
-    const checkedDishes = [...picked];
     const typedDish = $('#vAte').value.trim();
-    const ate = [...checkedDishes];
-    if(typedDish && !ate.some(d => d.toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
+    const ate = [...picked, ...keptAte];
+    if(typedDish && !ate.some(d => String(d).toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
+    // Only dishes that got stars or changes are recorded here; the plain
+    // "what I had" list stays in `ate`. Always written (even empty) so an
+    // edit that clears every dish's stars really clears them.
+    const dishDetails = [...picked].map(d=>{
+      const x = details.get(d) || {};
+      const out = { dish: d };
+      if(x.rating) out.rating = x.rating;
+      const mod = String(x.mod || '').trim().slice(0, DISH_MOD_MAX);
+      if(mod) out.mod = mod;
+      return out;
+    }).filter(x => x.rating || x.mod);
     const notes = $('#vNotes').value.trim();
-    visits.push({ id: uid(), restaurantId, date, ate, rating, wouldReturn, notes, reviewer: reviewerName, authorUid: window.RoundsFirebase.auth.currentUser.uid, createdAt: Date.now() });
+    if(editing){
+      Object.assign(editing, { date, ate, dishDetails, rating, wouldReturn, notes, reviewer: reviewerName });
+    } else {
+      visits.push({ id: uid(), restaurantId, date, ate, dishDetails, rating, wouldReturn, notes, reviewer: reviewerName, authorUid: myUid, createdAt: Date.now() });
+    }
     if(typedDish && addDishToMenu(restaurantId, typedDish)) await saveRestaurants();
     await saveVisits();
-    const rect = e.target.getBoundingClientRect();
-    spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2);
+    if(!editing){
+      const rect = e.target.getBoundingClientRect();
+      spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2);
+    }
     openDetail(restaurantId);
     renderAll();
   });

@@ -74,7 +74,7 @@ test.describe('Detail modal: visits (any viewer)', () => {
       await expect(first.locator('.visit-who')).toHaveText('Ana'); // newest first
       await expect(first.locator('.return-pill')).toHaveText('Would go back');
       await expect(first).toContainText('Ate Jerk Chicken');
-      await expect(first).toContainText('Notes Ask for extra sauce.');
+      await expect(first).toContainText('Review Ask for extra sauce.');
       await expect(listingsPage.locator('.visit-item').nth(1).locator('.return-pill')).toHaveText("Wouldn't go back");
       await expect(listingsPage.locator('.menu-row', { hasText: 'Jerk Chicken' }).locator('.ordered-badge')).toHaveText('ordered 1×');
     } finally {
@@ -209,6 +209,7 @@ test.describe('Detail modal: removing visits', () => {
       const item = friendPage.locator(`.visit-item[data-vid="${v.id}"]`);
       await expect(item).toBeVisible();
       await expect(item.locator('.trash')).toHaveCount(0);
+      await expect(item.locator('.visit-edit')).toHaveCount(0); // only the author can edit
     } finally {
       await closeSession(friendPage);
       await deleteDoc(`visits/${v.id}`);
