@@ -19,8 +19,18 @@ npm run test:emulators # start the Firebase emulators standalone, with the
 `npm test`/`npm run test:e2e` start the Firebase Auth + Firestore Emulators
 automatically (see `tests/global-setup.js`) and serve the app via the same
 `python3 -m http.server 8741` command documented in `.claude/skills/verify`.
-Nothing talks to the real `the-rounds-fc02a` Firebase project. Requires a
-JRE on the machine (the emulators are Java).
+Nothing talks to the real `the-rounds-fc02a` Firebase project. Requires
+Java 21 or newer (firebase-tools 15's emulators). `global-setup.js` picks
+one itself — `JAVA_HOME`, then `java` on PATH, then Homebrew's `openjdk` —
+so an older default Java on PATH is fine as long as a newer one is
+installed.
+
+**Known open issue: an occasional slow first connect.** About 1–2 owner
+sessions per full run wait more than 15s for their first Firestore
+snapshot after the sign-in reload and time out. Upgrading firebase-tools
+13 → 15 did not change it (measured 2026-11-16: 2 of 78 in a 3× repeat of
+specs 04/10/12). 20 owner boots in a row on their own were all 1.4–4.9s, so
+it depends on what earlier tests in the run did; not yet pinned down.
 
 ## Why every test needs the Auth Emulator, even "zero-backend" ones
 

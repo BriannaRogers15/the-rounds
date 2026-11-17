@@ -75,9 +75,9 @@ test.describe('Log a Visit: saving', () => {
     // Back on the detail modal, showing the new visit.
     const item = signedInPage.locator('.visit-item').first();
     await expect(item).toContainText('Probe Reviewer');
-    await expect(item).toContainText('Ate: Cheese Slice, Garlic Knots');
-    await expect(item).toContainText('Would return: Yes');
-    await expect(item).toContainText('Notes: Ask for extra crispy.');
+    await expect(item).toContainText('Ate Cheese Slice, Garlic Knots');
+    await expect(item.locator('.return-pill')).toHaveText('Would go back');
+    await expect(item).toContainText('Notes Ask for extra crispy.');
     await expect(signedInPage.locator('#menuChips')).toContainText('Garlic Knots');
 
     const uid = await signedInPage.evaluate(() => window.RoundsFirebase.auth.currentUser.uid);

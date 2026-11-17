@@ -3,15 +3,15 @@ const { injectRestaurants, injectVisits, resetLedger } = require('../fixtures/le
 const { probeRestaurants, probeVisits } = require('../fixtures/seed-data');
 
 test.describe('Listings grid view', () => {
-  test('renders one card per listing with name, address, and visit count', async ({ listingsPage }) => {
+  test('renders one card per listing with its name and "Not visited yet"', async ({ listingsPage }) => {
     const probes = probeRestaurants();
     await injectRestaurants(listingsPage, probes);
     try {
       for (const r of probes) {
         const card = listingsPage.locator(`.ticket[data-id="${r.id}"]`);
         await expect(card).toBeVisible();
-        await expect(card).toContainText(r.name);
-        await expect(card.locator('.ticket-meta')).toContainText('0 visits');
+        await expect(card.locator('.ticket-name')).toHaveText(r.name);
+        await expect(card.locator('.ticket-meta .not-visited')).toHaveText('Not visited yet');
       }
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
@@ -29,19 +29,23 @@ test.describe('Listings grid view', () => {
     }
   });
 
-  test('a visited listing shows the VISITED stamp and visit count; an unvisited one does not', async ({ listingsPage }) => {
+  test('a visited listing shows "Visited" with its stars; an unvisited one says "Not visited yet"', async ({ listingsPage }) => {
     const probes = probeRestaurants();
     const visits = probeVisits();
     await injectRestaurants(listingsPage, probes);
     await injectVisits(listingsPage, visits);
     try {
       const visitedCard = listingsPage.locator(`.ticket[data-id="${visits[0].restaurantId}"]`);
-      await expect(visitedCard.locator('.stamp')).toBeVisible();
-      await expect(visitedCard.locator('.ticket-meta')).toContainText('1 visit');
+      await expect(visitedCard.locator('.visited-label')).toHaveText('Visited');
+      // The probe visit is rated 5.
+      await expect(visitedCard.locator('.stars')).toHaveText('★★★★★');
+      await expect(visitedCard.locator('.stars')).toHaveAttribute('aria-label', '5 out of 5 stars');
+      await expect(visitedCard.locator('.not-visited')).toHaveCount(0);
 
       const unvisitedId = probes.find((r) => r.id !== visits[0].restaurantId).id;
       const unvisitedCard = listingsPage.locator(`.ticket[data-id="${unvisitedId}"]`);
-      await expect(unvisitedCard.locator('.stamp')).toHaveCount(0);
+      await expect(unvisitedCard.locator('.visited-label')).toHaveCount(0);
+      await expect(unvisitedCard.locator('.not-visited')).toHaveText('Not visited yet');
     } finally {
       await resetLedger(listingsPage, {
         restaurantIds: probes.map((r) => r.id),
@@ -55,7 +59,7 @@ test.describe('Listings grid view', () => {
     await injectRestaurants(listingsPage, probes);
     try {
       const gem = probes.find((r) => r.categories.includes('Chicago Gems'));
-      await expect(listingsPage.locator(`.ticket[data-id="${gem.id}"] .gem-badge`)).toBeVisible();
+      await expect(listingsPage.locator(`.ticket[data-id="${gem.id}"] .gem-badge`)).toHaveText('Chicago Gem');
       const nonGem = probes.find((r) => !r.categories.includes('Chicago Gems'));
       await expect(listingsPage.locator(`.ticket[data-id="${nonGem.id}"] .gem-badge`)).toHaveCount(0);
     } finally {
@@ -63,22 +67,28 @@ test.describe('Listings grid view', () => {
     }
   });
 
-  test('address link opens externally and does not trigger the detail modal', async ({ listingsPage }) => {
+  test("cards list the spot's own guides on one line (no umbrella groups, no emoji) and its area, not its street", async ({ listingsPage }) => {
     const probes = probeRestaurants();
-    await injectRestaurants(listingsPage, probes);
+    const tagged = {
+      id: 'probe-guides-4', name: 'Probe Guide Line', categories: ['Brunch', 'Jamaican', 'Chicago Gems'],
+      address: '5 Probe Way, Oak Park, IL 60302', menu: [], createdAt: Date.now(),
+    };
+    const hood = { ...tagged, id: 'probe-hood-5', name: 'Probe Hood Spot', categories: ['Pizza'], address: '1 Probe St, Chicago, IL 60615', neighborhood: 'Hyde Park' };
+    await injectRestaurants(listingsPage, [...probes, tagged, hood]);
     try {
-      const card = listingsPage.locator(`.ticket[data-id="${probes[0].id}"]`);
-      const addrLink = card.locator('.addr-link');
-      await expect(addrLink).toHaveAttribute('target', '_blank');
-      // Clicking it must not open the detail overlay (stopPropagation).
-      const [popup] = await Promise.all([
-        listingsPage.waitForEvent('popup'),
-        addrLink.click(),
-      ]);
-      await popup.close();
-      await expect(listingsPage.locator('#ov')).toHaveCount(0);
+      const card = listingsPage.locator(`.ticket[data-id="${tagged.id}"]`);
+      // Cuisine first, then occasion; the Gems badge is not a guide; Pizza's
+      // umbrella group (Italian) is not added.
+      await expect(card.locator('.ticket-guides')).toHaveText('Jamaican · Brunch');
+      await expect(listingsPage.locator(`.ticket[data-id="${hood.id}"] .ticket-guides`)).toHaveText('Pizza');
+      // Suburb: its town. City: its neighborhood. Never the street address.
+      await expect(card.locator('.ticket-area')).toHaveText('Oak Park');
+      await expect(listingsPage.locator(`.ticket[data-id="${hood.id}"] .ticket-area`)).toHaveText('Hyde Park');
+      await expect(card).not.toContainText('5 Probe Way');
+      const text = await listingsPage.locator('#content').innerText();
+      expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     } finally {
-      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
+      await resetLedger(listingsPage, { restaurantIds: [...probes.map((r) => r.id), tagged.id, hood.id] });
     }
   });
 });

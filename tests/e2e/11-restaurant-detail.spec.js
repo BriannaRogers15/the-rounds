@@ -54,6 +54,35 @@ test.describe('Detail modal: links (any viewer)', () => {
   });
 });
 
+test.describe('Detail modal: visits (any viewer)', () => {
+  test('visits come before the menu, with a count, the average, and each visit in full', async ({ listingsPage }) => {
+    const r = probe('visits-1', { menu: ['Jerk Chicken'] });
+    const v1 = visit('visits-1a', r.id, 'someone', { reviewer: 'Ana', rating: 5, date: '2026-10-02', ate: ['Jerk Chicken'], notes: 'Ask for extra sauce.' });
+    const v2 = visit('visits-1b', r.id, 'someone-else', { reviewer: 'Ben', rating: 4, date: '2026-09-01', wouldReturn: false });
+    await injectRestaurants(listingsPage, [r]);
+    await injectVisits(listingsPage, [v1, v2]);
+    try {
+      await listingsPage.evaluate((id) => openDetail(id), r.id);
+      const order = await listingsPage.evaluate(() => {
+        const visitsEl = document.querySelector('.listing-modal .visit-list');
+        const menuEl = document.querySelector('.listing-modal .menu-section');
+        return !!(visitsEl.compareDocumentPosition(menuEl) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      expect(order).toBe(true);
+      await expect(listingsPage.locator('.visit-list .section-sub')).toHaveText('2 visits · 4.5 average');
+      const first = listingsPage.locator('.visit-item').first();
+      await expect(first.locator('.visit-who')).toHaveText('Ana'); // newest first
+      await expect(first.locator('.return-pill')).toHaveText('Would go back');
+      await expect(first).toContainText('Ate Jerk Chicken');
+      await expect(first).toContainText('Notes Ask for extra sauce.');
+      await expect(listingsPage.locator('.visit-item').nth(1).locator('.return-pill')).toHaveText("Wouldn't go back");
+      await expect(listingsPage.locator('.menu-row', { hasText: 'Jerk Chicken' }).locator('.ordered-badge')).toHaveText('ordered 1×');
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: [r.id], visitIds: [v1.id, v2.id] });
+    }
+  });
+});
+
 test.describe('Detail modal: owner edits', () => {
   test('the owner can add a guide tag, and it persists', async ({ ownerPage }) => {
     const r = probe('tag-add');

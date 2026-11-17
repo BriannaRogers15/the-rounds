@@ -180,6 +180,31 @@ function starString(n){
   const full = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
   return '★'.repeat(full) + '☆'.repeat(5-full);
 }
+/* Stars with a spoken label, for cards, visits and popups. */
+function starsHtml(n){
+  const full = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
+  return `<span class="stars" role="img" aria-label="${full} out of 5 stars">${starString(n)}</span>`;
+}
+const PIN_ICON = '<svg class="pin-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+const CHEVRON_ICON = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
+/* A spot's own guides as one plain line ("Japanese · Dinner Dates") — the
+   tags it actually carries, not the umbrella groups they nest under. */
+function guideLine(r){
+  // Cuisine first, then food & drink, then occasions — "Jamaican · Brunch".
+  const rank = { 'Cuisines': 0, 'Food & Drink': 1, 'Occasions': 2 };
+  const rankOf = t => rank[GUIDE_SECTION[t] || GUIDE_SECTION[groupForTag(t)] || 'Food & Drink'];
+  return (r.categories || []).filter(t => !BADGE_TAGS.has(t))
+    .map((t, i) => [t, i]).sort((a, b) => rankOf(a[0]) - rankOf(b[0]) || a[1] - b[1])
+    .map(([t]) => singularizeTag(t)).join(' · ');
+}
+/* Where a spot is, in the words people use: its neighborhood in the city,
+   its town in the suburbs. */
+function areaLabel(r){
+  if(r.neighborhood) return r.neighborhood;
+  const town = r.town || parseTown(r.address);
+  return town || '';
+}
 /* Today as YYYY-MM-DD in the visitor's own time zone. toISOString() is UTC,
    which in Chicago turns every evening after 7pm into tomorrow. */
 function localDateStr(dt = new Date()){
@@ -309,18 +334,73 @@ function menuGroupsFor(r){
   if(!menu.length) return [];
   const entry = MENU_LOOKUP.find(e => e.name.toLowerCase() === r.name.toLowerCase());
   if(!entry || !entry.sections) return [{title:null, dishes:menu}];
-  const dishSection = {};
-  Object.entries(entry.sections).forEach(([sec, ds])=> ds.forEach(d => dishSection[d.toLowerCase()] = sec));
+  // A dish can sit in more than one section (a happy-hour list repeating
+  // the regular menu); it shows in each, as the printed menu does.
+  const dishSections = {};
+  Object.entries(entry.sections).forEach(([sec, ds])=> ds.forEach(d => (dishSections[d.toLowerCase()] = dishSections[d.toLowerCase()] || []).push(sec)));
   const grouped = {};
   const extra = [];
   menu.forEach(d=>{
-    const sec = dishSection[d.toLowerCase()];
-    if(sec) (grouped[sec] = grouped[sec] || []).push(d);
+    const secs = dishSections[d.toLowerCase()];
+    if(secs) secs.forEach(sec => (grouped[sec] = grouped[sec] || []).push(d));
     else extra.push(d);
   });
   const out = Object.keys(entry.sections).filter(s=>grouped[s]).map(s=>({title:s, dishes:grouped[s]}));
   if(extra.length) out.push({title:'More', dishes:extra});
   return out;
+}
+function menuLookupEntry(r){
+  return MENU_LOOKUP.find(e => e.name.toLowerCase() === r.name.toLowerCase()) || null;
+}
+/* When the menu was last checked against its source (YYYY-MM-DD), or null
+   for a menu that only grew out of logged visits. */
+function menuCheckedDate(r){
+  const entry = menuLookupEntry(r);
+  if(entry && entry.asOf) return entry.asOf;
+  return typeof r.menuUpdated === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.menuUpdated) ? r.menuUpdated : null;
+}
+/* "Most Popular" starts open when a menu has it; otherwise the first
+   section does, so the window never opens on a wall of closed headers. */
+function defaultOpenSection(groups){
+  const popular = groups.find(g => /^most popular$/i.test(g.title || ''));
+  return (popular || groups[0] || {}).title;
+}
+/* How many logged visits included each dish (lowercased name -> count).
+   Real visits only; a dish counts once per visit. */
+function menuDishCounts(r){
+  const counts = {};
+  visitsFor(r.id).forEach(v=>{
+    new Set(ateList(v).map(d => String(d).toLowerCase())).forEach(d => counts[d] = (counts[d] || 0) + 1);
+  });
+  return counts;
+}
+/* Sections past this many sit behind "Show N more sections". */
+const MENU_SECTIONS_SHOWN = 8;
+function menuAccordionHtml(r, state){
+  const groups = menuGroupsFor(r);
+  if(!groups.length) return `<div class="no-menu">No dishes on file yet — they'll collect as visits get logged.</div>`;
+  const counts = menuDishCounts(r);
+  const row = (d)=>{
+    const n = counts[d.toLowerCase()];
+    return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${n ? `<span class="ordered-badge">ordered ${n}×</span>` : ''}</div>`;
+  };
+  const section = (g, open, searching)=>{
+    if(!g.title) return `<div class="menu-group open" data-section=""><div class="menu-sec-body">${g.dishes.map(row).join('')}</div></div>`;
+    const head = searching
+      ? `<div class="menu-sec-head static"><span class="menu-group-title">${escapeHtml(g.title)}</span><span class="menu-sec-count">${g.dishes.length}</span></div>`
+      : `<button type="button" class="menu-sec-head" aria-expanded="${open}">${CHEVRON_ICON}<span class="menu-group-title">${escapeHtml(g.title)}</span><span class="menu-sec-count">${g.dishes.length}</span></button>`;
+    return `<div class="menu-group${open ? ' open' : ''}" data-section="${escapeHtml(g.title)}">${head}${open ? `<div class="menu-sec-body">${g.dishes.map(row).join('')}</div>` : ''}</div>`;
+  };
+  const q = state.query.trim().toLowerCase();
+  if(q){
+    const hits = groups.map(g => ({ title: g.title, dishes: g.dishes.filter(d => d.toLowerCase().includes(q)) })).filter(g => g.dishes.length);
+    if(!hits.length) return `<div class="no-menu">No dishes match “${escapeHtml(state.query.trim())}”.</div>`;
+    return hits.map(g => section(g, true, true)).join('');
+  }
+  // One extra section isn't worth a "Show 1 more" button.
+  const limit = state.showAll || groups.length <= MENU_SECTIONS_SHOWN + 1 ? groups.length : MENU_SECTIONS_SHOWN;
+  return groups.slice(0, limit).map(g => section(g, state.open.has(g.title), false)).join('')
+    + (limit < groups.length ? `<button type="button" class="menu-more">Show ${groups.length - limit} more sections</button>` : '');
 }
 /* Shared renderer for the log-visit checklist: section headers + checkbox
    rows, 2 columns (3 for big menus). */
@@ -930,20 +1010,20 @@ function renderContent(){
   el.innerHTML = list.map(r=>{
     const vs = visitsFor(r.id);
     const avg = avgRating(vs);
-    const visited = vs.length > 0;
-    const tags = displayTags(r.categories);
+    const guides = guideLine(r);
+    const area = areaLabel(r);
     const showDist = sortBy === 'distance' && userLocation && r.lat!=null && r.lng!=null;
     const distTxt = showDist ? distanceMiles(userLocation.lat, userLocation.lng, r.lat, r.lng).toFixed(1) + ' mi' : null;
     return `
       <div class="ticket" data-id="${r.id}">
-        ${isGem(r) ? `<div class="gem-badge" title="Chicago Gem">💎</div>` : ''}
-        ${visited ? `<div class="stamp"><svg viewBox="-4 -4 8 8" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0,-4 L0.8,-1.39 L3.46,-2 L1.6,0 L3.46,2 L0.8,1.39 L0,4 L-0.8,1.39 L-3.46,2 L-1.6,0 L-3.46,-2 L-0.8,-1.39 Z"/></svg>VISITED</div>` : ''}
-        <div class="ticket-tags">${tags.map(t=>`<span class="card-tag">${tagIcon(t)} ${escapeHtml(singularizeTag(t))}</span>`).join('')}</div>
+        ${guides ? `<div class="ticket-guides">${escapeHtml(guides)}</div>` : ''}
         <div class="ticket-name">${nameLinkHtml(r, true)}</div>
-        ${r.address ? `<div class="ticket-addr"><a href="${r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + r.address))}" target="_blank" rel="noopener" class="addr-link" onclick="event.stopPropagation()">${escapeHtml(r.address)}</a></div>` : ''}
+        ${area || distTxt ? `<div class="ticket-area">${PIN_ICON}<span>${escapeHtml(area)}${distTxt ? `${area ? ' · ' : ''}<span class="dist-badge">${distTxt}</span>` : ''}</span></div>` : ''}
         <div class="ticket-meta">
-          <span>${vs.length} visit${vs.length===1?'':'s'}${distTxt ? ` &nbsp;·&nbsp; <span class="dist-badge">${distTxt}</span>` : ''}</span>
-          <span class="stars">${avg ? starString(avg) : '—'}</span>
+          ${vs.length
+            ? `<span class="visited-label">Visited</span>${starsHtml(avg)}${vs.length > 1 ? `<span class="visit-count">${vs.length} visits</span>` : ''}`
+            : `<span class="not-visited">Not visited yet</span>`}
+          ${isGem(r) ? `<span class="gem-badge">Chicago Gem</span>` : ''}
         </div>
       </div>
     `;
@@ -1784,62 +1864,90 @@ function openDetail(id){
   const canLogVisit = canWriteLedger();
   const currentUid = window.RoundsFirebase?.auth?.currentUser?.uid;
   const vs = visitsFor(id);
+  const avg = avgRating(vs);
   const cats = categories();
   const datalist = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+  const guides = guideLine(r);
+  const mapsHref = r.mapsUrl || (r.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + r.address)}` : '');
+  const dishCount = menuOf(r).length;
+  const menuDate = menuCheckedDate(r);
   $('#modalRoot').innerHTML = `
-    <div class="overlay" id="ov">
-      <div class="modal" data-detail-id="${escapeHtml(id)}">
-        <button class="close" id="closeDet">×</button>
+    <div class="overlay sheet-overlay" id="ov">
+      <div class="modal paper listing-modal" data-detail-id="${escapeHtml(id)}" role="dialog" aria-modal="true" aria-labelledby="detailName">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="detail-top">
         <div class="detail-head">
-          <div>
-            <div class="tag-row" id="tagRow">
-              ${(r.categories||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}${canEditListing ? `<button class="tag-x" data-tag="${escapeHtml(t)}">×</button>` : ''}</span>`).join('')}
-              ${canEditListing ? '<input type="text" id="newTag" class="tag-add" list="tagList" placeholder="+ add guide">' : ''}
+          <div class="detail-head-text">
+            ${canEditListing ? `<div class="tag-row" id="tagRow">
+              ${(r.categories||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}<button class="tag-x" data-tag="${escapeHtml(t)}" aria-label="Remove ${escapeHtml(t)}">×</button></span>`).join('')}
+              <input type="text" id="newTag" class="tag-add" list="tagList" placeholder="+ Add a guide" aria-label="Add a guide">
               <datalist id="tagList">${datalist}</datalist>
-            </div>
-            <div class="detail-name">${nameLinkHtml(r)}</div>
-            ${r.address ? `<div class="detail-addr">${escapeHtml(r.address)}</div>` : ''}
+            </div>` : (guides ? `<div class="detail-guides">${escapeHtml(guides)}</div>` : '')}
+            <h2 class="detail-name" id="detailName">${nameLinkHtml(r)}</h2>
+          </div>
+          <button class="close-btn" id="closeDet" aria-label="Close">×</button>
+        </div>
             <div class="detail-links">
-              ${r.mapsUrl ? `<a href="${r.mapsUrl}" target="_blank" rel="noopener" class="link-pill">📍 Open in Google Maps</a>` : (r.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + r.address)}" target="_blank" rel="noopener" class="link-pill">📍 Open in Google Maps</a>` : '')}
-              ${r.yelp ? `<a href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener" class="link-pill">⭐ Yelp</a>` : ''}
-              ${r.phone ? `<a href="tel:${r.phone.replace(/[^+\d]/g,'')}" class="link-pill">📞 ${escapeHtml(r.phone)}</a>` : ''}
+              ${r.address ? `<span class="detail-addr">${PIN_ICON}${escapeHtml(r.address)}</span>` : ''}
+              ${mapsHref ? `<a href="${escapeHtml(mapsHref)}" target="_blank" rel="noopener" class="link-pill"><span class="wide-only">Open in Google Maps</span><span class="phone-only">Directions</span></a>` : ''}
+              ${r.yelp ? `<a href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener" class="link-pill">Yelp</a>` : ''}
+              ${r.phone ? `<a href="tel:${r.phone.replace(/[^+\d]/g,'')}" class="link-pill"><span class="wide-only">${escapeHtml(r.phone)}</span><span class="phone-only">Call</span></a>` : ''}
             </div>
-          </div>
         </div>
-        ${(canLogVisit || canEditListing) ? `<div style="margin-top:16px; display:flex; gap:8px;">
-          ${canLogVisit ? '<button class="btn small" id="logVisitBtn">+ Log a Visit</button>' : ''}
-          ${canEditListing ? '<button class="btn small danger" id="deleteRestBtn">Delete Listing</button>' : ''}
+        ${(canLogVisit || canEditListing) ? `<div class="detail-actions">
+          ${canLogVisit ? '<button class="btn" id="logVisitBtn">+ Log a visit</button>' : ''}
+          ${canEditListing ? '<button class="btn quiet danger" id="deleteRestBtn">Delete listing</button>' : ''}
         </div>` : ''}
-        <div class="menu-section">
-          <h3>Menu</h3>
-          <div class="menu-groups ${menuOf(r).length > 40 ? 'cols3' : ''}" id="menuChips">
-            ${menuGroupsFor(r).map(g=>`<div class="menu-group">
-                ${g.title ? `<div class="menu-group-title">${escapeHtml(g.title)}</div>` : ''}
-                ${g.dishes.map(d=>`<div class="menu-row"><span>${escapeHtml(d)}</span></div>`).join('')}
-              </div>`).join('')
-              || '<span class="no-menu">No dishes on file yet — they\'ll collect as visits get logged.</span>'}
+        <section class="visit-list">
+          <div class="section-head">
+            <h3>Visits</h3>
+            ${vs.length ? `<span class="section-sub">${vs.length} visit${vs.length===1?'':'s'} · ${avg.toFixed(1)} average</span>` : ''}
           </div>
-        </div>
-        <div class="visit-list">
-          <h3>Visit Ledger</h3>
           <div id="visitItems">
             ${vs.length ? vs.map(v=>`
               <div class="visit-item" data-vid="${v.id}">
-                <div class="visit-left">
-                  <b>${fmtDate(v.date)}${v.reviewer ? ` <span style="font-weight:500;color:var(--cream-dim);">· by ${escapeHtml(v.reviewer)}</span>` : ''}</b>
-                  <span class="stars">${starString(v.rating)}</span>
-                  ${ateList(v).length ? `<div class="visit-meta-small">Ate: ${escapeHtml(ateList(v).join(', '))}</div>` : ''}
-                  <div class="visit-meta-small">Would return: ${v.wouldReturn ? 'Yes' : 'No'}</div>
-                  ${v.notes ? `<div class="visit-meta-small">Notes: ${escapeHtml(v.notes)}</div>` : ''}
+                <div class="visit-top">
+                  ${v.reviewer ? `<span class="visit-who">${escapeHtml(v.reviewer)}</span>` : ''}
+                  <span class="visit-date">${fmtDate(v.date)}</span>
+                  ${starsHtml(v.rating)}
+                  <span class="return-pill ${v.wouldReturn ? 'yes' : 'no'}">${v.wouldReturn ? 'Would go back' : "Wouldn't go back"}</span>
+                  ${(canLogVisit && v.authorUid === currentUid) || canEditListing ? `<button class="trash" data-vid="${v.id}">Remove</button>` : ''}
                 </div>
-                ${(canLogVisit && v.authorUid === currentUid) || canEditListing ? `<button class="trash" data-vid="${v.id}">remove</button>` : ''}
+                ${ateList(v).length ? `<div class="visit-line"><span class="visit-lbl">Ate</span> ${escapeHtml(ateList(v).join(', '))}</div>` : ''}
+                ${v.notes ? `<div class="visit-line"><span class="visit-lbl">Notes</span> ${escapeHtml(v.notes)}</div>` : ''}
               </div>
-            `).join('') : '<div class="no-visits">No visits logged yet.</div>'}
+            `).join('') : `<div class="no-visits">No visits logged yet.</div>`}
           </div>
-        </div>
+        </section>
+        <section class="menu-section">
+          <div class="section-head menu-head">
+            <h3>Menu</h3>
+            ${dishCount ? `<span class="section-sub">${dishCount} dish${dishCount===1?'':'es'}${menuDate ? ` · checked ${fmtDate(menuDate)}` : ''}</span>` : ''}
+            ${dishCount ? `<label class="search-pill menu-search">${SEARCH_ICON}<input type="search" id="menuSearch" placeholder="Search this menu" aria-label="Search this menu" autocomplete="off"></label>` : ''}
+          </div>
+          <div class="menu-acc" id="menuChips"></div>
+        </section>
       </div>
     </div>
   `;
+  // The menu: sections that open and close, a search box, and how many
+  // logged visits ordered each dish.
+  const menuEl = $('#menuChips');
+  const menuState = { query: '', open: new Set([defaultOpenSection(menuGroupsFor(r))]), showAll: false };
+  const renderMenu = ()=>{ menuEl.innerHTML = menuAccordionHtml(r, menuState); };
+  renderMenu();
+  menuEl.addEventListener('click', (e)=>{
+    const head = e.target.closest('.menu-sec-head');
+    if(head){
+      const sec = head.closest('.menu-group').dataset.section;
+      if(menuState.open.has(sec)) menuState.open.delete(sec); else menuState.open.add(sec);
+      renderMenu();
+      return;
+    }
+    if(e.target.closest('.menu-more')){ menuState.showAll = true; renderMenu(); }
+  });
+  const menuSearch = $('#menuSearch');
+  if(menuSearch) menuSearch.addEventListener('input', ()=>{ menuState.query = menuSearch.value; renderMenu(); });
   $('#closeDet').addEventListener('click', closeModal);
   $('#ov').addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
   const logVisitButton = $('#logVisitBtn');
@@ -2072,7 +2180,8 @@ function openLogVisit(restaurantId){
     }
     const reviewerName = accountName();
     const date = selectedDate || today;
-    const checkedDishes = $$('.dish-check input:checked', $('#modalRoot')).map(cb => cb.dataset.dish);
+    // A dish listed in two sections has two boxes; record it once.
+    const checkedDishes = [...new Set($$('.dish-check input:checked', $('#modalRoot')).map(cb => cb.dataset.dish))];
     const typedDish = $('#vAte').value.trim();
     const ate = [...checkedDishes];
     if(typedDish && !ate.some(d => d.toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
@@ -2329,7 +2438,12 @@ async function seedCuratedMenus(){
     // the correction removes — user-added dishes are never touched.
     const ver = entry.v || 1;
     const seeded = r.menuSeeded === true ? 1 : (r.menuSeeded || 0);
-    if(seeded >= ver) return;
+    if(seeded >= ver){
+      // Already seeded. Older versions stamped menuUpdated with the moment
+      // seeding ran (a meaningless date); correct it to the curation date.
+      if(entry.asOf && r.menuUpdated !== entry.asOf){ r.menuUpdated = entry.asOf; changed = true; }
+      return;
+    }
     if(!r.menu) r.menu = [];
     (entry.retire || []).forEach(d=>{
       const i = r.menu.findIndex(x => x.toLowerCase() === d.toLowerCase());
@@ -2343,7 +2457,9 @@ async function seedCuratedMenus(){
     });
     r.menu.sort((a,b)=> a.localeCompare(b));
     r.menuSeeded = ver;
-    r.menuUpdated = Date.now();
+    // When the menu was last checked against its source (YYYY-MM-DD) —
+    // not when this device happened to seed it.
+    if(entry.asOf) r.menuUpdated = entry.asOf;
     changed = true;
   });
   if(changed) await saveRestaurants();

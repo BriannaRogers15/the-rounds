@@ -44,7 +44,45 @@ async function waitForPorts(open, timeoutMs) {
   }
 }
 
+// firebase-tools 15's emulators need Java 21 or newer. A machine can have
+// several JDKs with an older one first on PATH, so pick a new-enough one
+// explicitly: JAVA_HOME, then whatever is on PATH, then Homebrew's
+// openjdk. The emulators get that JDK's bin directory first on their PATH.
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const MIN_JAVA = 21;
+function javaMajor(javaBin) {
+  // `java -version` prints to stderr.
+  const res = spawnSync(javaBin, ['-version'], { encoding: 'utf8' });
+  return parseJavaVersion(`${res.stdout || ''}${res.stderr || ''}`);
+}
+function parseJavaVersion(text) {
+  const m = /version "(\d+)(?:\.(\d+))?/.exec(text);
+  if (!m) return 0;
+  return m[1] === '1' ? Number(m[2]) : Number(m[1]); // "1.8" means Java 8
+}
+function findJavaBinDir() {
+  const candidates = [];
+  if (process.env.JAVA_HOME) candidates.push(path.join(process.env.JAVA_HOME, 'bin'));
+  candidates.push(null); // whatever `java` is on PATH
+  candidates.push('/opt/homebrew/opt/openjdk/bin', '/usr/local/opt/openjdk/bin');
+  for (const dir of candidates) {
+    const bin = dir ? path.join(dir, 'java') : 'java';
+    if (dir && !fs.existsSync(bin)) continue;
+    if (javaMajor(bin) >= MIN_JAVA) return dir; // null = PATH is already fine
+  }
+  throw new Error(`The Firebase emulators need Java ${MIN_JAVA}+. Install one (e.g. "brew install openjdk") or set JAVA_HOME to it.`);
+}
+
 let emulator = null;
+
+let javaBinDir;
+function emulatorEnv() {
+  if (javaBinDir === undefined) javaBinDir = findJavaBinDir();
+  if (!javaBinDir) return process.env;
+  return { ...process.env, JAVA_HOME: path.dirname(javaBinDir), PATH: `${javaBinDir}${path.delimiter}${process.env.PATH}` };
+}
 
 async function startEmulators() {
   // detached: its own process group, so stopEmulators can signal the
@@ -52,7 +90,7 @@ async function startEmulators() {
   emulator = spawn(
     'npx',
     ['firebase', 'emulators:start', '--only', 'auth,firestore', '--project', 'the-rounds-fc02a'],
-    { cwd: __dirname + '/..', stdio: ['ignore', 'pipe', 'pipe'], detached: true }
+    { cwd: __dirname + '/..', stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: emulatorEnv() }
   );
   let output = '';
   emulator.stdout.on('data', (d) => { output += d.toString(); });
