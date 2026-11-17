@@ -14,7 +14,7 @@ test.describe('Sort options', () => {
     ];
     await injectRestaurants(listingsPage, probes);
     try {
-      await listingsPage.click('[data-sort="name"]');
+      await listingsPage.selectOption('#sortSelect', 'name');
       const order = await cardOrder(listingsPage);
       // "The Zzz Diner" sorts by "Zzz Diner" -> after Pizza/Sushi, not at
       // the very end alphabetically by its literal first letter either way
@@ -29,7 +29,7 @@ test.describe('Sort options', () => {
     const probes = probeRestaurants(); // gem (id probe-gem-3) has the newest createdAt
     await injectRestaurants(listingsPage, probes);
     try {
-      await listingsPage.click('[data-sort="date"]');
+      await listingsPage.selectOption('#sortSelect', 'date');
       const order = await cardOrder(listingsPage);
       expect(order[0]).toBe('probe-gem-3');
     } finally {
@@ -46,7 +46,7 @@ test.describe('Sort options', () => {
     await injectRestaurants(listingsPage, probes);
     await injectVisits(listingsPage, visits);
     try {
-      await listingsPage.click('[data-sort="rating"]');
+      await listingsPage.selectOption('#sortSelect', 'rating');
       const order = await cardOrder(listingsPage);
       expect(order[0]).toBe('probe-pizza-1'); // 5 stars
       expect(order[1]).toBe('probe-sushi-2'); // 2 stars
@@ -70,7 +70,7 @@ test.describe('Sort by distance', () => {
       await context.grantPermissions(['geolocation']);
       // Right next to Probe Hidden Gem (41.7943, -87.5907).
       await context.setGeolocation({ latitude: 41.7945, longitude: -87.5909 });
-      await listingsPage.click('[data-sort="distance"]');
+      await listingsPage.selectOption('#sortSelect', 'distance');
       await expect(listingsPage.locator('.dist-badge').first()).toBeVisible();
       const order = await cardOrder(listingsPage);
       expect(order[0]).toBe('probe-gem-3');
@@ -85,8 +85,8 @@ test.describe('Sort by distance', () => {
     await injectRestaurants(listingsPage, probes);
     try {
       await context.clearPermissions();
-      await listingsPage.click('[data-sort="distance"]');
-      await expect(listingsPage.locator('[data-sort="distance"]')).toHaveClass(/active/);
+      await listingsPage.selectOption('#sortSelect', 'distance');
+      await expect(listingsPage.locator('#sortSelect')).toHaveValue('distance');
       await expect(listingsPage.locator('.ticket')).toHaveCount(probes.length);
       await expect(listingsPage.locator('.dist-badge')).toHaveCount(0);
     } finally {
@@ -101,7 +101,7 @@ test.describe('Sort by distance', () => {
       await listingsPage.evaluate(() => {
         Object.defineProperty(navigator.geolocation, 'getCurrentPosition', { value: () => {} });
       });
-      await listingsPage.click('[data-sort="distance"]');
+      await listingsPage.selectOption('#sortSelect', 'distance');
       await expect(listingsPage.locator('.ticket')).toHaveCount(probes.length);
       await expect(listingsPage.locator('.dist-badge')).toHaveCount(0);
     } finally {

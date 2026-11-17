@@ -105,10 +105,10 @@
     function setMode(next){
       mode = next;
       document.getElementById('authNameField').style.display = mode === 'signup' ? '' : 'none';
-      document.getElementById('authSubmitBtn').textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
+      document.getElementById('authSubmitBtn').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
       document.getElementById('authModeToggle').textContent = mode === 'signup'
-        ? 'Already have an account? Sign in'
-        : 'New here? Create an account';
+        ? 'Have an account? Sign in'
+        : 'Create an account';
       passwordInput.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
       clearError();
     }
@@ -193,7 +193,7 @@
     /* The one place a person's name is set: their Firebase profile (what
        their visits are logged under), their users/{uid} doc, and the chip.
        app.js hears 'rounds-name-changed' and moves their past visits to the
-       new name. Used by sign-up, the chip's ✏️ rename, and Log a Visit
+       new name. Used by sign-up, the chip's pencil (rename), and Log a Visit
        (for an account that somehow has no name yet). */
     const MAX_NAME_LENGTH = 80; // firestore.rules caps a visit's reviewer name at 80
     window.setRoundsDisplayName = async (rawName)=>{
@@ -214,7 +214,8 @@
       if(signedInChip) signedInChip.remove();
       signedInChip = document.createElement('div');
       signedInChip.className = 'signed-in-chip';
-      signedInChip.innerHTML = `<span>Signed in as <button id="authRenameBtn" class="chip-name">${escapeHtml(user.displayName || user.email)} ✏️</button></span><button id="authSignOutBtn">Sign out</button>`;
+      // The name itself is the rename button, marked with a pencil.
+      signedInChip.innerHTML = `<span class="chip-label">Signed in as</span><button type="button" id="authRenameBtn" class="chip-name" aria-label="Change your name (${escapeHtml(user.displayName || user.email)})"><span class="chip-name-text">${escapeHtml(user.displayName || user.email)}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button type="button" id="authSignOutBtn">Sign out</button>`;
       document.body.appendChild(signedInChip);
       document.getElementById('authSignOutBtn').addEventListener('click', ()=> signOut(auth));
       document.getElementById('authRenameBtn').addEventListener('click', async ()=>{

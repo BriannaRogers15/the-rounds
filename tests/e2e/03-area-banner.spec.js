@@ -3,10 +3,10 @@ const { injectRestaurants, resetLedger, waitForBootSettled } = require('../fixtu
 const { probeRestaurants } = require('../fixtures/seed-data');
 
 test.describe('Area banner', () => {
-  test('"Browse all listings" shows the all-of-Chicagoland banner with no area pill', async ({ listingsPage }) => {
+  test('"Browse all listings" titles the page "All of Chicagoland", with no clear button', async ({ listingsPage }) => {
     await expect(listingsPage.locator('#areaBanner')).toBeVisible();
-    await expect(listingsPage.locator('.area-all-note')).toHaveText('All of Chicagoland');
-    await expect(listingsPage.locator('.area-pill')).toHaveCount(0);
+    await expect(listingsPage.locator('.area-title')).toHaveText('All of Chicagoland');
+    await expect(listingsPage.locator('#clearArea')).toHaveCount(0);
   });
 
   test('"← Neighborhoods" returns to the landing page', async ({ listingsPage }) => {
@@ -15,18 +15,19 @@ test.describe('Area banner', () => {
     await expect(listingsPage.locator('#listingsLayout')).toBeHidden();
   });
 
-  test('clicking an area shows a pill with name + count, and its × clears back to all', async ({ guestPage }) => {
+  test('clicking an area titles the page with its name + count, and × clears back to all', async ({ guestPage }) => {
     const probes = probeRestaurants();
     await injectRestaurants(guestPage, probes);
     try {
-      await guestPage.locator('.area-block').first().click();
-      const pill = guestPage.locator('.area-pill');
-      await expect(pill).toBeVisible();
-      await expect(pill).toContainText('spot');
+      const block = guestPage.locator('.area-block').first();
+      const name = await block.getAttribute('data-name');
+      await block.click();
+      await expect(guestPage.locator('.area-title')).toHaveText(name);
+      await expect(guestPage.locator('.area-count')).toContainText('spot');
 
       await guestPage.click('#clearArea');
-      await expect(guestPage.locator('.area-pill')).toHaveCount(0);
-      await expect(guestPage.locator('.area-all-note')).toBeVisible();
+      await expect(guestPage.locator('#clearArea')).toHaveCount(0);
+      await expect(guestPage.locator('.area-title')).toHaveText('All of Chicagoland');
       // Clearing the pill stays in listings view rather than bouncing back
       // to the neighborhoods page.
       await expect(guestPage.locator('#listingsLayout')).toBeVisible();

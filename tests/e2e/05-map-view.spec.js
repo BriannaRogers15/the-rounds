@@ -44,7 +44,11 @@ test.describe('Map view', () => {
       await marker.dispatchEvent('mouseover');
       const popup = listingsPage.locator('.leaflet-popup-content');
       await expect(popup).toBeVisible();
-      await expect(popup.locator('.map-popup-link', { hasText: 'View details' })).toBeVisible();
+      await expect(popup.locator('.map-popup-link', { hasText: 'Details' })).toBeVisible();
+      await expect(popup.locator('.map-popup-link', { hasText: 'Directions' })).toBeVisible();
+      // Same words as the card: no emoji, and whether it's been visited.
+      expect(await popup.innerText()).not.toMatch(/\p{Extended_Pictographic}/u);
+      await expect(popup.locator('.map-popup-meta')).toContainText('not visited yet');
     } finally {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }

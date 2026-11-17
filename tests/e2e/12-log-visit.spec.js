@@ -39,7 +39,7 @@ test.describe('Log a Visit: validation', () => {
     await signedInPage.click('#saveLog');
     expect(dialogs.at(-1)).toBe('Pick a rating.');
 
-    await signedInPage.click('#starPick span[data-n="3"]');
+    await signedInPage.click('#starPick [data-n="3"]');
     await signedInPage.click('#saveLog');
     expect(dialogs.at(-1)).toContain("if you'd go back");
 
@@ -59,7 +59,7 @@ test.describe('Log a Visit: saving', () => {
     await signedInPage.fill('#vName', 'Probe Reviewer');
     await signedInPage.locator('.dish-check input[data-dish="Cheese Slice"]').check();
     await signedInPage.fill('#vAte', 'Garlic Knots'); // not on the menu yet
-    await signedInPage.click('#starPick span[data-n="4"]');
+    await signedInPage.click('#starPick [data-n="4"]');
     await signedInPage.click('#wrYes');
     await signedInPage.fill('#vNotes', 'Ask for extra crispy.');
 
@@ -103,7 +103,7 @@ test.describe('Log a Visit: saving', () => {
       await openLogVisit(page, r);
       await expect(page.locator('.logged-by')).toContainText('Logging as Named Probe');
       await expect(page.locator('#vName')).toHaveCount(0);
-      await page.click('#starPick span[data-n="5"]');
+      await page.click('#starPick [data-n="5"]');
       await page.click('#wrYes');
       await page.click('#saveLog');
       await expect(page.locator('.visit-item').first()).toContainText('Named Probe');
@@ -117,7 +117,7 @@ test.describe('Log a Visit: saving', () => {
     const page = await openSignedInPage(browser, { creds: await createRegularTestUser({ displayName: 'Old Name Probe' }) });
     try {
       await openLogVisit(page, r);
-      await page.click('#starPick span[data-n="4"]');
+      await page.click('#starPick [data-n="4"]');
       await page.click('#wrYes');
       await page.click('#saveLog');
       const visitId = await page.evaluate((id) => visits.find((v) => v.restaurantId === id).id, r.id);
@@ -178,7 +178,7 @@ test.describe('Log a Visit: layout', () => {
       await page.click('#dateDisplay');
       await expect(page.locator('#miniCal')).toBeVisible();
       expect(await overflowing(page, '#calGrid')).toBeLessThanOrEqual(1);
-      // 45 dishes would be three columns on desktop — two on a phone, all tappable.
+      // A big menu stays inside the screen: one column of dishes, all tappable.
       expect(await overflowing(page, '.dish-checklist')).toBeLessThanOrEqual(1);
       const right = await page.locator('.dish-check').nth(1).evaluate((el) => el.getBoundingClientRect().right);
       expect(right).toBeLessThanOrEqual(390);

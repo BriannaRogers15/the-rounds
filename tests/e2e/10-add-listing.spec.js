@@ -83,23 +83,64 @@ test.describe('Add Listing: Google Places search path', () => {
     }
   });
 
-  test('saving with zero guide tags is blocked', async ({ browser }) => {
-    // A real food result Google doesn't classify beyond "restaurant" —
-    // GOOGLE_TYPE_TAG maps it to nothing, so no chip is pre-filled.
-    const generic = {
-      id: 'mock-place-generic', displayName: 'Mock Generic Diner',
-      formattedAddress: '400 W Mock St, Chicago, IL 60607, USA', lat: 41.88, lng: -87.64,
-      primaryType: 'restaurant', types: ['restaurant', 'food'],
-    };
-    const { page, dialogs } = await openAddModal(browser, { places: [generic] });
+  // Google often says only "restaurant". The name usually says more.
+  const generic = (id, displayName) => ({
+    id, displayName, formattedAddress: '400 W Mock St, Chicago, IL 60607, USA', lat: 41.88, lng: -87.64,
+    primaryType: 'restaurant', types: ['restaurant', 'food'],
+  });
+
+  test('when Google is too generic, the guide is guessed from the name (and can be changed)', async ({ browser }) => {
+    const { page } = await openAddModal(browser, { places: [generic('mock-generic-taco', 'Mock Taco Stop')] });
+    let saved = null;
+    try {
+      await page.fill('#rName', 'Mock Taco');
+      await page.locator('#nameSuggestions li').first().click();
+      await expect(page.locator('#filingUnder .tag-pill')).toHaveCount(1);
+      await expect(page.locator('#filingUnder .tag-pill')).toContainText('Mexican');
+      await expect(page.locator('#guessNote')).toContainText('Guessed from the name');
+      await page.click('#saveAdd');
+      await expect(page.locator('#rName')).toHaveCount(0);
+      saved = await findSaved(page, 'Mock Taco Stop');
+      expect(saved.categories).toEqual(['Mexican']);
+    } finally {
+      if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
+      await closeSession(page);
+    }
+  });
+
+  test('a spot with nothing to go on saves with no guide — none is required', async ({ browser }) => {
+    const { page, dialogs } = await openAddModal(browser, { places: [generic('mock-generic-diner', 'Mock Generic Diner')] });
+    let saved = null;
     try {
       await page.fill('#rName', 'Mock Generic');
       await page.locator('#nameSuggestions li').first().click();
       await expect(page.locator('#filingUnder .tag-pill')).toHaveCount(0);
+      await expect(page.locator('#filingUnder')).toContainText('No guide yet');
       await page.click('#saveAdd');
-      expect(dialogs.at(-1)).toContain('Add at least one guide');
-      expect(await findSaved(page, 'Mock Generic Diner')).toBeNull();
-      await expect(page.locator('#rName')).toBeVisible(); // still open
+      await expect(page.locator('#rName')).toHaveCount(0); // saved and closed
+      expect(dialogs).toHaveLength(0);
+      saved = await findSaved(page, 'Mock Generic Diner');
+      expect(saved.categories).toEqual([]);
+      await expect.poll(() => getDoc(`restaurants/${saved.id}`)).toMatchObject({ name: 'Mock Generic Diner' });
+    } finally {
+      if (saved) await resetLedger(page, { restaurantIds: [saved.id] });
+      await closeSession(page);
+    }
+  });
+
+  test('manual entry guesses from the typed name, but never overrides a guide the user set', async ({ browser }) => {
+    const { page } = await openAddModal(browser);
+    try {
+      await page.click('#manualToggle');
+      await page.fill('#rName', "Lou's Smokehouse");
+      await expect(page.locator('#filingUnder .tag-pill')).toHaveText(['BBQ×']);
+      // Only her existing guides are ever suggested — never a new category.
+      const known = await page.evaluate(() => categories());
+      expect(known).toContain('BBQ');
+      await page.locator('#filingUnder .tag-x[data-tag="BBQ"]').click();
+      await page.fill('#rName', "Lou's Smokehouse & Pizzeria");
+      await page.waitForTimeout(600); // past the guess debounce
+      await expect(page.locator('#filingUnder .tag-pill')).toHaveCount(0);
     } finally {
       await closeSession(page);
     }

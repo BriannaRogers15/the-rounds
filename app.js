@@ -164,7 +164,7 @@ function setSharedLedgerStatus(message, isError=false){
   }
 }
 /* The signed-in person's name, as visits are logged under it — set at
-   sign-up (or by Google), changed with the ✏️ on "Signed in as …". */
+   sign-up (or by Google), changed with the pencil on "Signed in as …". */
 function accountName(){
   return (window.RoundsFirebase?.auth?.currentUser?.displayName || '').trim();
 }
@@ -376,14 +376,14 @@ function menuDishCounts(r){
 }
 /* Sections past this many sit behind "Show N more sections". */
 const MENU_SECTIONS_SHOWN = 8;
-function menuAccordionHtml(r, state){
+function menuAccordionHtml(r, state, rowHtml){
   const groups = menuGroupsFor(r);
   if(!groups.length) return `<div class="no-menu">No dishes on file yet — they'll collect as visits get logged.</div>`;
   const counts = menuDishCounts(r);
-  const row = (d)=>{
+  const row = rowHtml || ((d)=>{
     const n = counts[d.toLowerCase()];
     return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${n ? `<span class="ordered-badge">ordered ${n}×</span>` : ''}</div>`;
-  };
+  });
   const section = (g, open, searching)=>{
     if(!g.title) return `<div class="menu-group open" data-section=""><div class="menu-sec-body">${g.dishes.map(row).join('')}</div></div>`;
     const head = searching
@@ -401,15 +401,6 @@ function menuAccordionHtml(r, state){
   const limit = state.showAll || groups.length <= MENU_SECTIONS_SHOWN + 1 ? groups.length : MENU_SECTIONS_SHOWN;
   return groups.slice(0, limit).map(g => section(g, state.open.has(g.title), false)).join('')
     + (limit < groups.length ? `<button type="button" class="menu-more">Show ${groups.length - limit} more sections</button>` : '');
-}
-/* Shared renderer for the log-visit checklist: section headers + checkbox
-   rows, 2 columns (3 for big menus). */
-function dishChecklistHtml(r){
-  const menu = menuOf(r);
-  const groups = menuGroupsFor(r);
-  return `<div class="dish-checklist ${menu.length > 40 ? 'cols3' : ''}">${groups.map(g=>`
-    ${g.title ? `<div class="dish-group-title">${escapeHtml(g.title)}</div>` : ''}
-    ${g.dishes.map(d=>`<label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"><span>${escapeHtml(d)}</span></label>`).join('')}`).join('')}</div>`;
 }
 function addDishToMenu(restaurantId, dish){
   const r = restaurants.find(x=>x.id===restaurantId);
@@ -746,20 +737,19 @@ function renderStats(){
   const el = $('#statsReceipt');
   el.innerHTML = `
     <div class="receipt-row"><span class="receipt-label">Listings</span><span class="receipt-val">${total}</span></div>
-    <div class="receipt-row"><span class="receipt-label">Spots Visited</span><span class="receipt-val">${visitedCount}/${total}</span></div>
-    <div class="receipt-row"><span class="receipt-label">Visits Logged</span><span class="receipt-val">${totalVisits}</span></div>
-    <div class="receipt-row"><span class="receipt-label">Average Rating</span><span class="receipt-val${allAvg ? '' : ' muted'}">${allAvg ? allAvg.toFixed(1) + ' ★' : '—'}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Spots visited</span><span class="receipt-val">${visitedCount}/${total}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Visits logged</span><span class="receipt-val">${totalVisits}</span></div>
+    <div class="receipt-row"><span class="receipt-label">Average rating</span><span class="receipt-val${allAvg ? '' : ' muted'}">${allAvg ? allAvg.toFixed(1) + ' ★' : '—'}</span></div>
   `;
 }
 
 /* The vertical guide list (desktop rail / phone drawer). A group that's
    active unfolds its sub-cuisines indented beneath it, accordion-style. */
 function railItemHTML(label, count, active, opts = {}){
-  const cls = `rail-item${opts.child ? ' child' : ''}${active ? ' active' : ''}`;
+  const cls = `rail-item${opts.child ? ' child' : ''}${active ? ' active' : ''}${opts.group ? ' group' : ''}${opts.open ? ' open' : ''}`;
   const sub = opts.sub !== undefined ? ` data-sub="${escapeHtml(opts.sub)}"` : '';
-  return `<button class="${cls}" data-cat="${escapeHtml(label)}"${sub}>
-    <span class="rail-ico">${opts.icon || tagIcon(label)}</span>
-    <span class="rail-name">${escapeHtml(opts.name || label)}</span>
+  return `<button type="button" class="${cls}" data-cat="${escapeHtml(label)}"${sub}${active ? ' aria-current="true"' : ''}${opts.group ? ` aria-expanded="${!!opts.open}"` : ''}>
+    ${opts.group ? CHEVRON_ICON : ''}<span class="rail-name">${escapeHtml(opts.name || label)}</span>
     <span class="rail-cnt">${count}</span>
   </button>`;
 }
@@ -791,20 +781,20 @@ function renderCuisineRail(){
   });
 
   let html = `<div class="rail-title">Guides</div>`;
-  html += railItemHTML('All', inArea.length, activeCategory === 'All', { icon:'🍽️' });
+  html += railItemHTML('All', inArea.length, activeCategory === 'All');
   RAIL_SECTION_ORDER.forEach(sec=>{
     if(!sections[sec].length) return;
     html += `<div class="rail-section">${sec}</div>`;
     sections[sec].forEach(({ label, count })=>{
       const active = activeCategory === label;
-      html += railItemHTML(label, count, active && !isGroupLabel(label));
+      html += railItemHTML(label, count, active && !isGroupLabel(label), isGroupLabel(label) ? { group:true, open:active } : {});
       if(isGroupLabel(label) && active){
         html += `<div class="rail-children">`;
-        html += railItemHTML(label, count, !activeSubTag, { child:true, sub:'', name:`All ${label}`, icon:'▸' });
+        html += railItemHTML(label, count, !activeSubTag, { child:true, sub:'', name:`All ${label}` });
         childTagsOf(label).forEach(c=>{
           const ccount = inArea.filter(r => (r.categories||[]).includes(c)).length;
           if(activeArea && ccount === 0) return;
-          html += railItemHTML(label, ccount, activeSubTag === c, { child:true, sub:c, name:c, icon:tagIcon(c) });
+          html += railItemHTML(label, ccount, activeSubTag === c, { child:true, sub:c, name:c });
         });
         html += `</div>`;
       }
@@ -954,6 +944,63 @@ const GOOGLE_TYPE_TAG = {
   bar_and_grill: 'Bars',
   night_club: 'Late Night',
 };
+/* When Google only says "restaurant", the name usually says more:
+   "Mock Taqueria", "Lou's Smokehouse", "Harold's Chicken". Each hint maps
+   words in a name to one guide. Only guides already in the ledger are
+   ever suggested (her guides set the categories — never new ones), and
+   the chips stay editable before saving. Specific bars before plain "bar". */
+const NAME_GUIDE_HINTS = [
+  [/\b(mexican|tacos?|taquer[ií]a|cantina|birria|tamales?|burritos?|quesadillas?|elotes?)\b/i, 'Mexican'],
+  [/\b(pizza|pizzeria|pizzas)\b/i, 'Pizza'],
+  [/\bsushi\b/i, 'Sushi'],
+  [/\bramen\b/i, 'Ramen'],
+  [/\b(hibachi|izakaya|teriyaki|japanese)\b/i, 'Japanese'],
+  [/\b(pho|banh mi|vietnamese)\b/i, 'Vietnamese'],
+  [/\bthai\b/i, 'Thai'],
+  [/\b(korean|kbbq|bulgogi|bibimbap)\b/i, 'Korean'],
+  [/\b(chinese|wok|dumplings?|szechuan|sichuan|dim sum|hot ?pot)\b/i, 'Chinese'],
+  [/\b(indian|curry|tandoori?|masala|biryani)\b/i, 'Indian'],
+  [/\b(peru|peruvian|ceviche)\b/i, 'Peruvian'],
+  [/\b(jerk|jamaican?|caribbean)\b/i, 'Jamaican'],
+  [/\b(italian|trattoria|ristorante|osteria)\b/i, 'Italian'],
+  [/\b(bbq|bar-?b-?q(?:ue)?|barbecue|smokehouse|smoke ?house)\b/i, 'BBQ'],
+  [/\b(steak ?house|chophouse)\b/i, 'Steakhouses'],
+  [/\bburgers?\b/i, 'Burgers'],
+  [/\b(seafood|mariscos|crabs?|shrimp|lobsters?|oysters?|fish|po['-]? ?boys?|crawfish)\b/i, 'Seafood'],
+  [/\b(wings?|chicken)\b/i, 'Chicken'],
+  [/\bsoul\b/i, 'Soul Food'],
+  [/\b(hoag(?:ie|y)s?|sandwich(?:es)?|subs|deli|cheesesteaks?|philly|phillies|gyros?|steak (?:&|and) lemonade)\b/i, 'Sandwiches'],
+  [/\b(bakery|bakehouse|patisserie|pastry|pastries|donuts?|doughnuts?)\b/i, 'Bakery'],
+  [/\b(ice cream|gelato|creamery|custard)\b/i, 'Ice Cream'],
+  [/\b(froyo|frozen yogurt)\b/i, 'Frozen Yogurt'],
+  [/\b(desserts?|sweets|cakes?|cookies?|cupcakes?|cheesecake)\b/i, 'Desserts'],
+  [/\b(pancakes?|breakfast|waffles?)\b/i, 'Breakfast'],
+  [/\bbrunch\b/i, 'Brunch'],
+  [/\brooftop\b/i, 'Rooftop'],
+  [/\bwine bar\b/i, 'Wine Bars'],
+  [/\bsports (bar|pub|grill)\b/i, 'Sports Bars'],
+  // Only when nothing in the name names the food: "Kitchen + Bar" and
+  // "Bar & Grill" are restaurants first, but "Bar Tabu" or "The Tap" are bars.
+  [/\b(bar|pub|tavern|tap|taproom|lounge|saloon)\b/i, 'Bars', { fallback: true }],
+];
+// Overlaps where one guide already says it: Korean BBQ is Korean, a fish
+// and chicken shack is seafood, a sushi bar is Sushi.
+const NAME_GUIDE_SUPERSEDES = { 'Korean': ['BBQ', 'Steakhouses'], 'Seafood': ['Chicken'] };
+function guessGuidesFromName(name){
+  const text = String(name || '');
+  const known = new Map(categories().map(c => [c.toLowerCase(), c]));
+  let out = [];
+  NAME_GUIDE_HINTS.forEach(([re, tag, opts = {}])=>{
+    const guide = known.get(tag.toLowerCase());
+    if(!guide || out.includes(guide) || !re.test(text)) return;
+    if(opts.fallback && out.length) return;
+    out.push(guide);
+  });
+  Object.entries(NAME_GUIDE_SUPERSEDES).forEach(([winner, losers])=>{
+    if(out.includes(known.get(winner.toLowerCase()))) out = out.filter(t => !losers.some(l => l.toLowerCase() === t.toLowerCase()));
+  });
+  return out.slice(0, 3);
+}
 /* Places API (New) caps includedPrimaryTypes at 5 exact-match values, so
    the search box can't just list every type GOOGLE_TYPE_TAG knows about
    (60+ of them) as a server-side filter. Instead the name search below
@@ -1111,17 +1158,7 @@ function renderLeafletMap(el, withCoords, noteHtml, myToken){
     const marker = L.circleMarker([r.lat, r.lng], {
       radius: 8, color: '#12302799', weight: 2, fillColor: color, fillOpacity: 0.95
     }).addTo(leafletMap);
-    const avg = avgRating(vs);
-    const mapsHref = r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + (r.address||'')));
-    marker.bindPopup(`
-      <div class="map-popup-cat">${displayTags(r.categories).map(t=>tagIcon(t)+' '+escapeHtml(singularizeTag(t))).join(' · ')}</div>
-      <div class="map-popup-name">${escapeHtml(r.name)}</div>
-      <div style="font-size:11px;">${vs.length} visit${vs.length===1?'':'s'}${avg ? ' · ' + starString(avg) : ''}</div>
-      <a class="map-popup-link" href="${mapsHref}" target="_blank" rel="noopener">📍 Maps</a>
-      ${r.website ? `<a class="map-popup-link" href="${escapeHtml(r.website)}" target="_blank" rel="noopener">🌐 Website</a>` : ''}
-      ${r.yelp ? `<a class="map-popup-link" href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener">⭐ Yelp</a>` : ''}
-      <a class="map-popup-link" href="javascript:void(0)" onclick="openDetail('${r.id}')">View details</a>
-    `);
+    marker.bindPopup(mapPopupHtml(r), { maxWidth: 320, minWidth: 240 });
     marker.on('mouseover', ()=> marker.openPopup());
   });
   if(bounds.length > 1){
@@ -1176,33 +1213,40 @@ function renderRelativeMap(el, withCoords, noteHtml, wasFallback){
   });
 }
 
+/* A map pin's popup, in the same words as its card: guides, name, area
+   and whether it's been visited, then Details / Directions / Website. */
+function mapPopupHtml(r){
+  const vs = visitsFor(r.id);
+  const avg = avgRating(vs);
+  const guides = guideLine(r);
+  const area = areaLabel(r);
+  const mapsHref = r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + (r.address||'')));
+  const site = r.website || r.yelp;
+  return `
+    ${guides ? `<div class="map-popup-cat">${escapeHtml(guides)}</div>` : ''}
+    <div class="map-popup-name">${escapeHtml(r.name)}</div>
+    <div class="map-popup-meta">${area ? `${escapeHtml(area)} · ` : ''}${vs.length ? `visited ${starsHtml(avg)}` : 'not visited yet'}</div>
+    <div class="map-popup-links">
+      <button type="button" class="map-popup-link map-popup-detail" onclick="openDetail('${escapeHtml(r.id)}')">Details</button>
+      <a class="map-popup-link" href="${escapeHtml(mapsHref)}" target="_blank" rel="noopener">Directions</a>
+      ${site ? `<a class="map-popup-link" href="${escapeHtml(site)}" target="_blank" rel="noopener">${r.website ? 'Website' : 'Yelp'}</a>` : ''}
+    </div>`;
+}
 function showMapPopup(mapEl, pinEl){
   const existing = mapEl.querySelector('.map-popup');
   if(existing) existing.remove();
   const id = pinEl.dataset.id;
   const r = restaurants.find(x=>x.id===id);
   if(!r) return;
-  const vs = visitsFor(id);
-  const avg = avgRating(vs);
-  const mapsHref = r.mapsUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.name + ' ' + (r.address||'')));
   const popup = document.createElement('div');
   popup.className = 'map-popup';
   popup.style.left = pinEl.dataset.x + '%';
   popup.style.top = pinEl.dataset.y + '%';
-  popup.innerHTML = `
-    <button class="close-x">×</button>
-    <div class="map-popup-cat">${displayTags(r.categories).map(t=>tagIcon(t)+' '+escapeHtml(singularizeTag(t))).join(' · ')}</div>
-    <div class="map-popup-name">${escapeHtml(r.name)}</div>
-    <div style="font-size:11px;color:var(--cream-dim);">${vs.length} visit${vs.length===1?'':'s'}${avg ? ' · ' + starString(avg) : ''}</div>
-    <a class="map-popup-link" href="${mapsHref}" target="_blank" rel="noopener">📍 Maps</a>
-    ${r.website ? `<a class="map-popup-link" href="${escapeHtml(r.website)}" target="_blank" rel="noopener">🌐 Website</a>` : ''}
-    ${r.yelp ? `<a class="map-popup-link" href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener">⭐ Yelp</a>` : ''}
-    <a class="map-popup-link" href="javascript:void(0)" data-detail="${id}">View details</a>
-  `;
+  popup.innerHTML = `<button type="button" class="close-x" aria-label="Close">×</button>${mapPopupHtml(r)}`;
   mapEl.appendChild(popup);
   popup.addEventListener('click', (e)=> e.stopPropagation());
   popup.querySelector('.close-x').addEventListener('click', ()=> popup.remove());
-  popup.querySelector('[data-detail]').addEventListener('click', ()=>{ popup.remove(); openDetail(id); });
+  popup.querySelector('.map-popup-detail').addEventListener('click', ()=>{ popup.remove(); });
 }
 
 
@@ -1394,10 +1438,10 @@ function renderAreaBanner(){
   el.style.display = 'flex';
   const count = restaurants.filter(r => restaurantInArea(r, activeArea)).length;
   el.innerHTML = `
-    <button class="btn secondary small" id="backToAreas">← Neighborhoods</button>
-    ${activeArea
-      ? `<span class="area-pill">📍 ${escapeHtml(activeArea.name)} · ${count} spot${count===1?'':'s'} <button class="tag-x" id="clearArea" title="Show all of Chicagoland">×</button></span>`
-      : `<span class="area-all-note">All of Chicagoland</span>`}
+    <button type="button" class="tool-btn back-btn" id="backToAreas">← Neighborhoods</button>
+    <h2 class="area-title">${escapeHtml(activeArea ? activeArea.name : 'All of Chicagoland')}</h2>
+    <span class="area-count">${count} spot${count===1?'':'s'}</span>
+    ${activeArea ? `<button type="button" class="area-clear" id="clearArea" aria-label="Show all of Chicagoland" title="Show all of Chicagoland">×</button>` : ''}
   `;
   $('#backToAreas').addEventListener('click', ()=>{ currentPage = 'areas'; activeArea = null; renderAll(); });
   const clearBtn = $('#clearArea');
@@ -1564,34 +1608,36 @@ function openAddRestaurant(){
   }
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov">
-      <div class="modal">
-        <button class="close" id="closeAdd">×</button>
-        <h2>New Listing</h2>
-        <div class="sub" style="font-size:11.5px;color:var(--cream-dim);">Search it, tap it, done — address, website, and cuisines fill themselves.</div>
+      <div class="modal paper add-modal" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+        <div class="paper-head">
+          <div>
+            <h2 id="addTitle">New listing</h2>
+            <div class="paper-sub">Search it, tap it, done. Address, website and guides fill themselves in.</div>
+          </div>
+          <button type="button" class="close-btn" id="closeAdd" aria-label="Close">×</button>
+        </div>
         <div class="places-notice" id="placesNotice" style="display:none;">
-          ⚠️ Restaurant search isn't available right now, so manual entry is open below.
+          Restaurant search isn't available right now, so manual entry is open below.
         </div>
         <div class="field">
-          <label>Name <span style="text-transform:none;">(search for the restaurant)</span></label>
+          <label for="rName" id="rNameLabel">Restaurant</label>
           <div class="addr-autocomplete-wrap">
-            <input type="text" id="rName" placeholder="e.g. The Anchor Room" autocomplete="off">
+            <label class="search-pill big">${SEARCH_ICON}<input type="text" id="rName" placeholder="Search for a restaurant" autocomplete="off"></label>
             <ul id="nameSuggestions" class="addr-suggestions" style="display:none;"></ul>
           </div>
         </div>
         <div class="field" id="manualAddrField" style="display:none;">
-          <label>Address</label>
+          <label for="rAddr">Address</label>
           <div class="addr-autocomplete-wrap">
-            <input type="text" id="rAddr" placeholder="e.g. 123 Main St" autocomplete="off">
+            <input type="text" id="rAddr" placeholder="e.g. 123 Main St, Oak Park, IL" autocomplete="off">
             <ul id="addrSuggestions" class="addr-suggestions" style="display:none;"></ul>
           </div>
         </div>
         <div class="filing-under" id="filingUnder" style="display:none;"></div>
-        <div style="margin-top:10px;margin-bottom:4px;">
-          <a href="#" id="manualToggle" style="color:var(--flag-blue-bright);text-decoration:underline;cursor:pointer;font-size:11.5px;">Can't find it on Google Maps? Add it manually</a>
-        </div>
-        <div class="modal-actions">
-          <button class="btn secondary" id="cancelAdd">Cancel</button>
-          <button class="btn" id="saveAdd">Add Listing</button>
+        <div class="paper-actions">
+          <a href="#" id="manualToggle" class="text-link">Not on Google Maps? Add it by hand</a>
+          <button type="button" class="btn quiet" id="cancelAdd">Cancel</button>
+          <button type="button" class="btn" id="saveAdd">Add listing</button>
         </div>
       </div>
     </div>
@@ -1603,21 +1649,29 @@ function openAddRestaurant(){
   let selectedPlace = null;
   let manualMode = false;
   let pendingTags = [];
+  // Where the chips came from: 'google' (its place type), 'name' (guessed
+  // from the name because Google only said "restaurant"), or null. Once the
+  // user edits a chip, the guess never overwrites their choice.
+  let tagSource = null;
+  let tagsTouched = false;
   let manualAddressPlace = null;
-  /* Editable guide chips, live in the modal before saving. Google's
-     suggestions land here first, but the final say is the user's — so a
-     spot never has to be saved untagged, manual mode included. */
+  /* Editable guide chips, live in the modal before saving. Guides file
+     themselves (from Google, or guessed from the name) and the user can
+     change them; a spot may also be saved with none. */
   function renderFilingUnder(){
     const fu = $('#filingUnder');
     if(!fu) return;
     fu.style.display = '';
     const datalist = categories().map(c=>`<option value="${escapeHtml(c)}">`).join('');
-    fu.innerHTML = `Filing under:
-      ${pendingTags.map(t=>`<span class="tag-pill">${tagIcon(t)} ${escapeHtml(t)}<button class="tag-x" data-tag="${escapeHtml(t)}">×</button></span>`).join('')}
-      <input type="text" id="addTagInput" class="tag-add" list="addTagList" placeholder="+ add guide">
-      <datalist id="addTagList">${datalist}</datalist>`;
+    fu.innerHTML = `<span class="filing-label">Filing under</span>
+      ${pendingTags.map(t=>`<span class="tag-pill">${escapeHtml(t)}<button type="button" class="tag-x" data-tag="${escapeHtml(t)}" aria-label="Remove ${escapeHtml(t)}">×</button></span>`).join('')}
+      <input type="text" id="addTagInput" class="tag-add" list="addTagList" placeholder="+ Add a guide" aria-label="Add a guide">
+      <datalist id="addTagList">${datalist}</datalist>
+      ${tagSource === 'name' && pendingTags.length && !tagsTouched ? '<span class="filing-note" id="guessNote">Guessed from the name. Change it if it\'s wrong.</span>' : ''}
+      ${!pendingTags.length ? '<span class="filing-note">No guide yet. It can be added later from the listing.</span>' : ''}`;
     $$('#filingUnder .tag-x').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        tagsTouched = true;
         pendingTags = pendingTags.filter(t => t !== btn.dataset.tag);
         renderFilingUnder();
       });
@@ -1626,6 +1680,7 @@ function openAddRestaurant(){
     const commitTag = (refocus)=>{
       const val = inp.value.trim();
       if(!val) return;
+      tagsTouched = true;
       if(!pendingTags.some(t => t.toLowerCase() === val.toLowerCase())) pendingTags.push(val);
       renderFilingUnder();
       if(refocus) $('#addTagInput').focus();
@@ -1637,6 +1692,9 @@ function openAddRestaurant(){
     manualMode = true;
     selectedPlace = null;
     pendingTags = [];
+    tagSource = null;
+    tagsTouched = false;
+    $('#rName').placeholder = 'Restaurant name';
     $('#nameSuggestions').style.display = 'none';
     $('#nameSuggestions').innerHTML = '';
     $('#rName').focus();
@@ -1709,9 +1767,27 @@ function openAddRestaurant(){
       placeId: place.id || null,
     };
     $('#rName').value = selectedPlace.name;
-    pendingTags = tags;
+    // Google's type said nothing about the food ("restaurant")? File it by
+    // what the name says instead.
+    if(tags.length){ pendingTags = tags; tagSource = 'google'; }
+    else { pendingTags = guessGuidesFromName(selectedPlace.name); tagSource = pendingTags.length ? 'name' : null; }
+    tagsTouched = false;
     renderFilingUnder();
   }
+  // Manual entry has no Google type at all: guess from the name as it's
+  // typed, until the user sets the chips themselves.
+  let guessDebounce = null;
+  $('#rName').addEventListener('input', ()=>{
+    if(!manualMode || tagsTouched) return;
+    clearTimeout(guessDebounce);
+    guessDebounce = setTimeout(()=>{
+      // The user may have set a guide while this was waiting.
+      if(tagsTouched) return;
+      pendingTags = guessGuidesFromName($('#rName').value);
+      tagSource = pendingTags.length ? 'name' : null;
+      renderFilingUnder();
+    }, 300);
+  });
   $('#rName').addEventListener('input', ()=>{
     selectedPlace = null; // any edit invalidates a previously picked match
     clearTimeout(nameDebounce);
@@ -1829,10 +1905,6 @@ function openAddRestaurant(){
     }
     if(manualMode && !manualAddressPlace && !typedAddressInChicagoland(address)){
       alert(`The Rounds only covers ${CHICAGOLAND_AREA_TEXT}. Pick the address from the suggestions so it can be checked, or include a Chicagoland town (e.g. "123 Main St, Oak Park, IL").`);
-      return;
-    }
-    if(!pendingTags.length){
-      alert('Add at least one guide before saving — type one into "Filing under" below.');
       return;
     }
     const record = { id: uid(), name, categories: [...pendingTags], address, createdAt: Date.now() };
@@ -2038,62 +2110,96 @@ function openLogVisit(restaurantId){
 
   $('#modalRoot').innerHTML = `
     <div class="overlay" id="ov2">
-      <div class="modal log-modal">
-        <button class="close" id="closeLog">×</button>
-        <h2>Log a Visit</h2>
-        <div class="log-grid">
-        <div class="log-who">
-        ${accountName()
-          ? `<div class="logged-by">Logging as <b>${escapeHtml(accountName())}</b> <span class="logged-by-hint">— change your name with the ✏️ next to it, top right</span></div>`
-          : `<div class="field">
-              <label>Your name <span style="text-transform:none;">(shown on your reviews — saved to your account)</span></label>
-              <input type="text" id="vName" maxlength="80" placeholder="e.g. Brianna">
-            </div>`}
+      <div class="modal paper log-modal" role="dialog" aria-modal="true" aria-labelledby="logTitle">
+        <div class="paper-head">
+          <div class="log-who">
+            <h2 id="logTitle">Log a visit${rest ? ` · ${escapeHtml(rest.name)}` : ''}</h2>
+            ${accountName()
+              ? `<div class="logged-by">Logging as <b>${escapeHtml(accountName())}</b><span class="logged-by-hint"> — change your name with the pencil by "Signed in as"</span></div>`
+              : ''}
+          </div>
+          <button type="button" class="close-btn" id="closeLog" aria-label="Close">×</button>
         </div>
+        <div class="log-grid">
+        <div class="log-left">
+        ${accountName() ? '' : `<div class="field log-name">
+            <label for="vName">Your name <span class="label-note">(shown on your reviews, saved to your account)</span></label>
+            <input type="text" id="vName" maxlength="80" placeholder="e.g. Brianna" autocomplete="name">
+          </div>`}
         <div class="field log-date">
-          <label>Date</label>
-          <button type="button" class="date-display" id="dateDisplay">${fmtDate(selectedDate)}</button>
+          <div class="field-row"><span class="field-label" id="dateLabel">Date</span>
+          <button type="button" class="date-display" id="dateDisplay" aria-describedby="dateLabel">${fmtDate(selectedDate)}</button></div>
           <div class="mini-cal" id="miniCal">
             <div class="mini-cal-head">
-              <button type="button" id="calPrev">‹</button>
+              <button type="button" id="calPrev" aria-label="Previous month">‹</button>
               <span id="calMonthLabel"></span>
-              <button type="button" id="calNext">›</button>
+              <button type="button" id="calNext" aria-label="Next month">›</button>
             </div>
             <div class="mini-cal-grid" id="calGrid"></div>
           </div>
         </div>
-        <div class="field log-ate">
-          <label>What did you eat? <span style="text-transform:none;">(check everything you had)</span></label>
-          <div id="dishArea">
-            ${menu.length ? dishChecklistHtml(rest) : ''}
-          </div>
-          <input type="text" id="vAte" placeholder="+ something not on the menu list">
-        </div>
         <div class="field log-rating">
-          <label>Rating</label>
-          <div class="star-pick" id="starPick">
-            ${[1,2,3,4,5].map(n=>`<span data-n="${n}">★</span>`).join('')}
+          <span class="field-label" id="ratingLabel">Rating</span>
+          <div class="star-pick" id="starPick" role="group" aria-labelledby="ratingLabel">
+            ${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" aria-label="${n} star${n===1?'':'s'}" aria-pressed="false">★</button>`).join('')}
           </div>
         </div>
         <div class="field log-return">
-          <label>Would you go back?</label>
-          <div class="toggle-pair">
-            <button class="yes" id="wrYes">Yes</button>
-            <button class="no" id="wrNo">No</button>
+          <span class="field-label" id="returnLabel">Would you go back?</span>
+          <div class="toggle-pair" role="group" aria-labelledby="returnLabel">
+            <button type="button" class="yes" id="wrYes" aria-pressed="false">Yes</button>
+            <button type="button" class="no" id="wrNo" aria-pressed="false">No</button>
           </div>
         </div>
         <div class="field log-notes">
-          <label>Notes <span style="text-transform:none;">(modifications, tips — optional)</span></label>
+          <label for="vNotes">Notes <span class="label-note">(optional)</span></label>
           <textarea id="vNotes" placeholder="e.g. sub fries for rice, no onions, ask for Jesse"></textarea>
         </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn secondary" id="cancelLog">Cancel</button>
-          <button class="btn" id="saveLog">Save Visit</button>
+        <div class="field log-ate">
+          <div class="field-row">
+            <span class="field-label">What did you eat?</span>
+            ${menu.length ? `<label class="search-pill dish-search">${SEARCH_ICON}<input type="search" id="dishSearch" placeholder="Find a dish" aria-label="Find a dish" autocomplete="off"></label>` : ''}
+          </div>
+          ${menu.length ? `<div class="dish-checklist menu-acc" id="dishArea"></div>` : '<div class="no-dishes">No menu on file yet. Type what you had below.</div>'}
+          <input type="text" id="vAte" class="something-else" placeholder="+ Something not on the menu" aria-label="Something not on the menu">
+        </div>
+        </div>
+        <div class="paper-actions">
+          <button type="button" class="btn quiet" id="cancelLog">Cancel</button>
+          <button type="button" class="btn" id="saveLog">Save visit</button>
         </div>
       </div>
     </div>
   `;
+
+  // The dish picker: the same open-and-close sections as the listing's
+  // menu, with a box per dish. What's checked lives here, so closing a
+  // section or searching never loses a pick.
+  const picked = new Set();
+  const dishState = { query: '', open: new Set([defaultOpenSection(rest ? menuGroupsFor(rest) : [])]), showAll: false };
+  const dishArea = $('#dishArea');
+  const pickRow = (d)=> `<label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"${picked.has(d) ? ' checked' : ''}><span>${escapeHtml(d)}</span></label>`;
+  const renderDishes = ()=>{ if(dishArea) dishArea.innerHTML = menuAccordionHtml(rest, dishState, pickRow); };
+  renderDishes();
+  if(dishArea){
+    dishArea.addEventListener('change', (e)=>{
+      const box = e.target.closest('input[data-dish]');
+      if(!box) return;
+      if(box.checked) picked.add(box.dataset.dish); else picked.delete(box.dataset.dish);
+      // A dish listed in two sections has two boxes; keep them in step.
+      dishArea.querySelectorAll('input[data-dish]').forEach(other=>{ if(other.dataset.dish === box.dataset.dish) other.checked = box.checked; });
+    });
+    dishArea.addEventListener('click', (e)=>{
+      const head = e.target.closest('.menu-sec-head');
+      if(head && !head.classList.contains('static')){
+        const sec = head.closest('.menu-group').dataset.section;
+        if(dishState.open.has(sec)) dishState.open.delete(sec); else dishState.open.add(sec);
+        renderDishes();
+      } else if(e.target.closest('.menu-more')){ dishState.showAll = true; renderDishes(); }
+    });
+    $('#dishSearch').addEventListener('input', (e)=>{ dishState.query = e.target.value; renderDishes(); });
+  }
 
   function renderCalendar(){
     const grid = $('#calGrid');
@@ -2141,27 +2247,24 @@ function openLogVisit(restaurantId){
     }
   });
 
-  const starEls = $$('#starPick span');
+  const starEls = $$('#starPick button');
+  const paintStars = (n)=> starEls.forEach(x=> x.classList.toggle('on', parseInt(x.dataset.n) <= n));
   starEls.forEach(s=>{
-    s.addEventListener('mouseenter', ()=>{
-      const n = parseInt(s.dataset.n);
-      starEls.forEach(x=> x.classList.toggle('on', parseInt(x.dataset.n) <= n));
-    });
+    s.addEventListener('mouseenter', ()=> paintStars(parseInt(s.dataset.n)));
     s.addEventListener('click', ()=>{
       rating = parseInt(s.dataset.n);
+      starEls.forEach(x=> x.setAttribute('aria-pressed', String(x === s)));
+      paintStars(rating);
     });
   });
-  $('#starPick').addEventListener('mouseleave', ()=>{
-    starEls.forEach(x=> x.classList.toggle('on', parseInt(x.dataset.n) <= rating));
-  });
-  $('#wrYes').addEventListener('click', ()=>{
-    wouldReturn = true;
-    $('#wrYes').classList.add('on'); $('#wrNo').classList.remove('on');
-  });
-  $('#wrNo').addEventListener('click', ()=>{
-    wouldReturn = false;
-    $('#wrNo').classList.add('on'); $('#wrYes').classList.remove('on');
-  });
+  $('#starPick').addEventListener('mouseleave', ()=> paintStars(rating));
+  const setReturn = (yes)=>{
+    wouldReturn = yes;
+    $('#wrYes').classList.toggle('on', yes); $('#wrYes').setAttribute('aria-pressed', String(yes));
+    $('#wrNo').classList.toggle('on', !yes); $('#wrNo').setAttribute('aria-pressed', String(!yes));
+  };
+  $('#wrYes').addEventListener('click', ()=> setReturn(true));
+  $('#wrNo').addEventListener('click', ()=> setReturn(false));
   $('#closeLog').addEventListener('click', ()=> openDetail(restaurantId));
   $('#cancelLog').addEventListener('click', ()=> openDetail(restaurantId));
   $('#ov2').addEventListener('click', (e)=>{ if(e.target.id==='ov2') openDetail(restaurantId); });
@@ -2181,7 +2284,8 @@ function openLogVisit(restaurantId){
     const reviewerName = accountName();
     const date = selectedDate || today;
     // A dish listed in two sections has two boxes; record it once.
-    const checkedDishes = [...new Set($$('.dish-check input:checked', $('#modalRoot')).map(cb => cb.dataset.dish))];
+    // Picks survive closed sections and searches (see the dish picker).
+    const checkedDishes = [...picked];
     const typedDish = $('#vAte').value.trim();
     const ate = [...checkedDishes];
     if(typedDish && !ate.some(d => d.toLowerCase() === typedDish.toLowerCase())) ate.push(typedDish);
@@ -2200,13 +2304,10 @@ $('#addRestaurantBtn').addEventListener('click', openAddRestaurant);
 $('#railToggle').addEventListener('click', openRail);
 $('#railScrim').addEventListener('click', closeRail);
 
-$$('#sortOpts button').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    sortBy = btn.dataset.sort;
-    $$('#sortOpts button').forEach(b=> b.classList.toggle('active', b===btn));
-    if(sortBy === 'distance') requestUserLocation();
-    renderContent();
-  });
+$('#sortSelect').addEventListener('change', (e)=>{
+  sortBy = e.target.value;
+  if(sortBy === 'distance') requestUserLocation();
+  renderContent();
 });
 
 let searchDebounce = null;
@@ -2216,28 +2317,33 @@ $('#searchBox').addEventListener('input', (e)=>{
   searchDebounce = setTimeout(renderContent, 150);
 });
 
-$('#unvisitedToggle').addEventListener('click', ()=>{
-  unvisitedOnly = !unvisitedOnly;
-  $('#unvisitedToggle').classList.toggle('active', unvisitedOnly);
-  renderContent();
+/* The three filters. On phones they fold behind one "Filters" button,
+   which shows how many are on. */
+function syncFilterChips(){
+  const on = { unvisitedToggle: unvisitedOnly, gemsToggle: gemsOnly, recentToggle: recentOnly };
+  Object.entries(on).forEach(([id, active])=>{
+    const chip = document.getElementById(id);
+    chip.classList.toggle('active', active);
+    chip.setAttribute('aria-pressed', String(active));
+  });
+  const count = Object.values(on).filter(Boolean).length;
+  const badge = $('#filtersCount');
+  badge.hidden = !count;
+  badge.textContent = count ? String(count) : '';
+}
+$('#filtersToggle').addEventListener('click', ()=>{
+  const open = !$('#filterChips').classList.contains('open');
+  $('#filterChips').classList.toggle('open', open);
+  $('#filtersToggle').setAttribute('aria-expanded', String(open));
 });
-
-$('#gemsToggle').addEventListener('click', ()=>{
-  gemsOnly = !gemsOnly;
-  $('#gemsToggle').classList.toggle('active', gemsOnly);
-  renderContent();
-});
-
-$('#recentToggle').addEventListener('click', ()=>{
-  recentOnly = !recentOnly;
-  $('#recentToggle').classList.toggle('active', recentOnly);
-  renderContent();
-});
+$('#unvisitedToggle').addEventListener('click', ()=>{ unvisitedOnly = !unvisitedOnly; syncFilterChips(); renderContent(); });
+$('#gemsToggle').addEventListener('click', ()=>{ gemsOnly = !gemsOnly; syncFilterChips(); renderContent(); });
+$('#recentToggle').addEventListener('click', ()=>{ recentOnly = !recentOnly; syncFilterChips(); renderContent(); });
 
 $$('#viewOpts button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     viewMode = btn.dataset.view;
-    $$('#viewOpts button').forEach(b=> b.classList.toggle('active', b===btn));
+    $$('#viewOpts button').forEach(b=>{ b.classList.toggle('active', b===btn); b.setAttribute('aria-pressed', String(b===btn)); });
     renderContent();
     renderListingsBackdrop();
   });

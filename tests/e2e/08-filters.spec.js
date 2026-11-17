@@ -71,4 +71,27 @@ test.describe('Filter toggles', () => {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
     }
   });
+
+  test('on a phone the filters fold into one "Filters" button that shows how many are on', async ({ browser }) => {
+    const { openGuestPage, closeContext } = require('../fixtures/app-fixture');
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await openGuestPage(context);
+    try {
+      await page.click('#browseAllBtn');
+      await expect(page.locator('#gemsToggle')).toBeHidden();
+      await expect(page.locator('#filtersCount')).toBeHidden();
+      await page.click('#filtersToggle');
+      await expect(page.locator('#filtersToggle')).toHaveAttribute('aria-expanded', 'true');
+      await page.click('#gemsToggle');
+      await page.click('#unvisitedToggle');
+      await expect(page.locator('#filtersCount')).toHaveText('2');
+      await expect(page.locator('#gemsToggle')).toHaveAttribute('aria-pressed', 'true');
+      await page.click('#filtersToggle');
+      await expect(page.locator('#gemsToggle')).toBeHidden();
+      await expect(page.locator('#filtersCount')).toHaveText('2'); // still on while folded
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    } finally {
+      await closeContext(context);
+    }
+  });
 });
