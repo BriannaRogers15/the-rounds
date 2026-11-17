@@ -192,6 +192,83 @@ test.describe('Detail modal: owner edits', () => {
   });
 });
 
+test.describe('Curated listings: your edits stick', () => {
+  // Owner sessions load the full curated dataset; these use real curated
+  // listings and re-run the owner startup steps in the page to prove a
+  // restart doesn't undo anything.
+  // The owner startup's steps, in init()'s order (app.js).
+  const restart = (page) => page.evaluate(async () => {
+    await migrateCategories(); await seedIfNeeded(); await redateCuratedListings(); await enrichAddresses();
+    await removeClosedPlaces(); await renameCuisineTags(); await stripParentDessertTag(); await removeStrayTags();
+    await removeRemovedListings(); await seedMenusFromVisits(); await seedCuratedMenus();
+  });
+
+  test('a Personal Gem you remove stays removed after the owner startup runs again', async ({ ownerPage }) => {
+    const id = await ownerPage.evaluate(() => restaurants.find((r) => r.name === 'Beggars Pizza').id);
+    expect(await ownerPage.evaluate((id) => restaurants.find((r) => r.id === id).categories, id)).toContain('Personal Gems');
+    await openListing(ownerPage, id);
+    await ownerPage.locator('#tagRow .tag-x[data-tag="Personal Gems"]').click();
+    await expect(ownerPage.locator('#tagRow .tag-pill', { hasText: 'Personal Gems' })).toHaveCount(0);
+    await restart(ownerPage);
+    expect(await ownerPage.evaluate((id) => restaurants.find((r) => r.id === id).categories, id)).not.toContain('Personal Gems');
+    await expect.poll(async () => (await getDoc(`restaurants/${id}`))?.categories).not.toContain('Personal Gems');
+  });
+
+  test('renaming a listing keeps its visits, menu and checked date, and never seeds a duplicate', async ({ ownerPage }) => {
+    const before = await ownerPage.evaluate(() => {
+      const r = restaurants.find((x) => x.name === 'Chi Cafe');
+      return { id: r.id, menu: r.menu.length, count: restaurants.length };
+    });
+    const v = visit('rename-v', before.id, getOwnerUid(), { ate: ['Orange Chicken'] });
+    await injectVisits(ownerPage, [v]);
+    try {
+      await openListing(ownerPage, before.id);
+      await ownerPage.click('#renameBtn');
+      await ownerPage.fill('#renameInput', 'Chi Cafe Chinatown');
+      await ownerPage.click('#renameForm button[type="submit"]');
+      await expect(ownerPage.locator('.modal .detail-name')).toHaveText('Chi Cafe Chinatown');
+      await expect(ownerPage.locator(`.visit-item[data-vid="${v.id}"]`)).toBeVisible();
+      await expect(ownerPage.locator('.menu-head .section-sub')).toContainText(`${before.menu} dishes · checked`);
+      await restart(ownerPage);
+      const after = await ownerPage.evaluate((id) => ({
+        count: restaurants.length,
+        dupes: restaurants.filter((x) => x.name === 'Chi Cafe').length,
+        r: restaurants.find((x) => x.id === id),
+      }), before.id);
+      expect(after.count).toBe(before.count);
+      expect(after.dupes).toBe(0);
+      expect(after.r).toMatchObject({ name: 'Chi Cafe Chinatown', curatedName: 'Chi Cafe' });
+      expect(after.r.menu.length).toBe(before.menu);
+      await expect.poll(async () => (await getDoc(`restaurants/${before.id}`))?.name).toBe('Chi Cafe Chinatown');
+    } finally {
+      await resetLedger(ownerPage, { visitIds: [v.id] });
+    }
+  });
+
+  test('a rename to a name another listing already has is refused', async ({ ownerPage }) => {
+    const id = await ownerPage.evaluate(() => restaurants.find((r) => r.name === 'Akiro').id);
+    const dialogs = [];
+    ownerPage.on('dialog', async (d) => { dialogs.push(d.message()); await d.accept(); });
+    await openListing(ownerPage, id);
+    await ownerPage.click('#renameBtn');
+    await ownerPage.fill('#renameInput', 'beggars pizza');
+    await ownerPage.click('#renameForm button[type="submit"]');
+    expect(dialogs.at(-1)).toContain('already a listing called');
+    expect(await ownerPage.evaluate((id) => restaurants.find((r) => r.id === id).name, id)).toBe('Akiro');
+  });
+
+  test('guests and friends get no rename button', async ({ listingsPage }) => {
+    const r = probe('rename-guest');
+    await injectRestaurants(listingsPage, [r]);
+    try {
+      await listingsPage.evaluate((id) => openDetail(id), r.id);
+      await expect(listingsPage.locator('#renameBtn')).toHaveCount(0);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: [r.id] });
+    }
+  });
+});
+
 test.describe('Detail modal: removing visits', () => {
   test('a visit\'s author sees "remove" on it and can delete it', async ({ ownerPage }) => {
     const r = probe('visit-own');

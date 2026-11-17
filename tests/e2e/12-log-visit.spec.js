@@ -262,6 +262,24 @@ test.describe('Log a Visit: half stars', () => {
     await expect.poll(async () => (await getDoc(`visits/${saved.id}`))?.rating).toBe(4.5);
   });
 
+  test('hovering over the stars changes nothing; only a click sets them', async ({ browser, signedInPage }) => {
+    const r = await arrangeListing(browser, 'lv-hover');
+    await openLogVisit(signedInPage, r);
+    const overall = signedInPage.locator('#starPick');
+    const box = await overall.locator('.ss-icons').boundingBox();
+    for (const f of [0.1, 0.5, 0.9]) {
+      await signedInPage.mouse.move(box.x + box.width * f, box.y + box.height / 2);
+    }
+    await expect(overall).toHaveAttribute('aria-valuenow', '0');
+    await expect(overall.locator('.st-full, .st-half')).toHaveCount(0);
+    await signedInPage.mouse.move(box.x - 40, box.y - 40); // and leaving changes nothing either
+    await expect(overall.locator('.st-full, .st-half')).toHaveCount(0);
+    await pickStars(overall, 4);
+    await expect(overall).toHaveAttribute('aria-valuenow', '4');
+    await signedInPage.mouse.move(box.x + box.width * 0.15, box.y + box.height / 2);
+    await expect(overall.locator('.st-full')).toHaveCount(4); // hovering after picking doesn't move it
+  });
+
   test('phone: the star row spans the screen, each star is a big target, and dragging picks', async ({ browser }) => {
     const r = await arrangeListing(browser, 'lv-half-phone');
     const page = await openSignedInPage(browser, { contextOptions: { viewport: { width: 390, height: 844 }, hasTouch: true } });

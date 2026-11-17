@@ -26,6 +26,9 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] "Tourist spots" filter — Brianna tags spots herself with "+ Add a guide" (Tourist Spots is always suggested); tagged cards show a "Tourist Spot" label
 - [x] City sides renamed Up North / Out West / Out South / Over East (Downtown unchanged; old side links still work)
 - [x] Half stars — overall and per-dish ratings go in half steps. Real half-filled stars where the full row shows; "4.5★" where space is tight. Phones: drag across a full-width star row (the number shows above your thumb); desktop: hover and click; arrow keys and screen readers move in half steps. Database rules allow 0.5 steps (deployed)
+- [x] Stars only change on click, tap, drag or arrow keys (no hover preview)
+- [x] Guides and gems you remove stay removed: each curated guide reaches a listing once (`seedTags`)
+- [x] Rename a listing (owner, pencil by the name): visits, menu, guides and curated links stay attached via `curatedName`; no duplicate is ever seeded
 - [x] Edit your own visit — "Edit" on your visits reopens Log a Visit filled in; changes save to the same visit
 - [x] Menu "checked" dates — every curated menu carries the date it was last checked against its source (`asOf`, recovered from git history); shown in the listing window and stored as `menuUpdated` for staleness checks
 - [x] Visits logged under your account name — no separate usernames; renaming yourself (the pencil on "Signed in as") updates your past visits too

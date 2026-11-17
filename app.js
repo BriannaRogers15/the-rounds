@@ -250,8 +250,6 @@ function wireStarSlider(el, { clearable = false, onChange } = {}){
       const v = valueAt(e.clientX);
       if(v !== pending){ moved = true; pending = v; paint(v); }
       if(e.pointerType !== 'mouse') showBubble(v, e.clientX);
-    } else if(e.pointerType === 'mouse'){
-      paint(valueAt(e.clientX)); // hover preview
     }
   });
   el.addEventListener('pointerup', ()=>{
@@ -262,7 +260,6 @@ function wireStarSlider(el, { clearable = false, onChange } = {}){
   });
   // A vertical swipe that turns into page scrolling cancels the pick.
   el.addEventListener('pointercancel', ()=>{ dragging = false; bubble.hidden = true; paint(value); });
-  el.addEventListener('pointerleave', ()=>{ if(!dragging) paint(value); });
   el.addEventListener('keydown', (e)=>{
     let v = null;
     if(e.key === 'ArrowRight' || e.key === 'ArrowUp') v = Math.min(5, Math.max(0.5, value + 0.5));
@@ -433,6 +430,11 @@ function ateList(v){
   return v.ate ? [v.ate] : [];
 }
 function menuOf(r){ return Array.isArray(r.menu) ? r.menu : []; }
+/* The name a listing's curated data (menus, addresses, seed guides) is
+   filed under. Renaming a listing in the app changes only `name`; the
+   original stays in `curatedName`, so its menu, links and guides still
+   find it and no duplicate listing is ever seeded. */
+function curatedKey(r){ return String(r.curatedName || r.name || '').toLowerCase(); }
 /* Groups a spot's stored dishes under the curated section headers
    (Appetizers, Entrees, Drinks...) from MENU_LOOKUP. Grouping happens at
    render time, so stored menus never need migrating: dishes the curation
@@ -441,7 +443,7 @@ function menuOf(r){ return Array.isArray(r.menu) ? r.menu : []; }
 function menuGroupsFor(r){
   const menu = menuOf(r);
   if(!menu.length) return [];
-  const entry = MENU_LOOKUP.find(e => e.name.toLowerCase() === r.name.toLowerCase());
+  const entry = MENU_LOOKUP.find(e => e.name.toLowerCase() === curatedKey(r));
   if(!entry || !entry.sections) return [{title:null, dishes:menu}];
   // A dish can sit in more than one section (a happy-hour list repeating
   // the regular menu); it shows in each, as the printed menu does.
@@ -459,7 +461,7 @@ function menuGroupsFor(r){
   return out;
 }
 function menuLookupEntry(r){
-  return MENU_LOOKUP.find(e => e.name.toLowerCase() === r.name.toLowerCase()) || null;
+  return MENU_LOOKUP.find(e => e.name.toLowerCase() === curatedKey(r)) || null;
 }
 /* When the menu was last checked against its source (YYYY-MM-DD), or null
    for a menu that only grew out of logged visits. */
@@ -2110,7 +2112,10 @@ function openDetail(id){
               <input type="text" id="newTag" class="tag-add" list="tagList" placeholder="+ Add a guide" aria-label="Add a guide">
               <datalist id="tagList">${datalist}</datalist>
             </div>` : (guides ? `<div class="detail-guides">${escapeHtml(guides)}</div>` : '')}
-            <h2 class="detail-name" id="detailName">${nameLinkHtml(r)}</h2>
+            <div class="detail-name-row" id="nameRow">
+              <h2 class="detail-name" id="detailName">${nameLinkHtml(r)}</h2>
+              ${canEditListing ? `<button type="button" class="rename-btn" id="renameBtn" aria-label="Rename ${escapeHtml(r.name)}" title="Rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>` : ''}
+            </div>
           </div>
           <button class="close-btn" id="closeDet" aria-label="Close">×</button>
         </div>
@@ -2178,6 +2183,35 @@ function openDetail(id){
   });
   const menuSearch = $('#menuSearch');
   if(menuSearch) menuSearch.addEventListener('input', ()=>{ menuState.query = menuSearch.value; renderMenu(); });
+  // Rename: only the shown name changes. Visits, menu, guides and curated
+  // links stay attached (they follow the listing's id and curatedKey()).
+  const renameBtn = $('#renameBtn');
+  if(renameBtn) renameBtn.addEventListener('click', ()=>{
+    $('#nameRow').innerHTML = `<form class="rename-form" id="renameForm">
+      <input type="text" id="renameInput" maxlength="120" value="${escapeHtml(r.name)}" aria-label="Listing name">
+      <button type="submit" class="btn">Save</button>
+      <button type="button" class="btn quiet" id="renameCancel">Cancel</button>
+    </form>`;
+    const input = $('#renameInput');
+    input.focus(); input.select();
+    $('#renameCancel').addEventListener('click', ()=> openDetail(id));
+    $('#renameForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      if(!canManageListings()) return;
+      const next = input.value.trim().replace(/\s+/g, ' ');
+      if(!next){ alert('A listing needs a name.'); return; }
+      if(next === r.name){ openDetail(id); return; }
+      if(restaurants.some(x => x.id !== id && x.name.toLowerCase() === next.toLowerCase())){
+        alert(`There's already a listing called "${next}".`);
+        return;
+      }
+      if(!r.curatedName) r.curatedName = r.name;
+      r.name = next;
+      await saveRestaurants();
+      openDetail(id);
+      renderAll();
+    });
+  });
   $('#closeDet').addEventListener('click', closeModal);
   $('#ov').addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
   $$('.visit-edit', $('#modalRoot')).forEach(btn => btn.addEventListener('click', ()=> openLogVisit(id, btn.dataset.vid)));
@@ -2576,15 +2610,33 @@ $$('#viewOpts button').forEach(btn=>{
    Date Added sorting meaningless). Only listings added through New Listing
    carry their real add time. `seeded: true` marks a curated record. */
 const CURATED_ADDED_AT = Date.UTC(2026, 6, 1); // July 1, 2026
+/* Each curated guide reaches a listing once. `seedTags` remembers which
+   ones it has been given, so a guide (or gem) Brianna removes in the app
+   stays removed, while a guide newly added to the curated data still
+   arrives — once. Listings from before this existed count as having been
+   given every curated guide already (they all were, every startup). */
 async function seedIfNeeded(){
   let added = false;
+  const seedCats = new Map();
   SEED_RESTAURANTS.forEach(s=>{
-    const existing = restaurants.find(r => r.name.toLowerCase() === s.name.toLowerCase());
+    const key = s.name.toLowerCase();
+    if(!seedCats.has(key)) seedCats.set(key, []);
+    if(!seedCats.get(key).includes(s.category)) seedCats.get(key).push(s.category);
+  });
+  SEED_RESTAURANTS.forEach(s=>{
+    const existing = restaurants.find(r => curatedKey(r) === s.name.toLowerCase());
     if(existing){
-      if(addTagToRestaurant(existing.id, s.category)) added = true;
+      if(!Array.isArray(existing.seedTags)){
+        existing.seedTags = [...seedCats.get(s.name.toLowerCase())];
+        added = true;
+      } else if(!existing.seedTags.includes(s.category)){
+        addTagToRestaurant(existing.id, s.category);
+        existing.seedTags.push(s.category);
+        added = true;
+      }
       if(!existing.address && s.address){ existing.address = s.address; added = true; }
     } else {
-      restaurants.push({ id: uid(), name: s.name, categories: [s.category], address: s.address || '', createdAt: CURATED_ADDED_AT, seeded: true });
+      restaurants.push({ id: uid(), name: s.name, categories: [s.category], seedTags: [s.category], address: s.address || '', createdAt: CURATED_ADDED_AT, seeded: true });
       added = true;
     }
   });
@@ -2598,7 +2650,7 @@ async function redateCuratedListings(){
   const curatedNames = new Set(SEED_RESTAURANTS.map(s => s.name.toLowerCase()));
   let changed = false;
   restaurants.forEach(r=>{
-    if(r.seeded || !curatedNames.has(r.name.toLowerCase())) return;
+    if(r.seeded || !curatedNames.has(curatedKey(r))) return;
     if(!r.createdAt || r.createdAt > CURATED_ADDED_AT) r.createdAt = CURATED_ADDED_AT;
     r.seeded = true;
     changed = true;
@@ -2610,7 +2662,7 @@ async function redateCuratedListings(){
 async function enrichAddresses(){
   let changed = false;
   ADDRESS_LOOKUP.forEach(entry=>{
-    const r = restaurants.find(x => x.name.toLowerCase() === entry.name.toLowerCase());
+    const r = restaurants.find(x => curatedKey(x) === entry.name.toLowerCase());
     if(!r) return;
     // Entries may be partial (e.g. just a verified yelp URL for a listing
     // added in-app) — only the fields an entry actually carries are applied,
@@ -2733,7 +2785,7 @@ const REMOVED_TAGS_BY_NAME = {
 async function removeStrayTags(){
   let changed = false;
   Object.entries(REMOVED_TAGS_BY_NAME).forEach(([name, tagsToRemove])=>{
-    const r = restaurants.find(x => x.name.toLowerCase() === name.toLowerCase());
+    const r = restaurants.find(x => curatedKey(x) === name.toLowerCase());
     if(r && r.categories){
       const before = r.categories.length;
       r.categories = r.categories.filter(c => !tagsToRemove.includes(c));
@@ -2759,7 +2811,7 @@ async function seedMenusFromVisits(){
 async function seedCuratedMenus(){
   let changed = false;
   MENU_LOOKUP.forEach(entry=>{
-    const r = restaurants.find(x => x.name.toLowerCase() === entry.name.toLowerCase());
+    const r = restaurants.find(x => curatedKey(x) === entry.name.toLowerCase());
     if(!r) return;
     // Entries are versioned: bumping `v` re-applies a corrected menu on
     // devices that already seeded an older one. `retire` names seed dishes
@@ -2802,7 +2854,7 @@ const REMOVED_LISTING_NAMES = [
 ];
 async function removeRemovedListings(){
   const removeIds = new Set(
-    restaurants.filter(r => REMOVED_LISTING_NAMES.some(n => n.toLowerCase() === r.name.toLowerCase())).map(r => r.id)
+    restaurants.filter(r => REMOVED_LISTING_NAMES.some(n => n.toLowerCase() === curatedKey(r))).map(r => r.id)
   );
   if(removeIds.size === 0) return;
   restaurants = restaurants.filter(r => !removeIds.has(r.id));
