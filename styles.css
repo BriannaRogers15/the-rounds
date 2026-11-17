@@ -221,7 +221,7 @@ h1{
 }
 .tool-btn:hover{ background: var(--paper-inner); border-color: var(--paper-muted); }
 .tool-btn svg{ width:16px; height:16px; }
-.search-wrap{ flex: 1 1 220px; min-width: 180px; }
+.search-wrap{ flex: 1 1 260px; min-width: 240px; }
 .search-box{ font-size:15px; }
 .filters-toggle{ display:none; }
 .filters-count{
@@ -815,9 +815,12 @@ h1{
 }
 #ledgerStatus{ color: var(--flag-blue-bright); }
 #ledgerStatus.error{ color: var(--flag-red); }
-/* "Signed in as": a cream pill, top right. */
+/* "Signed in as": a cream pill at the top right of the page. It scrolls
+   with the page, so it never covers a window or the content. */
+.wrap{ position:relative; }
+.account-slot{ position:absolute; top:14px; right:20px; z-index:5; }
+.account-slot:empty{ display:none; }
 .signed-in-chip{
-  position: fixed; top:14px; right:14px; z-index:400;
   display:flex; align-items:center; gap:6px;
   background: var(--paper); color: var(--paper-muted);
   border-radius:999px; padding:4px 4px 4px 16px;
@@ -842,7 +845,8 @@ h1{
 @media (max-width: 620px){
   .auth-gate{ min-height:100svh; align-items:flex-start; padding:18px 14px; }
   .auth-card{ padding:30px 22px 24px; }
-  .signed-in-chip{ left:10px; right:10px; top:10px; justify-content:space-between; }
+  .account-slot{ position:static; margin: -26px 0 14px; }
+  .signed-in-chip{ justify-content:space-between; }
   .chip-label{ white-space:nowrap; }
   .signed-in-chip .chip-name{ max-width:none; flex:1; min-width:0; }
 }
@@ -1005,10 +1009,6 @@ h1{
 .menu-more:hover{ background: rgba(42,23,18,0.035); }
 .menu-acc .no-menu{ padding: 18px 20px; font-size:15px; color: var(--paper-muted); }
 
-/* The "Signed in as" chip floats top-right above everything (it stays
-   usable with a window open); windows start below it instead of under it. */
-body:has(.signed-in-chip) .overlay{ padding-top: 76px; }
-
 /* Phones: the listing window becomes a sheet from the bottom. */
 @media (max-width: 620px){
   .overlay.sheet-overlay{ padding: 24px 0 0; }
@@ -1016,8 +1016,6 @@ body:has(.signed-in-chip) .overlay{ padding-top: 76px; }
     border-radius: 22px 22px 0 0; padding: 14px 20px 28px; gap:20px;
     min-height: calc(100svh - 24px);
   }
-  body:has(.signed-in-chip) .overlay.sheet-overlay{ padding-top: 70px; }
-  body:has(.signed-in-chip) .listing-modal{ min-height: calc(100svh - 70px); }
   .sheet-handle{ display:block; align-self:center; width:44px; height:5px; border-radius:3px; background: var(--paper-line); }
   .listing-modal .detail-name{ font-size:38px; }
   .listing-modal .detail-head{ gap:12px; }
@@ -1038,4 +1036,70 @@ body:has(.signed-in-chip) .overlay{ padding-top: 76px; }
   .menu-more{ padding-left:41px; }
   .ticket{ min-height:0; }
   .ticket-name{ font-size:26px; }
+}
+
+/* ======================================================================
+   Quiet panels: the stats, toolbar and guide rail sit back on the brick
+   (see-through, cream text) so the cream cards and windows lead.
+   ====================================================================== */
+:root{
+  --panel: rgba(243,237,224,0.06);
+  --panel-line: rgba(243,237,224,0.16);
+  --panel-ctrl: rgba(0,0,0,0.24);
+  --panel-ctrl-line: rgba(243,237,224,0.22);
+}
+.receipt, .tools-row, .cuisine-rail{
+  background: var(--panel); color: var(--cream);
+  border: 1px solid var(--panel-line);
+  box-shadow: none;
+}
+.receipt-row, .receipt-row:nth-child(odd){ border-color: var(--panel-line); }
+.receipt-label{ color: var(--cream-dim); }
+.receipt-val{ color: var(--cream); }
+.receipt-val.muted{ color: var(--cream-dim); }
+
+.rail-title{ color: var(--cream); }
+.rail-section{ color: var(--cream-dim); border-top-color: var(--panel-line); }
+.rail-item{ color: var(--cream); }
+.rail-item:hover{ background: rgba(243,237,224,0.07); }
+.rail-item .chev, .rail-item .rail-cnt{ color: var(--cream-dim); }
+.rail-item.active{ background: var(--action); color:#fff; }
+.rail-item.active .rail-cnt{ color: rgba(255,255,255,0.85); }
+.rail-item.child.active{ background: rgba(31,111,163,0.35); color: #fff; }
+.rail-item.child.active .rail-cnt{ color: rgba(255,255,255,0.85); }
+.rail-children{ border-left-color: var(--panel-line); }
+@media (max-width: 900px){
+  /* The phone drawer slides over the cards, so it's solid. */
+  .cuisine-rail{ background: #3A1E17; border:none; }
+}
+
+.tools-row .tool-btn, .tools-row .filter-chip, .tools-row .sort-wrap, .tools-row .search-pill, .tools-row .segmented{
+  background: var(--panel-ctrl); border-color: var(--panel-ctrl-line); color: var(--cream);
+}
+.tools-row .tool-btn:hover, .tools-row .filter-chip:hover{ background: rgba(243,237,224,0.1); border-color: var(--cream-dim); }
+.tools-row .filter-chip.active{ background: var(--action); border-color: var(--action); color:#fff; }
+.tools-row .search-pill input{ color: var(--cream); }
+.tools-row .search-pill input::placeholder, .tools-row .search-pill svg{ color: var(--cream-dim); }
+.tools-row .search-pill:focus-within, .tools-row .sort-wrap:focus-within{ border-color: var(--flag-blue); box-shadow: 0 0 0 3px rgba(79,168,222,0.2); }
+.tools-row .sort-label{ color: var(--cream-dim); }
+.tools-row .sort-wrap select{
+  color: var(--cream);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23F3EDE0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+/* The open list itself is drawn by the browser; keep its text readable. */
+.tools-row .sort-wrap select option{ color: var(--paper-ink); background: var(--paper-inner); }
+.tools-row .segmented button{ color: var(--cream); }
+.tools-row .segmented button.active{ background: var(--action); color:#fff; }
+
+/* ---- Cards: last visit, and the dishes a search matched ---- */
+.last-visit{ color: var(--paper-muted); }
+.ticket-match{ font-size:14px; color: var(--paper-muted); }
+.ticket-match b{ color: var(--paper-ink); font-weight:700; }
+
+/* ---- Dish picker: a checked dish takes the full row, so its stars and
+   "any changes?" box sit side by side with room to type ---- */
+@media (min-width: 621px){
+  .dish-checklist .dish-pick:has(.dish-detail){ grid-column: 1 / -1; }
+  .dish-detail{ flex-direction:row; align-items:center; gap:14px; }
+  .dish-detail .dish-mod{ flex:1; }
 }

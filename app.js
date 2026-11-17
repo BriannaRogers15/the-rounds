@@ -210,6 +210,12 @@ function areaLabel(r){
 function localDateStr(dt = new Date()){
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 }
+/* "Oct 22" this year, "Oct 22, 2025" otherwise — for "last visited". */
+function fmtShortDate(d){
+  const dt = new Date(d + 'T00:00:00');
+  const sameYear = dt.getFullYear() === new Date().getFullYear();
+  return dt.toLocaleDateString('en-US', sameYear ? { month:'short', day:'numeric' } : { month:'short', day:'numeric', year:'numeric' });
+}
 function fmtDate(d){
   const dt = new Date(d + 'T00:00:00');
   return dt.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
@@ -394,6 +400,7 @@ function visitAteHtml(v){
       return `<li><span class="ate-dish">${escapeHtml(d)}</span>${x.rating ? starsHtml(x.rating) : ''}${x.mod ? `<span class="ate-mod">${escapeHtml(x.mod)}</span>` : ''}</li>`;
     }).join('')}</ul></div>`;
 }
+const GROUP_FAVORITES = 'Group favorites';
 /* Sections past this many sit behind "Show N more sections". */
 const MENU_SECTIONS_SHOWN = 8;
 function menuAccordionHtml(r, state, rowHtml){
@@ -413,6 +420,18 @@ function menuAccordionHtml(r, state, rowHtml){
     return `<div class="menu-group${open ? ' open' : ''}" data-section="${escapeHtml(g.title)}">${head}${open ? `<div class="menu-sec-body">${g.dishes.map(row).join('')}</div>` : ''}</div>`;
   };
   const q = state.query.trim().toLowerCase();
+  // On the listing's menu (not the dish picker), the group's best-rated
+  // dishes lead: rated 4+ on average, from real ratings only.
+  if(!rowHtml && !q){
+    const favorites = menuOf(r).filter(d=>{
+      const st = stats[d.toLowerCase()];
+      return st && st.ratingN && st.ratingSum / st.ratingN >= 4;
+    }).sort((a, b)=>{
+      const sa = stats[a.toLowerCase()], sb = stats[b.toLowerCase()];
+      return (sb.ratingSum / sb.ratingN) - (sa.ratingSum / sa.ratingN) || sb.ratingN - sa.ratingN || a.localeCompare(b);
+    });
+    if(favorites.length) groups.unshift({ title: GROUP_FAVORITES, dishes: favorites });
+  }
   if(q){
     const hits = groups.map(g => ({ title: g.title, dishes: g.dishes.filter(d => d.toLowerCase().includes(q)) })).filter(g => g.dishes.length);
     if(!hits.length) return `<div class="no-menu">No dishes match “${escapeHtml(state.query.trim())}”.</div>`;
@@ -1044,7 +1063,7 @@ function getFilteredSortedList(){
   list = list.filter(r => activeCategory==='All' || restaurantMatchesLabel(r, activeCategory, activeSubTag));
   if(searchQuery.trim()){
     const q = searchQuery.trim().toLowerCase();
-    list = list.filter(r => r.name.toLowerCase().includes(q));
+    list = list.filter(r => r.name.toLowerCase().includes(q) || menuOf(r).some(d => d.toLowerCase().includes(q)));
   }
   if(unvisitedOnly){
     list = list.filter(r => visitsFor(r.id).length === 0);
@@ -1075,11 +1094,17 @@ function renderContent(){
   }
   if(leafletMap){ try{ leafletMap.remove(); }catch(e){} leafletMap = null; }
   el.className = 'grid';
+  // Inside one neighborhood or town every card is there, so saying so on
+  // each card repeats the page title. A side, a region or "all" mixes areas.
+  const inOneArea = !!activeArea && (activeArea.type === 'neighborhood' || activeArea.type === 'town');
+  const q = searchQuery.trim().toLowerCase();
   el.innerHTML = list.map(r=>{
     const vs = visitsFor(r.id);
     const avg = avgRating(vs);
     const guides = guideLine(r);
-    const area = areaLabel(r);
+    const area = inOneArea ? '' : areaLabel(r);
+    // Found by a dish rather than its name: say which dishes.
+    const dishHits = q && !r.name.toLowerCase().includes(q) ? menuOf(r).filter(d => d.toLowerCase().includes(q)) : [];
     const showDist = sortBy === 'distance' && userLocation && r.lat!=null && r.lng!=null;
     const distTxt = showDist ? distanceMiles(userLocation.lat, userLocation.lng, r.lat, r.lng).toFixed(1) + ' mi' : null;
     return `
@@ -1087,9 +1112,10 @@ function renderContent(){
         ${guides ? `<div class="ticket-guides">${escapeHtml(guides)}</div>` : ''}
         <div class="ticket-name">${nameLinkHtml(r, true)}</div>
         ${area || distTxt ? `<div class="ticket-area">${PIN_ICON}<span>${escapeHtml(area)}${distTxt ? `${area ? ' · ' : ''}<span class="dist-badge">${distTxt}</span>` : ''}</span></div>` : ''}
+        ${dishHits.length ? `<div class="ticket-match">On the menu: ${dishHits.slice(0, 2).map(d => `<b>${escapeHtml(d)}</b>`).join(', ')}${dishHits.length > 2 ? ` +${dishHits.length - 2} more` : ''}</div>` : ''}
         <div class="ticket-meta">
           ${vs.length
-            ? `<span class="visited-label">Visited</span>${starsHtml(avg)}${vs.length > 1 ? `<span class="visit-count">${vs.length} visits</span>` : ''}`
+            ? `<span class="visited-label">Visited</span>${starsHtml(avg)}<span class="last-visit">${fmtShortDate(vs[0].date)}</span>`
             : `<span class="not-visited">Not visited yet</span>`}
           ${isGem(r) ? `<span class="gem-badge">Chicago Gem</span>` : ''}
         </div>
@@ -2029,7 +2055,7 @@ function openDetail(id){
   // The menu: sections that open and close, a search box, and how many
   // logged visits ordered each dish.
   const menuEl = $('#menuChips');
-  const menuState = { query: '', open: new Set([defaultOpenSection(menuGroupsFor(r))]), showAll: false };
+  const menuState = { query: '', open: new Set([GROUP_FAVORITES, defaultOpenSection(menuGroupsFor(r))]), showAll: false };
   const renderMenu = ()=>{ menuEl.innerHTML = menuAccordionHtml(r, menuState); };
   renderMenu();
   menuEl.addEventListener('click', (e)=>{

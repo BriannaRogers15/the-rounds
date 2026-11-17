@@ -142,4 +142,27 @@ test.describe('Menu system (read-only display)', () => {
       await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id), visitIds: visits.map((v) => v.id) });
     }
   });
+
+  test('"Group favorites" leads the menu once dishes are rated 4+ on average — real ratings only', async ({ listingsPage }) => {
+    const probes = probeRestaurants();
+    const base = { restaurantId: 'probe-pizza-1', rating: 4, wouldReturn: true, notes: '', reviewer: 'P', authorUid: 'p', createdAt: Date.now(), date: '2026-10-01' };
+    const vs = [
+      { ...base, id: 'probe-fav-1', ate: ['Pepperoni Pie', 'Cheese Slice'], dishDetails: [{ dish: 'Pepperoni Pie', rating: 5 }, { dish: 'Cheese Slice', rating: 3 }] },
+      { ...base, id: 'probe-fav-2', ate: ['Pepperoni Pie'], dishDetails: [{ dish: 'Pepperoni Pie', rating: 4 }] },
+    ];
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await listingsPage.evaluate(() => openDetail('probe-pizza-1'));
+      await expect(listingsPage.locator('#menuChips .menu-group[data-section="Group favorites"]')).toHaveCount(0);
+      await listingsPage.evaluate(() => closeModal());
+      await injectVisits(listingsPage, vs);
+      await listingsPage.evaluate(() => openDetail('probe-pizza-1'));
+      const fav = listingsPage.locator('#menuChips .menu-group[data-section="Group favorites"]');
+      await expect(fav).toHaveClass(/open/);
+      await expect(fav.locator('.dish-name')).toHaveText(['Pepperoni Pie']); // 4.5 avg; Cheese Slice's 3 stays out
+      await expect(fav.locator('.dish-avg')).toHaveText('★ 4.5');
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id), visitIds: vs.map((v) => v.id) });
+    }
+  });
 });

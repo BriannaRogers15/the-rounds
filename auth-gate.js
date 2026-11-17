@@ -216,7 +216,9 @@
       signedInChip.className = 'signed-in-chip';
       // The name itself is the rename button, marked with a pencil.
       signedInChip.innerHTML = `<span class="chip-label">Signed in as</span><button type="button" id="authRenameBtn" class="chip-name" aria-label="Change your name (${escapeHtml(user.displayName || user.email)})"><span class="chip-name-text">${escapeHtml(user.displayName || user.email)}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button type="button" id="authSignOutBtn">Sign out</button>`;
-      document.body.appendChild(signedInChip);
+      // Part of the page header (scrolls with the page), never floating
+      // over windows or content.
+      (document.getElementById('accountSlot') || document.body).appendChild(signedInChip);
       document.getElementById('authSignOutBtn').addEventListener('click', ()=> signOut(auth));
       document.getElementById('authRenameBtn').addEventListener('click', async ()=>{
         const next = prompt('Your name (shown on your reviews):', user.displayName || '');

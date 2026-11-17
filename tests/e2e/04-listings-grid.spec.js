@@ -91,4 +91,51 @@ test.describe('Listings grid view', () => {
       await resetLedger(listingsPage, { restaurantIds: [...probes.map((r) => r.id), tagged.id, hood.id] });
     }
   });
+
+  test('inside one neighborhood the cards drop the area (the page title says it); "all" keeps it', async ({ listingsPage }) => {
+    const probe = { id: 'probe-hood-only', name: 'Probe Hood Only', categories: ['Pizza'], address: '1 Probe St, Chicago, IL 60615', neighborhood: 'Hyde Park', region: 'Chicago', town: 'Chicago', menu: [], createdAt: Date.now() };
+    await injectRestaurants(listingsPage, [probe]);
+    try {
+      const card = () => listingsPage.locator(`.ticket[data-id="${probe.id}"]`);
+      await expect(card().locator('.ticket-area')).toHaveText('Hyde Park');
+      await listingsPage.evaluate(() => openArea({ type: 'neighborhood', name: 'Hyde Park' }));
+      await expect(listingsPage.locator('.area-title')).toHaveText('Hyde Park');
+      await expect(card().locator('.ticket-area')).toHaveCount(0);
+      // A whole side of the city mixes neighborhoods, so the area shows.
+      await listingsPage.evaluate(() => openArea({ type: 'side', name: 'South Side' }));
+      await expect(card().locator('.ticket-area')).toHaveText('Hyde Park');
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: [probe.id] });
+    }
+  });
+
+  test('a visited card shows when it was last visited', async ({ listingsPage }) => {
+    const probes = probeRestaurants();
+    const base = { restaurantId: 'probe-pizza-1', rating: 4, wouldReturn: true, ate: [], notes: '', reviewer: 'P', authorUid: 'p', createdAt: Date.now() };
+    const vs = [{ ...base, id: 'probe-last-1', date: '2025-03-02' }, { ...base, id: 'probe-last-2', date: '2025-06-09' }];
+    await injectRestaurants(listingsPage, probes);
+    await injectVisits(listingsPage, vs);
+    try {
+      await expect(listingsPage.locator('.ticket[data-id="probe-pizza-1"] .last-visit')).toHaveText('Jun 9, 2025');
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id), visitIds: vs.map((v) => v.id) });
+    }
+  });
+
+  test('searching finds spots by a dish on their menu, and says which dish', async ({ listingsPage }) => {
+    const probes = probeRestaurants(); // Probe Sushi Spot serves "Spicy Tuna Roll"
+    await injectRestaurants(listingsPage, probes);
+    try {
+      await listingsPage.fill('#searchBox', 'tuna');
+      const card = listingsPage.locator('.ticket[data-id="probe-sushi-2"]');
+      await expect(card).toBeVisible();
+      await expect(card.locator('.ticket-match')).toHaveText('On the menu: Spicy Tuna Roll');
+      await expect(listingsPage.locator('.ticket[data-id="probe-pizza-1"]')).toHaveCount(0);
+      // A name match needs no dish line.
+      await listingsPage.fill('#searchBox', 'Probe Sushi');
+      await expect(card.locator('.ticket-match')).toHaveCount(0);
+    } finally {
+      await resetLedger(listingsPage, { restaurantIds: probes.map((r) => r.id) });
+    }
+  });
 });

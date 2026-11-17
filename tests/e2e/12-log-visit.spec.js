@@ -123,10 +123,14 @@ test.describe('Log a Visit: saving', () => {
       const visitId = await page.evaluate((id) => visits.find((v) => v.restaurantId === id).id, r.id);
       await expect.poll(async () => (await getDoc(`visits/${visitId}`))?.reviewer).toBe('Old Name Probe');
 
+      // The "Signed in as" pill is part of the page, not floating over
+      // windows: close the listing, rename, and the visit follows.
+      await page.click('#closeDet');
       page.once('dialog', (d) => d.accept('New Name Probe'));
       await page.click('#authRenameBtn');
       await expect(page.locator('.signed-in-chip')).toContainText('New Name Probe');
       await expect.poll(async () => (await getDoc(`visits/${visitId}`))?.reviewer).toBe('New Name Probe');
+      await openListingDetail(page, r.id);
       await expect(page.locator(`.visit-item[data-vid="${visitId}"]`)).toContainText('New Name Probe');
     } finally {
       await closeSession(page);
@@ -169,7 +173,8 @@ test.describe('Log a Visit: each dish gets its own stars and changes', () => {
     await expect(item.locator('.ate-list li', { hasText: 'Pepperoni Pie' }).locator('.stars')).toHaveCount(0);
     await expect(item).toContainText('Review Great spot, slow on weekends.');
     // The menu averages the dish's own stars.
-    const row = signedInPage.locator('#menuChips .menu-row', { hasText: 'Cheese Slice' });
+    // (It also leads "Group favorites" now; check its own section's row.)
+    const row = signedInPage.locator('#menuChips .menu-group:not([data-section="Group favorites"]) .menu-row', { hasText: 'Cheese Slice' });
     await expect(row.locator('.dish-avg')).toHaveText('★ 5.0');
     await expect(row.locator('.ordered-badge')).toHaveText('ordered 1×');
 
