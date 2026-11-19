@@ -679,6 +679,18 @@ h1{
   font: 500 14px 'Manrope', sans-serif;
 }
 .dish-mod::placeholder{ color: var(--paper-muted); }
+/* A dish's choices (size, flavor, sauce...): one pick per group. */
+.dish-choices{ display:flex; flex-direction:column; gap:8px; flex-basis:100%; }
+.choice-group{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.choice-group-name{ font-size:13px; font-weight:800; color: var(--paper-muted); min-width:64px; }
+.choice-row{ display:flex; flex-wrap:wrap; gap:6px; }
+.choice-chip{
+  min-height:36px; padding: 0 14px; border-radius:18px; cursor:pointer;
+  border:1px solid var(--paper-line); background:#fff; color: var(--paper-ink);
+  font: 600 14px 'Manrope', sans-serif;
+}
+.choice-chip:hover{ border-color: var(--action); }
+.choice-chip[aria-pressed="true"]{ background: var(--action); border-color: var(--action); color:#fff; }
 .dish-mod:focus{ outline:none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(31,111,163,0.15); }
 .dish-hint{ font-size:14px; color: var(--paper-muted); margin: -2px 0 10px; }
 .dish-check input{ accent-color: var(--action); width:18px; height:18px; margin:1px 0 0; flex-shrink:0; }
@@ -935,6 +947,7 @@ h1{
 .ate-list li{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
 .ate-list .stars{ font-size:15px; letter-spacing:1px; }
 .ate-mod{ font-size:14px; color: var(--paper-muted); font-style:italic; }
+.ate-choices{ font-size:14px; color: var(--paper-muted); }
 .dish-badges{ margin-left:auto; display:inline-flex; gap:10px; align-items:baseline; white-space:nowrap; }
 .dish-avg{ font-size:12.5px; font-weight:800; color: var(--star); }
 .dish-badges .ordered-badge{ margin-left:0; }
@@ -980,6 +993,13 @@ h1{
   border-bottom:1px dotted var(--paper-dots); font-size:15.5px; color: var(--paper-ink);
 }
 .menu-acc .menu-row:hover{ background:none; }
+.menu-acc .menu-row{ flex-wrap:wrap; }
+/* One dish's ratings broken down by choice ("12 pc 4.5★ 2×"). */
+.dish-choice-stats{ flex-basis:100%; display:flex; flex-direction:column; gap:2px; font-size:13px; color: var(--paper-muted); }
+.choice-stat-line{ display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 14px; }
+.choice-stat-group{ font-weight:800; min-width:48px; }
+.choice-stat-name{ color: var(--paper-ink); font-weight:600; }
+.choice-stat-count{ font-weight:800; color: var(--action); }
 .ordered-badge{ margin-left:auto; font-size:12px; font-weight:800; color: var(--action); white-space:nowrap; }
 .menu-more{
   width:100%; min-height:52px; padding: 14px 20px 14px 46px; border:none; background:transparent;
@@ -1080,7 +1100,7 @@ h1{
    "any changes?" box sit side by side with room to type ---- */
 @media (min-width: 621px){
   .dish-checklist .dish-pick:has(.dish-detail){ grid-column: 1 / -1; }
-  .dish-detail{ flex-direction:row; align-items:center; gap:14px; }
+  .dish-detail{ flex-direction:row; flex-wrap:wrap; align-items:center; gap:14px; }
   .dish-detail .dish-mod{ flex:1; }
 }
 

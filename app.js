@@ -474,6 +474,20 @@ function currentDishName(r, dish){
   const hit = Object.keys(renamed).find(k => k.toLowerCase() === lower);
   return hit ? renamed[hit] : dish;
 }
+/* A dish's choices from its menu entry (sizes, counts, flavors, sauces,
+   sides...): { "Size": ["6 pc", "12 pc"], ... }, or null. */
+function dishOptions(r, dish){
+  const opts = r && menuLookupEntry(r)?.options;
+  if(!opts) return null;
+  const lower = String(dish).toLowerCase();
+  const key = Object.keys(opts).find(k => k.toLowerCase() === lower);
+  return key ? opts[key] : null;
+}
+/* The choices a visit recorded for one dish, as plain {group: choice}. */
+function visitChoices(x){
+  if(!x || !x.choices || typeof x.choices !== 'object') return {};
+  return Object.fromEntries(Object.entries(x.choices).filter(([g, c]) => typeof g === 'string' && typeof c === 'string' && c));
+}
 /* Groups a spot's stored dishes under the curated section headers
    (Appetizers, Entrees, Drinks...) from MENU_LOOKUP. Grouping happens at
    render time, so stored menus never need migrating: dishes the curation
@@ -526,16 +540,21 @@ function defaultOpenSection(groups){
    had it (once per visit), and the stars people gave that dish. */
 function menuDishStats(r){
   const stats = {};
-  const get = (d)=> stats[d] || (stats[d] = { count: 0, ratingSum: 0, ratingN: 0 });
+  const get = (d)=> stats[d] || (stats[d] = { count: 0, ratingSum: 0, ratingN: 0, choices: {} });
   // Dishes the restaurant has since renamed count under their new name.
   const key = (d)=> String(currentDishName(r, String(d || ''))).toLowerCase();
   visitsFor(r.id).forEach(v=>{
     new Set(ateList(v).map(key)).forEach(d => get(d).count++);
     (v.dishDetails || []).forEach(x=>{
-      if(typeof x.rating === 'number' && x.rating >= 0.5 && x.rating <= 5){
-        const s = get(key(x.dish));
-        s.ratingSum += x.rating; s.ratingN++;
-      }
+      const rated = typeof x.rating === 'number' && x.rating >= 0.5 && x.rating <= 5;
+      const s = get(key(x.dish));
+      if(rated){ s.ratingSum += x.rating; s.ratingN++; }
+      // The same dish broken down by what was chosen (size, flavor...).
+      Object.entries(visitChoices(x)).forEach(([group, choice])=>{
+        const c = s.choices[`${group}\u0000${choice}`] || (s.choices[`${group}\u0000${choice}`] = { group, choice, count: 0, ratingSum: 0, ratingN: 0 });
+        c.count++;
+        if(rated){ c.ratingSum += x.rating; c.ratingN++; }
+      });
     });
   });
   return stats;
@@ -550,7 +569,8 @@ function visitAteHtml(v){
   return `<div class="visit-line"><span class="visit-lbl">Ate</span>
     <ul class="ate-list">${ate.map(d=>{
       const x = byDish.get(String(d).toLowerCase()) || {};
-      return `<li><span class="ate-dish">${escapeHtml(d)}</span>${x.rating ? starsHtml(x.rating) : ''}${x.mod ? `<span class="ate-mod">${escapeHtml(x.mod)}</span>` : ''}</li>`;
+      const chosen = Object.values(visitChoices(x));
+      return `<li><span class="ate-dish">${escapeHtml(d)}</span>${chosen.length ? `<span class="ate-choices">${escapeHtml(chosen.join(' · '))}</span>` : ''}${x.rating ? starsHtml(x.rating) : ''}${x.mod ? `<span class="ate-mod">${escapeHtml(x.mod)}</span>` : ''}</li>`;
     }).join('')}</ul></div>`;
 }
 const GROUP_FAVORITES = 'Group favorites';
@@ -563,7 +583,12 @@ function menuAccordionHtml(r, state, rowHtml){
   const row = rowHtml || ((d)=>{
     const st = stats[d.toLowerCase()];
     const avg = st && st.ratingN ? st.ratingSum / st.ratingN : null;
-    return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${st && st.count ? `<span class="dish-badges">${avg ? `<span class="dish-avg" title="Average of ${st.ratingN} rating${st.ratingN===1?'':'s'}">${avg.toFixed(1)}★</span>` : ''}<span class="ordered-badge">ordered ${st.count}×</span></span>` : ''}</div>`;
+    // Grouped by choice group, in the menu's own order (then any group the
+    // menu no longer offers), most-ordered choice first.
+    const byGroup = new Map(Object.keys(dishOptions(r, d) || {}).map(g => [g, []]));
+    if(st) Object.values(st.choices).forEach(c => { if(!byGroup.has(c.group)) byGroup.set(c.group, []); byGroup.get(c.group).push(c); });
+    const choiceLines = [...byGroup].filter(([, cs]) => cs.length).map(([group, cs]) => `<span class="choice-stat-line"><span class="choice-stat-group">${escapeHtml(group)}</span>${cs.sort((a, b)=> b.count - a.count || a.choice.localeCompare(b.choice)).map(c => `<span class="choice-stat"><span class="choice-stat-name">${escapeHtml(c.choice)}</span>${c.ratingN ? ` <span class="dish-avg">${(c.ratingSum / c.ratingN).toFixed(1)}★</span>` : ''} <span class="choice-stat-count">${c.count}×</span></span>`).join('')}</span>`);
+    return `<div class="menu-row"><span class="dish-name">${escapeHtml(d)}</span>${st && st.count ? `<span class="dish-badges">${avg ? `<span class="dish-avg" title="Average of ${st.ratingN} rating${st.ratingN===1?'':'s'}">${avg.toFixed(1)}★</span>` : ''}<span class="ordered-badge">ordered ${st.count}×</span></span>` : ''}${choiceLines.length ? `<div class="dish-choice-stats">${choiceLines.join('')}</div>` : ''}</div>`;
   });
   const section = (g, open, searching)=>{
     if(!g.title) return `<div class="menu-group open" data-section=""><div class="menu-sec-body">${g.dishes.map(row).join('')}</div></div>`;
@@ -2627,7 +2652,7 @@ function openLogVisit(restaurantId, visitId){
     });
     (editing.dishDetails || []).forEach(x=>{
       const onMenu = onMenuAs(x.dish);
-      if(onMenu) details.set(onMenu, { rating: x.rating || 0, mod: x.mod || '' });
+      if(onMenu) details.set(onMenu, { rating: x.rating || 0, mod: x.mod || '', choices: visitChoices(x) });
     });
   }
 
@@ -2697,7 +2722,19 @@ function openLogVisit(restaurantId, visitId){
     return `<div class="dish-detail">
       ${starSliderHtml({ value: x.rating, label: `Your rating for ${d}`, size: 'small' })}
       <input type="text" class="dish-mod" maxlength="${DISH_MOD_MAX}" value="${escapeHtml(x.mod)}" placeholder="Any changes? e.g. no onions" aria-label="Changes to ${escapeHtml(d)}">
+      ${choiceGroupsHtml(d, x.choices || {})}
     </div>`;
+  };
+  // The dish's own choices (size, flavor, sauce...), one pick per group;
+  // tapping the picked one again clears it.
+  const choiceGroupsHtml = (d, chosen)=>{
+    const groups = dishOptions(rest, d);
+    if(!groups) return '';
+    return `<div class="dish-choices">${Object.entries(groups).map(([group, choices]) => `
+      <div class="choice-group" role="group" aria-label="${escapeHtml(`${group} for ${d}`)}" data-group="${escapeHtml(group)}">
+        <span class="choice-group-name">${escapeHtml(group)}</span>
+        <div class="choice-row">${choices.map(c => `<button type="button" class="choice-chip" data-choice="${escapeHtml(c)}" aria-pressed="${chosen[group] === c}">${escapeHtml(c)}</button>`).join('')}</div>
+      </div>`).join('')}</div>`;
   };
   const pickRow = (d)=> `<div class="dish-pick" data-dish="${escapeHtml(d)}"><label class="dish-check"><input type="checkbox" data-dish="${escapeHtml(d)}"${picked.has(d) ? ' checked' : ''}><span>${escapeHtml(d)}</span></label>${picked.has(d) ? detailHtml(d) : ''}</div>`;
   // Each dish's own stars: a change goes to every row of that dish.
@@ -2735,6 +2772,20 @@ function openLogVisit(restaurantId, visitId){
       rowsFor(d).forEach(row=>{ const other = row.querySelector('.dish-mod'); if(other && other !== mod) other.value = mod.value; });
     });
     dishArea.addEventListener('click', (e)=>{
+      const chip = e.target.closest('.choice-chip');
+      if(chip){
+        const d = chip.closest('.dish-pick').dataset.dish;
+        const group = chip.closest('.choice-group').dataset.group;
+        const x = details.get(d) || { rating: 0, mod: '' };
+        const choices = { ...(x.choices || {}) };
+        if(choices[group] === chip.dataset.choice) delete choices[group]; else choices[group] = chip.dataset.choice;
+        details.set(d, { ...x, choices });
+        rowsFor(d).forEach(row => row.querySelectorAll(`.choice-group`).forEach(g=>{
+          if(g.dataset.group !== group) return;
+          g.querySelectorAll('.choice-chip').forEach(b => b.setAttribute('aria-pressed', String(choices[group] === b.dataset.choice)));
+        }));
+        return;
+      }
       const head = e.target.closest('.menu-sec-head');
       if(head && !head.classList.contains('static')){
         const sec = head.closest('.menu-group').dataset.section;
@@ -2825,8 +2876,12 @@ function openLogVisit(restaurantId, visitId){
       if(x.rating) out.rating = x.rating;
       const mod = String(x.mod || '').trim().slice(0, DISH_MOD_MAX);
       if(mod) out.mod = mod;
+      // Only choices this dish's menu offers right now.
+      const offered = dishOptions(rest, d) || {};
+      const choices = Object.fromEntries(Object.entries(x.choices || {}).filter(([g, c]) => (offered[g] || []).includes(c)));
+      if(Object.keys(choices).length) out.choices = choices;
       return out;
-    }).filter(x => x.rating || x.mod);
+    }).filter(x => x.rating || x.mod || x.choices);
     const notes = $('#vNotes').value.trim();
     if(editing){
       Object.assign(editing, { date, ate, dishDetails, rating, wouldReturn, notes, reviewer: reviewerName });
