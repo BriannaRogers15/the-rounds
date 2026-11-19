@@ -29,6 +29,7 @@ A running checklist of what's built vs. still open, so nothing gets lost across 
 - [x] Stars only change on click, tap, drag or arrow keys (no hover preview)
 - [x] Guides and gems you remove stay removed: each curated guide reaches a listing once (`seedTags`)
 - [x] Rename a listing (owner, pencil by the name): visits, menu, guides and curated links stay attached via `curatedName`; no duplicate is ever seeded
+- [x] Change location (owner, on the listing): pick another location of the spot from Google; address, pin, phone, directions, area and side update, the Yelp link clears, visits/menu/guides/name stay, and curated address data never overrides the choice (`locationChosenAt`)
 - [x] Edit your own visit — "Edit" on your visits reopens Log a Visit filled in; changes save to the same visit
 - [x] Menu "checked" dates — every curated menu carries the date it was last checked against its source (`asOf`, recovered from git history); shown in the listing window and stored as `menuUpdated` for staleness checks
 - [x] Usernames — every account has a public, unique username (required at email sign-up and on a first Google sign-in, or for accounts from before). Reviews show the author's current username, live from their profile, so a change shows everywhere and nobody can post as someone else. Reserved in `usernames/{lowercased}`; the database refuses duplicates and a short blocked-word list

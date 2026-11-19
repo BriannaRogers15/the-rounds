@@ -889,6 +889,15 @@ h1{
   border:none; border-radius:0; padding:0; background:none; text-decoration:none;
 }
 .listing-modal .link-pill:hover{ background:none; color: var(--action-hover); text-decoration:underline; }
+.listing-modal button.link-pill{ cursor:pointer; }
+/* Change location: the search replaces the address row while it's open. */
+.loc-change{
+  flex: 1 1 100%; grid-column: 1 / -1;
+  display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding: 6px 0 4px;
+}
+.loc-change .addr-autocomplete-wrap{ width:100%; max-width:640px; }
+.loc-change .search-pill{ width:100%; }
+.loc-hint{ font-size:15px; color: var(--paper-muted); }
 .detail-actions{
   display:flex; gap:12px; align-items:center; flex-wrap:wrap;
   padding-bottom:26px; border-bottom:1px solid var(--paper-line);

@@ -205,33 +205,66 @@ if('serviceWorker' in navigator){
       }
       return false;
     }
+    // The page's own files, the fonts and the map library load through the
+    // service worker. A hand-over while one of them is loading lets that
+    // request restart the old version just as the browser stops it, and
+    // the update then waits until the old version has sat idle (measured:
+    // 30 seconds to 5 minutes). So the hand-over also waits for the page
+    // to settle: fonts loaded, and nothing loaded through the worker in
+    // the last 2 seconds. (Fonts start loading only when text first uses
+    // them, which can be after the load event.) Same hosts as the
+    // service worker's fetch handler.
+    const VIA_WORKER = [location.host, 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com'];
+    let lastLoaded = performance.now();
+    const noteLoads = (entries)=>{
+      if(entries.some(e => VIA_WORKER.includes(new URL(e.name).host))) lastLoaded = performance.now();
+    };
+    try{
+      noteLoads(performance.getEntriesByType('resource'));
+      new PerformanceObserver((list)=> noteLoads(list.getEntries())).observe({ type: 'resource' });
+    }catch(_e){ /* no resource timing: the fonts check below still applies */ }
+    if(document.fonts) document.fonts.addEventListener('loadingdone', ()=>{ lastLoaded = performance.now(); });
+    function isSettling(){
+      return (document.fonts && document.fonts.status === 'loading') || performance.now() - lastLoaded < 2000;
+    }
     let pending = null, timer = null;
     function applyWhenIdle(worker){
       pending = worker;
       if(timer) return;
+      // Asked again every second until the new worker actually starts
+      // activating: Chrome answers and ignores a request that reaches the
+      // new worker before it counts as installed, and a repeat of a
+      // request it already accepted is harmless.
       const tryApply = ()=>{
-        if(!pending || isBusy()) return;
-        clearInterval(timer); timer = null;
+        if(pending && pending.state !== 'installed'){ pending = null; }
+        if(!pending){ clearInterval(timer); timer = null; return; }
+        if(isBusy() || isSettling()) return;
         pending.postMessage('skipWaiting');
-        pending = null;
       };
       timer = setInterval(tryApply, 1000);
       tryApply();
     }
     navigator.serviceWorker.register('service-worker.js').then((reg)=>{
-      if(reg.waiting && navigator.serviceWorker.controller) applyWhenIdle(reg.waiting);
-      reg.addEventListener('updatefound', ()=>{
+      // Reads the registration's actual state rather than relying on the
+      // updatefound event alone: an update can already be installing (or
+      // installed) by the time this runs, and its event has then been
+      // missed. A waiting/installed worker plus an existing controller
+      // means an update to an already-cached app, not the first install.
+      const watched = new WeakSet();
+      const watch = ()=>{
+        if(!navigator.serviceWorker.controller) return;
+        if(reg.waiting) applyWhenIdle(reg.waiting);
         const worker = reg.installing;
-        if(!worker) return;
-        worker.addEventListener('statechange', ()=>{
-          // installed + an existing controller means this is an update to
-          // an already-cached app, not the very first install.
-          if(worker.state === 'installed' && navigator.serviceWorker.controller) applyWhenIdle(worker);
-        });
-      });
+        if(worker && !watched.has(worker)){
+          watched.add(worker);
+          worker.addEventListener('statechange', ()=>{ if(worker.state === 'installed') watch(); });
+        }
+      };
+      watch();
+      reg.addEventListener('updatefound', watch);
       // A tab left open for days only checks on load by default; also
       // check whenever it comes back into view, and hourly while open.
-      const check = ()=> reg.update().catch(()=>{});
+      const check = ()=> reg.update().then(watch, ()=>{});
       document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') check(); });
       setInterval(()=>{ if(document.visibilityState === 'visible') check(); }, 60 * 60 * 1000);
     }).catch(()=>{ /* offline support unavailable, app still works online */ });

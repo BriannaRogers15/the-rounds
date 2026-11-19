@@ -1929,6 +1929,91 @@ function typedAddressInChicagoland(address){
   return !!town && KNOWN_CHICAGOLAND_TOWNS.has(town.toLowerCase());
 }
 
+/* Google restaurant search, shared by New listing and Change location.
+   A custom dropdown, not Google's auto-rendering PlaceAutocompleteElement
+   widget, because the widget can't be filtered per-result. Queried with no
+   server-side type restriction (Places API (New) caps includedPrimaryTypes
+   at 5 exact-match values — nowhere near enough to cover the 60+ types
+   GOOGLE_TYPE_TAG knows about), then filtered client-side against
+   FOOD_DRINK_TYPES so results stay restaurant/food-scoped without a 5-type
+   ceiling silently excluding real businesses (ice cream shops,
+   steakhouses, etc.). */
+// The Places library, loaded once per window. Loading it is free; only
+// the requests are billed.
+let placesLibrary = null;
+const loadPlaces = async ()=> placesLibrary || (placesLibrary = await google.maps.importLibrary('places'));
+/* Wires `input` + its suggestion `list`. `isActive()` false pauses the
+   search (manual entry). `onPick(place)` gets the picked spot's details,
+   or null when it was refused for being outside Chicagoland (the person
+   has already been told). `onUnavailable(err)` fires when Google can't be
+   reached (blocked key, no network). */
+function wireRestaurantSearch({ input, list, isActive = ()=> true, onPick, onUnavailable }){
+  let debounce = null;
+  // Google bills every keystroke's suggestions plus the final pick as ONE
+  // request when they share a session token. One token per search, retired
+  // once a result is picked (that pick's fetchFields closes the session).
+  let session = null;
+  const hide = ()=>{ list.style.display = 'none'; list.innerHTML = ''; };
+  async function pick(prediction){
+    const place = prediction.toPlace();
+    await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType','addressComponents'] });
+    session = null;
+    hide();
+    const lat = place.location ? place.location.lat() : null;
+    const lng = place.location ? place.location.lng() : null;
+    if(!placeInChicagoland(place.addressComponents, lat, lng)){
+      alert(`${place.displayName || 'That spot'} is outside Chicagoland — The Rounds only covers ${CHICAGOLAND_AREA_TEXT}.`);
+      onPick(null);
+      return;
+    }
+    onPick({
+      name: place.displayName || '',
+      address: place.formattedAddress || '',
+      lat, lng,
+      phone: place.internationalPhoneNumber || null,
+      website: place.websiteURI || null,
+      placeId: place.id || null,
+      types: [place.primaryType, ...(place.types || [])].filter(Boolean),
+    });
+  }
+  const search = ()=>{
+    clearTimeout(debounce);
+    const q = input.value.trim();
+    if(!isActive() || q.length < 3){ hide(); return; }
+    debounce = setTimeout(async ()=>{
+      try{
+        const { AutocompleteSuggestion, AutocompleteSessionToken } = await loadPlaces();
+        if(!session) session = new AutocompleteSessionToken();
+        const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: q,
+          locationRestriction: CHICAGOLAND_BOUNDS,
+          sessionToken: session,
+        });
+        if(input.value.trim() !== q) return; // stale response, input moved on
+        const picks = (suggestions || [])
+          .filter(s => (s.placePrediction.types || []).some(t => FOOD_DRINK_TYPES.has(t)))
+          .filter(s => ILLINOIS_SUGGESTION.test(s.placePrediction.text.text))
+          .slice(0, 6);
+        if(!picks.length){ hide(); return; }
+        list.innerHTML = picks.map((s, i)=>`<li data-i="${i}">${escapeHtml(s.placePrediction.text.text)}</li>`).join('');
+        list.style.display = '';
+        $$('li', list).forEach((li, i)=>{
+          li.addEventListener('mousedown', (ev)=>{
+            ev.preventDefault(); // fires before the input's blur, so the pick isn't lost
+            pick(picks[i].placePrediction).catch(onUnavailable);
+          });
+        });
+      }catch(err){
+        hide();
+        onUnavailable(err);
+      }
+    }, 300);
+  };
+  input.addEventListener('input', search);
+  input.addEventListener('blur', ()=> setTimeout(hide, 150));
+  return { search, hide };
+}
+
 function openAddRestaurant(){
   if(!canManageListings()){
     alert('Only the ledger manager can add listings.');
@@ -2032,26 +2117,8 @@ function openAddRestaurant(){
   }
   $('#manualToggle').addEventListener('click', (ev)=>{ ev.preventDefault(); enableManualMode(); });
 
-  /* Restaurant-name search — a custom dropdown, not Google's auto-
-     rendering PlaceAutocompleteElement widget, because the widget can't
-     be filtered per-result. Queried with no server-side type restriction
-     (Places API (New) caps includedPrimaryTypes at 5 exact-match values —
-     nowhere near enough to cover the 60+ types GOOGLE_TYPE_TAG knows
-     about), then filtered client-side against FOOD_DRINK_TYPES so results
-     stay restaurant/food-scoped without a 5-type ceiling silently
-     excluding real businesses (ice cream shops, steakhouses, etc.) and
-     force-routing them into manual mode with no website/phone/coordinates. */
-  let nameDebounce = null;
+  /* Restaurant-name search (shared with Change location). */
   let placesBlocked = false;
-  const nameList = $('#nameSuggestions');
-  // The Places library, loaded once per window. Loading it is free; only
-  // the requests below are billed.
-  let placesLibrary = null;
-  const loadPlaces = async ()=> placesLibrary || (placesLibrary = await google.maps.importLibrary('places'));
-  // Google bills every keystroke's suggestions plus the final pick as ONE
-  // request when they share a session token. One token per search, retired
-  // once a result is picked (that pick's fetchFields closes the session).
-  let nameSession = null;
   /* A blocked or misconfigured key fails every request, which would
      otherwise look like a dead search box — say so and open manual entry. */
   function placesUnavailable(err){
@@ -2061,47 +2128,32 @@ function openAddRestaurant(){
     $('#placesNotice').style.display = '';
     enableManualMode();
   }
-  function hideNameSuggestions(){
-    nameList.style.display = 'none';
-    nameList.innerHTML = '';
-  }
-  async function selectPlace(prediction){
-    const place = prediction.toPlace();
-    await place.fetchFields({ fields: ['displayName','formattedAddress','location','internationalPhoneNumber','websiteURI','id','types','primaryType','addressComponents'] });
-    nameSession = null;
-    hideNameSuggestions();
-    const lat = place.location ? place.location.lat() : null;
-    const lng = place.location ? place.location.lng() : null;
-    if(!placeInChicagoland(place.addressComponents, lat, lng)){
-      selectedPlace = null;
-      $('#rName').value = '';
-      alert(`${place.displayName || 'That spot'} is outside Chicagoland — The Rounds only covers ${CHICAGOLAND_AREA_TEXT}.`);
-      return;
-    }
-    // Cuisines map themselves from Google's classification, then land
-    // in the Filing-under chips where they can be adjusted before saving.
-    const types = [place.primaryType, ...(place.types || [])].filter(Boolean);
-    const tags = [];
-    types.forEach(t=>{
-      const tag = GOOGLE_TYPE_TAG[t];
-      if(tag && !tags.includes(tag)) tags.push(tag);
-    });
-    selectedPlace = {
-      name: place.displayName || '',
-      address: place.formattedAddress || '',
-      lat, lng,
-      phone: place.internationalPhoneNumber || null,
-      website: place.websiteURI || null,
-      placeId: place.id || null,
-    };
-    $('#rName').value = selectedPlace.name;
-    // Google's type said nothing about the food ("restaurant")? File it by
-    // what the name says instead.
-    if(tags.length){ pendingTags = tags; tagSource = 'google'; }
-    else { pendingTags = guessGuidesFromName(selectedPlace.name); tagSource = pendingTags.length ? 'name' : null; }
-    tagsTouched = false;
-    renderFilingUnder();
-  }
+  wireRestaurantSearch({
+    input: $('#rName'),
+    list: $('#nameSuggestions'),
+    isActive: ()=> !manualMode && !placesBlocked,
+    onUnavailable: placesUnavailable,
+    onPick: (picked)=>{
+      if(!picked){ selectedPlace = null; $('#rName').value = ''; return; }
+      // Cuisines map themselves from Google's classification, then land
+      // in the Filing-under chips where they can be adjusted before saving.
+      const tags = [];
+      picked.types.forEach(t=>{
+        const tag = GOOGLE_TYPE_TAG[t];
+        if(tag && !tags.includes(tag)) tags.push(tag);
+      });
+      selectedPlace = picked;
+      $('#rName').value = picked.name;
+      // Google's type said nothing about the food ("restaurant")? File it by
+      // what the name says instead.
+      if(tags.length){ pendingTags = tags; tagSource = 'google'; }
+      else { pendingTags = guessGuidesFromName(picked.name); tagSource = pendingTags.length ? 'name' : null; }
+      tagsTouched = false;
+      renderFilingUnder();
+    },
+  });
+  // Any edit invalidates a previously picked match.
+  $('#rName').addEventListener('input', ()=>{ selectedPlace = null; });
   // Manual entry has no Google type at all: guess from the name as it's
   // typed, until the user sets the chips themselves.
   let guessDebounce = null;
@@ -2116,41 +2168,6 @@ function openAddRestaurant(){
       renderFilingUnder();
     }, 300);
   });
-  $('#rName').addEventListener('input', ()=>{
-    selectedPlace = null; // any edit invalidates a previously picked match
-    clearTimeout(nameDebounce);
-    const q = $('#rName').value.trim();
-    if(manualMode || placesBlocked || q.length < 3){ hideNameSuggestions(); return; }
-    nameDebounce = setTimeout(async ()=>{
-      try{
-        const { AutocompleteSuggestion, AutocompleteSessionToken } = await loadPlaces();
-        if(!nameSession) nameSession = new AutocompleteSessionToken();
-        const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: q,
-          locationRestriction: CHICAGOLAND_BOUNDS,
-          sessionToken: nameSession,
-        });
-        if($('#rName').value.trim() !== q) return; // stale response, input moved on
-        const picks = (suggestions || [])
-          .filter(s => (s.placePrediction.types || []).some(t => FOOD_DRINK_TYPES.has(t)))
-          .filter(s => ILLINOIS_SUGGESTION.test(s.placePrediction.text.text))
-          .slice(0, 6);
-        if(!picks.length){ hideNameSuggestions(); return; }
-        nameList.innerHTML = picks.map((s, i)=>`<li data-i="${i}">${escapeHtml(s.placePrediction.text.text)}</li>`).join('');
-        nameList.style.display = '';
-        $$('li', nameList).forEach((li, i)=>{
-          li.addEventListener('mousedown', (ev)=>{
-            ev.preventDefault(); // fires before #rName's blur, so the pick isn't lost
-            selectPlace(picks[i].placePrediction).catch(placesUnavailable);
-          });
-        });
-      }catch(err){
-        hideNameSuggestions();
-        placesUnavailable(err);
-      }
-    }, 300);
-  });
-  $('#rName').addEventListener('blur', ()=> setTimeout(hideNameSuggestions, 150));
 
   // If the Maps script itself can't load, go straight to manual entry.
   // (Loading the library costs nothing — no search request is made.)
@@ -2289,8 +2306,9 @@ function openDetail(id){
           </div>
           <button class="close-btn" id="closeDet" aria-label="Close">×</button>
         </div>
-            <div class="detail-links">
+            <div class="detail-links" id="detailLinks">
               ${r.address ? `<span class="detail-addr">${PIN_ICON}${escapeHtml(r.address)}</span>` : ''}
+              ${canEditListing ? '<button type="button" class="link-pill" id="changeLocBtn">Change location</button>' : ''}
               ${mapsHref ? `<a href="${escapeHtml(mapsHref)}" target="_blank" rel="noopener" class="link-pill"><span class="wide-only">Open in Google Maps</span><span class="phone-only">Directions</span></a>` : ''}
               ${r.yelp ? `<a href="${escapeHtml(r.yelp)}" target="_blank" rel="noopener" class="link-pill">Yelp</a>` : ''}
               ${r.phone ? `<a href="tel:${r.phone.replace(/[^+\d]/g,'')}" class="link-pill"><span class="wide-only">${escapeHtml(r.phone)}</span><span class="phone-only">Call</span></a>` : ''}
@@ -2381,6 +2399,60 @@ function openDetail(id){
       openDetail(id);
       renderAll();
     });
+  });
+  /* Change location: pick another location of this spot from Google.
+     Only where-it-is fields change; visits, menu, ratings, guides and the
+     name stay. Fields this location doesn't have are set to null rather
+     than deleted, because saves merge into the stored record and a deleted
+     field would come back. */
+  const changeLocBtn = $('#changeLocBtn');
+  if(changeLocBtn) changeLocBtn.addEventListener('click', ()=>{
+    $('#detailLinks').innerHTML = `<div class="loc-change">
+      <div class="addr-autocomplete-wrap">
+        <label class="search-pill big">${SEARCH_ICON}<input type="text" id="locSearch" value="${escapeHtml(r.name)}" placeholder="Search for this spot" aria-label="Search for another location" autocomplete="off"></label>
+        <ul id="locSuggestions" class="addr-suggestions" style="display:none;"></ul>
+      </div>
+      <div class="loc-hint" id="locHint">Pick the location you go to. Add a neighborhood or street to narrow it, like “${escapeHtml(r.name)} Oak Lawn”.</div>
+      <button type="button" class="btn quiet" id="locCancel">Cancel</button>
+    </div>`;
+    $('#locCancel').addEventListener('click', ()=> openDetail(id));
+    const input = $('#locSearch');
+    const finder = wireRestaurantSearch({
+      input,
+      list: $('#locSuggestions'),
+      onUnavailable: (err)=>{
+        console.warn('Restaurant search unavailable for Change location.', err);
+        $('#locHint').textContent = "Restaurant search isn't available right now. Try again later.";
+      },
+      onPick: async (picked)=>{
+        if(!picked) return;
+        if(!canManageListings()) return;
+        const mapsUrl = picked.placeId ? `https://www.google.com/maps/place/?q=place_id:${picked.placeId}` : null;
+        const other = mapsUrl && restaurants.find(x => x.id !== id && x.mapsUrl === mapsUrl);
+        if(other){ alert(`That location is already its own listing: ${other.name}.`); return; }
+        if(!confirm(`Move ${r.name} to ${picked.address}?\n\nVisits, ratings, menu and guides stay with it.`)) return;
+        r.address = picked.address;
+        r.lat = picked.lat;
+        r.lng = picked.lng;
+        r.phone = picked.phone;
+        r.mapsUrl = mapsUrl;
+        if(picked.website) r.website = picked.website;
+        // A Yelp page belongs to one location, so the old one no longer fits.
+        r.yelp = null;
+        r.permanentlyClosed = null;
+        r.neighborhood = null;
+        // The curated address data never overrides a location chosen here.
+        r.locationChosenAt = Date.now();
+        await loadHoodGeo();
+        assignAreaFields(r);
+        await saveRestaurants();
+        openDetail(id);
+        renderAll();
+      },
+    });
+    input.focus();
+    input.select();
+    finder.search();
   });
   $('#closeDet').addEventListener('click', closeModal);
   $('#ov').addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
@@ -2823,6 +2895,9 @@ async function enrichAddresses(){
   ADDRESS_LOOKUP.forEach(entry=>{
     const r = restaurants.find(x => curatedKey(x) === entry.name.toLowerCase());
     if(!r) return;
+    // Every field in an entry describes one location. Once a location was
+    // picked with Change location, that choice wins over the curated one.
+    if(r.locationChosenAt) return;
     // Entries may be partial (e.g. just a verified yelp URL for a listing
     // added in-app) — only the fields an entry actually carries are applied,
     // so curated data never wipes out what Google filled in at add time.

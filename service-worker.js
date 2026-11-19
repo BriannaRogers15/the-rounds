@@ -1,4 +1,4 @@
-const CACHE_NAME = 'the-rounds-v127';
+const CACHE_NAME = 'the-rounds-v128';
 const ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,25 @@ self.addEventListener('install', (event) => {
   // No skipWaiting() here — a newly installed worker waits until the page
   // says nobody is mid-typing (see index.html), then the page asks it to
   // take over and reloads itself. That way an update never wipes a form.
+
+  // Requests this worker never answers (the database's always-open
+  // connection, sign-in, maps) go straight to the network instead of
+  // through the worker. Otherwise each one wakes the worker, and one that
+  // lands during an update's hand-over restarts the old version just as
+  // Chrome stopped it, which leaves the update waiting for up to five
+  // minutes (measured). Browsers without static routes skip this and use
+  // the fetch handler below, which passes these requests through anyway.
+  if (event.addRoutes) {
+    const here = new URL(self.location.href);
+    const throughWorker = [
+      { protocol: here.protocol.replace(':', ''), hostname: here.hostname, port: here.port },
+      ...CDN_HOSTS.map((hostname) => ({ hostname })),
+    ];
+    event.waitUntil(event.addRoutes([
+      ...throughWorker.map((init) => ({ condition: { urlPattern: new URLPattern(init) }, source: 'fetch-event' })),
+      { condition: { urlPattern: new URLPattern({}) }, source: 'network' },
+    ]).catch((error) => console.warn('Static routes unavailable; using the fetch handler for everything.', error)));
+  }
 });
 
 self.addEventListener('activate', (event) => {
