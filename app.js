@@ -437,12 +437,43 @@ function ateList(v){
   if(Array.isArray(v.ate)) return v.ate;
   return v.ate ? [v.ate] : [];
 }
-function menuOf(r){ return Array.isArray(r.menu) ? r.menu : []; }
 /* The name a listing's curated data (menus, addresses, seed guides) is
    filed under. Renaming a listing in the app changes only `name`; the
    original stays in `curatedName`, so its menu, links and guides still
    find it and no duplicate listing is ever seeded. */
 function curatedKey(r){ return String(r.curatedName || r.name || '').toLowerCase(); }
+/* A listing's menu is read straight from its MENU_LOOKUP entry (kept up
+   to date by the daily menu routine), plus the dishes people added, which
+   are all its stored `menu` holds. So a menu update reaches every listing
+   the moment it's published, and nothing has to be copied around. */
+const MENU_BY_NAME = new Map(MENU_LOOKUP.map(e => [e.name.toLowerCase(), e]));
+function menuLookupEntry(r){ return MENU_BY_NAME.get(curatedKey(r)) || null; }
+const curatedDishCache = new WeakMap();
+function curatedDishes(entry){
+  if(!entry || entry.none) return [];
+  if(!curatedDishCache.has(entry)) curatedDishCache.set(entry, entry.sections ? Object.values(entry.sections).flat() : (entry.dishes || []));
+  return curatedDishCache.get(entry);
+}
+function addedDishes(r){ return Array.isArray(r.menu) ? r.menu : []; }
+function menuOf(r){
+  const seen = new Set();
+  const out = [];
+  [...curatedDishes(menuLookupEntry(r)), ...addedDishes(r)].forEach(d=>{
+    const key = String(d).toLowerCase();
+    if(!seen.has(key)){ seen.add(key); out.push(d); }
+  });
+  return out.sort((a,b)=> a.localeCompare(b));
+}
+/* When a restaurant renames a dish, the entry's `renamed` maps the old
+   name to the new one, so visits and ratings logged under the old name
+   count toward the dish as it's called now. */
+function currentDishName(r, dish){
+  const renamed = r && menuLookupEntry(r)?.renamed;
+  if(!renamed) return dish;
+  const lower = String(dish).toLowerCase();
+  const hit = Object.keys(renamed).find(k => k.toLowerCase() === lower);
+  return hit ? renamed[hit] : dish;
+}
 /* Groups a spot's stored dishes under the curated section headers
    (Appetizers, Entrees, Drinks...) from MENU_LOOKUP. Grouping happens at
    render time, so stored menus never need migrating: dishes the curation
@@ -451,7 +482,7 @@ function curatedKey(r){ return String(r.curatedName || r.name || '').toLowerCase
 function menuGroupsFor(r){
   const menu = menuOf(r);
   if(!menu.length) return [];
-  const entry = MENU_LOOKUP.find(e => e.name.toLowerCase() === curatedKey(r));
+  const entry = menuLookupEntry(r);
   if(!entry || !entry.sections) return [{title:null, dishes:menu}];
   // A dish can sit in more than one section (a happy-hour list repeating
   // the regular menu); it shows in each, as the printed menu does.
@@ -468,15 +499,22 @@ function menuGroupsFor(r){
   if(extra.length) out.push({title:'More', dishes:extra});
   return out;
 }
-function menuLookupEntry(r){
-  return MENU_LOOKUP.find(e => e.name.toLowerCase() === curatedKey(r)) || null;
-}
 /* When the menu was last checked against its source (YYYY-MM-DD), or null
    for a menu that only grew out of logged visits. */
 function menuCheckedDate(r){
   const entry = menuLookupEntry(r);
   if(entry && entry.asOf) return entry.asOf;
   return typeof r.menuUpdated === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.menuUpdated) ? r.menuUpdated : null;
+}
+/* The day a menu re-check was requested (YYYY-MM-DD), while it's still
+   waiting: a request counts until the menu has been checked on a later
+   day. (Same rule as the daily menu routine's queue; a request made the
+   day the routine already ran stays queued for its next run.) */
+function menuRecheckPending(r){
+  if(typeof r.menuCheckRequestedAt !== 'number') return null;
+  const asked = localDateStr(new Date(r.menuCheckRequestedAt));
+  const checked = menuLookupEntry(r)?.asOf;
+  return !checked || asked >= checked ? asked : null;
 }
 /* "Most Popular" starts open when a menu has it; otherwise the first
    section does, so the window never opens on a wall of closed headers. */
@@ -489,11 +527,13 @@ function defaultOpenSection(groups){
 function menuDishStats(r){
   const stats = {};
   const get = (d)=> stats[d] || (stats[d] = { count: 0, ratingSum: 0, ratingN: 0 });
+  // Dishes the restaurant has since renamed count under their new name.
+  const key = (d)=> String(currentDishName(r, String(d || ''))).toLowerCase();
   visitsFor(r.id).forEach(v=>{
-    new Set(ateList(v).map(d => String(d).toLowerCase())).forEach(d => get(d).count++);
+    new Set(ateList(v).map(key)).forEach(d => get(d).count++);
     (v.dishDetails || []).forEach(x=>{
       if(typeof x.rating === 'number' && x.rating >= 0.5 && x.rating <= 5){
-        const s = get(String(x.dish || '').toLowerCase());
+        const s = get(key(x.dish));
         s.ratingSum += x.rating; s.ratingN++;
       }
     });
@@ -555,13 +595,16 @@ function menuAccordionHtml(r, state, rowHtml){
   return groups.slice(0, limit).map(g => section(g, state.open.has(g.title), false)).join('')
     + (limit < groups.length ? `<button type="button" class="menu-more">Show ${groups.length - limit} more sections</button>` : '');
 }
+/* Adds a dish someone had that isn't on the menu yet. Only dishes the
+   curated menu doesn't already list (under their current names) are
+   stored; the daily menu routine checks each one against the restaurant. */
 function addDishToMenu(restaurantId, dish){
   const r = restaurants.find(x=>x.id===restaurantId);
   if(!r) return false;
-  const clean = dish.trim();
+  const clean = String(currentDishName(r, String(dish).trim())).trim();
   if(!clean) return false;
   if(!r.menu) r.menu = [];
-  if(r.menu.some(d => d.toLowerCase() === clean.toLowerCase())) return false;
+  if(menuOf(r).some(d => d.toLowerCase() === clean.toLowerCase())) return false;
   r.menu.push(clean);
   r.menu.sort((a,b)=> a.localeCompare(b));
   return true;
@@ -2287,6 +2330,7 @@ function openDetail(id){
   const mapsHref = r.mapsUrl || (r.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + r.address)}` : '');
   const dishCount = menuOf(r).length;
   const menuDate = menuCheckedDate(r);
+  const recheckDate = menuRecheckPending(r);
   $('#modalRoot').innerHTML = `
     <div class="overlay sheet-overlay" id="ov">
       <div class="modal paper listing-modal" data-detail-id="${escapeHtml(id)}" role="dialog" aria-modal="true" aria-labelledby="detailName">
@@ -2346,6 +2390,9 @@ function openDetail(id){
           <div class="section-head menu-head">
             <h3>Menu</h3>
             ${dishCount ? `<span class="section-sub">${dishCount} dish${dishCount===1?'':'es'}${menuDate ? ` · checked ${fmtDate(menuDate)}` : ''}</span>` : ''}
+            ${canEditListing ? (recheckDate
+              ? `<span class="recheck-note" id="recheckNote">Re-check requested ${fmtDate(recheckDate)}</span>`
+              : '<button type="button" class="link-pill" id="recheckMenuBtn">Re-check menu</button>') : ''}
             ${dishCount ? `<label class="search-pill menu-search">${SEARCH_ICON}<input type="search" id="menuSearch" placeholder="Search this menu" aria-label="Search this menu" autocomplete="off"></label>` : ''}
           </div>
           <div class="menu-acc" id="menuChips"></div>
@@ -2371,6 +2418,15 @@ function openDetail(id){
   });
   const menuSearch = $('#menuSearch');
   if(menuSearch) menuSearch.addEventListener('input', ()=>{ menuState.query = menuSearch.value; renderMenu(); });
+  // Re-check menu: queues this spot for the daily menu routine, which
+  // re-reads the restaurant's own menu and publishes any changes.
+  const recheckBtn = $('#recheckMenuBtn');
+  if(recheckBtn) recheckBtn.addEventListener('click', async ()=>{
+    if(!canManageListings()) return;
+    r.menuCheckRequestedAt = Date.now();
+    await saveRestaurants();
+    openDetail(id);
+  });
   // Rename: only the shown name changes. Visits, menu, guides and curated
   // links stay attached (they follow the listing's id and curatedKey()).
   const renameBtn = $('#renameBtn');
@@ -2443,6 +2499,8 @@ function openDetail(id){
         r.neighborhood = null;
         // The curated address data never overrides a location chosen here.
         r.locationChosenAt = Date.now();
+        // Another location can have a different menu; queue a re-check.
+        r.menuCheckRequestedAt = Date.now();
         await loadHoodGeo();
         assignAreaFields(r);
         await saveRestaurants();
@@ -2560,13 +2618,15 @@ function openLogVisit(restaurantId, visitId){
   // on the visit untouched.
   const keptAte = [];
   if(editing){
+    // A dish the restaurant has since renamed shows checked under its new name.
     const byLower = new Map(menu.map(d => [d.toLowerCase(), d]));
+    const onMenuAs = (d)=> byLower.get(String(currentDishName(rest, String(d || ''))).toLowerCase());
     ateList(editing).forEach(d=>{
-      const onMenu = byLower.get(String(d).toLowerCase());
+      const onMenu = onMenuAs(d);
       if(onMenu) picked.add(onMenu); else keptAte.push(d);
     });
     (editing.dishDetails || []).forEach(x=>{
-      const onMenu = byLower.get(String(x.dish || '').toLowerCase());
+      const onMenu = onMenuAs(x.dish);
       if(onMenu) details.set(onMenu, { rating: x.rating || 0, mod: x.mod || '' });
     });
   }
@@ -3042,38 +3102,24 @@ async function seedMenusFromVisits(){
   if(changed) await saveRestaurants();
 }
 
-async function seedCuratedMenus(){
+/* Curated menus used to be copied into each listing's stored `menu` (and
+   re-copied whenever an entry's version `v` went up). Menus are now read
+   straight from MENU_LOOKUP (see menuOf), so the stored `menu` holds only
+   dishes people added. One-time, for listings that were copied into
+   (`menuSeeded` set): drop the copied dishes, current or retired, and keep
+   the rest. Measured before the switch: every seeded listing's stored menu
+   matched its entry exactly, so no dish anyone added is lost. Re-running
+   is a no-op: `menuSeeded` is cleared (set to null, since saves merge and
+   a deleted field would come back). */
+async function stripCopiedMenus(){
   let changed = false;
-  MENU_LOOKUP.forEach(entry=>{
-    const r = restaurants.find(x => curatedKey(x) === entry.name.toLowerCase());
-    if(!r) return;
-    // Entries are versioned: bumping `v` re-applies a corrected menu on
-    // devices that already seeded an older one. `retire` names seed dishes
-    // the correction removes — user-added dishes are never touched.
-    const ver = entry.v || 1;
-    const seeded = r.menuSeeded === true ? 1 : (r.menuSeeded || 0);
-    if(seeded >= ver){
-      // Already seeded. Older versions stamped menuUpdated with the moment
-      // seeding ran (a meaningless date); correct it to the curation date.
-      if(entry.asOf && r.menuUpdated !== entry.asOf){ r.menuUpdated = entry.asOf; changed = true; }
-      return;
-    }
-    if(!r.menu) r.menu = [];
-    (entry.retire || []).forEach(d=>{
-      const i = r.menu.findIndex(x => x.toLowerCase() === d.toLowerCase());
-      if(i !== -1) r.menu.splice(i, 1);
-    });
-    // Sectioned entries store dishes grouped by menu section; flatten for
-    // seeding — grouping is re-derived at render time from the sections.
-    const entryDishes = entry.sections ? Object.values(entry.sections).flat() : entry.dishes;
-    entryDishes.forEach(d=>{
-      if(!r.menu.some(x => x.toLowerCase() === d.toLowerCase())) r.menu.push(d);
-    });
-    r.menu.sort((a,b)=> a.localeCompare(b));
-    r.menuSeeded = ver;
-    // When the menu was last checked against its source (YYYY-MM-DD) —
-    // not when this device happened to seed it.
-    if(entry.asOf) r.menuUpdated = entry.asOf;
+  restaurants.forEach(r=>{
+    if(!r.menuSeeded) return;
+    const entry = menuLookupEntry(r);
+    const copied = new Set([...curatedDishes(entry), ...((entry && entry.retire) || []), ...Object.keys((entry && entry.renamed) || {})]
+      .map(d => String(d).toLowerCase()));
+    r.menu = addedDishes(r).filter(d => !copied.has(String(d).toLowerCase()));
+    r.menuSeeded = null;
     changed = true;
   });
   if(changed) await saveRestaurants();
@@ -3158,8 +3204,8 @@ async function waitForFirebase(){
     await stripParentDessertTag();
     await removeStrayTags();
     await removeRemovedListings();
+    await stripCopiedMenus();
     await seedMenusFromVisits();
-    await seedCuratedMenus();
     await assignAreas();
   }
 

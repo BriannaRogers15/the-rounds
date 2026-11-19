@@ -6,9 +6,10 @@ const { probeRestaurants } = require('../fixtures/seed-data');
 // write session and is covered in Phase 4 — this file covers the read-only
 // listing-window menu, which any guest can see.
 
-// A listing whose name matches a curated, sectioned MENU_LOOKUP entry, so
-// its dishes group under the real section headers. Built from the entry
-// itself rather than hard-coded, so curation edits don't break the test.
+// A listing whose name matches a curated, sectioned MENU_LOOKUP entry. It
+// stores no dishes of its own: the whole menu comes from the entry, under
+// the real section headers. Built from the entry itself rather than
+// hard-coded, so curation edits don't break the test.
 async function curatedProbe(page, entryName) {
   return page.evaluate((entryName) => {
     const entry = MENU_LOOKUP.find((e) => e.name === entryName);
@@ -16,9 +17,10 @@ async function curatedProbe(page, entryName) {
     return {
       probe: {
         id: 'probe-curated-menu', name: entry.name, categories: ['Chinese'],
-        address: '1 Probe St, Chicago, IL 60616', menu: Object.values(entry.sections).flat(), createdAt: Date.now(),
+        address: '1 Probe St, Chicago, IL 60616', menu: [], createdAt: Date.now(),
       },
       sections,
+      dishCount: new Set(Object.values(entry.sections).flat().map((d) => d.toLowerCase())).size,
       asOf: entry.asOf,
     };
   }, entryName);
@@ -55,7 +57,7 @@ test.describe('Menu system (read-only display)', () => {
   });
 
   test('sections open and close; Most Popular starts open; the rest sit behind "Show N more sections"', async ({ listingsPage }) => {
-    const { probe, sections, asOf } = await curatedProbe(listingsPage, 'Chi Cafe');
+    const { probe, sections, dishCount, asOf } = await curatedProbe(listingsPage, 'Chi Cafe');
     expect(sections[0].title).toBe('Most Popular');
     expect(sections.length).toBeGreaterThan(9);
     await injectRestaurants(listingsPage, [probe]);
@@ -64,7 +66,7 @@ test.describe('Menu system (read-only display)', () => {
       const menu = listingsPage.locator('#menuChips');
       // The source date shows, so a stale menu is visible at a glance.
       const shown = await listingsPage.evaluate((d) => fmtDate(d), asOf);
-      await expect(listingsPage.locator('.menu-head .section-sub')).toHaveText(`${probe.menu.length} dishes · checked ${shown}`);
+      await expect(listingsPage.locator('.menu-head .section-sub')).toHaveText(`${dishCount} dishes · checked ${shown}`);
 
       await expect(menu.locator('.menu-group')).toHaveCount(8);
       await expect(menu.locator('.menu-group.open')).toHaveCount(1);

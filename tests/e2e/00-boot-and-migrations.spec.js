@@ -6,7 +6,7 @@ const { createOwnerTestUser, createRegularTestUser } = require('../fixtures/auth
 
 // The owner's startup (app.js init()) runs a chain of migrations —
 // migrateCategories, seedIfNeeded, enrichAddresses, renameCuisineTags,
-// seedCuratedMenus, assignAreas, … — then uploads to the shared ledger.
+// stripCopiedMenus, assignAreas, … — then uploads to the shared ledger.
 // It runs once per page load, only on a load that starts signed in as the
 // owner; signing in as the owner later reloads the page once so it runs.
 test.describe('Boot sequence / owner startup', () => {

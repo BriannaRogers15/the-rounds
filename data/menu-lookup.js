@@ -1,12 +1,28 @@
-/* Real dishes pulled from each spot's own menu (website / posted menu),
-   so logging a visit offers checkboxes instead of an empty box. Applied
-   once per listing (menuSeeded flag): a dish you delete stays deleted,
-   and dishes you add on top are yours. Curated in batches — guide by
-   guide — alongside the website/Yelp research.
-   `asOf` is the date the entry was last checked against its source (taken
-   from the git history of each entry); seedCuratedMenus() copies it onto
-   the listing as `menuUpdated`, which is what staleness checks read. Set it
-   to the research date whenever an entry is added or corrected. */
+/* Each spot's menu, transcribed in full from its own menu (website, menu
+   PDF, ordering platform). The app shows a listing's menu straight from
+   its entry here (matched by curated name), plus any dishes people added,
+   which are all a listing's stored `menu` holds. Kept current by the daily
+   menu routine; scripts/check-menus.js checks every change before it's
+   published (run it, and bump CACHE_NAME in service-worker.js).
+
+   One entry per line. Fields:
+   - name: the listing's curated name.
+   - asOf: "YYYY-MM-DD", the day the entry was last checked against its source.
+   - sections: {"Section": ["Dish", ...]}, with the menu's own headers and
+     names. (Older entries use dishes: [...] instead.)
+   - source: ["https://..."], every page the entry was transcribed from.
+   - renamed: {"Old name": "New name"} for dishes the restaurant renamed;
+     visits and ratings under the old name count toward the new one.
+   - none: true when the spot has no menu at all (then no sections).
+   - seenAdded: [...] dishes people added that were checked and are not on
+     the official menu.
+   - pendingShrink: "YYYY-MM-DD" when the menu seemed to lose more than half
+     its dishes; the drop is applied only once that's 7+ days old and the
+     smaller menu is confirmed.
+   - options: {"Dish": {"Group": ["choice", ...]}} for sizes, counts,
+     flavors, sauces, sides and other choices a dish comes with.
+   - v, retire: left from when menus were copied onto listings; read only by
+     the one-time cleanup of those copies (stripCopiedMenus in app.js). */
 const MENU_LOOKUP = [
   {name:"Mel's California Hoagies",asOf:"2026-08-17",sections:{"Signature Sandwiches":["The George Lee - Ham Hoagie","The Margaret - Turkey Hoagie","The Annie - Veggie Hoagie","The Melly Mel - Steak Hoagie","The Lil Red - Corned Beef Hoagie","The Uncle Nick - Jerk Chicken Hoagie","The Zell'O","The James Bell - Chicken Wrap","The Bebe's Kid - Lunchpack","The 4 Dolla Holla"],Sides:["Fries","Fries with Meat and Sauce"],Drinks:["Old School Koolaid"]}},
   {name:"NYC Halal Eats",asOf:"2026-08-17",sections:{Munchies:["French Fries","Cheese Fries","Mozzarella Sticks","Onion Rings","Hummus & Pita","Sweet Corn Nuggets","Falafel","Samosa"],"Burgers & Heros":["Cheese Burger","Double Cheese Burger","Bacon Cheese Burger","Blazin Burger","Falafel Burger","Grilled Chicken Sandwich","Blazin Chicken Sandos","Chop Cheese Burger","Chicken Cheese Steak","Philly Cheese Steak","Loaded Philly Cheese Steak","Salito Chicken Hero"],Gyros:["Chicken Gyro","Falafel Gyro","Lamb Gyro","Mixed Gyro","Fish Gyro"],Salads:["Grilled Chicken Salad","Chicken Gyro Salad","Chicken & Lamb Salad","Lamb Salad","Shrimp Salad","Crispy Chicken Salad","Fish Salad","Garden Salad","Falafel Salad"],Platters:["Chicken Platter","Falafel Platter","Lamb Platter","Seafood Platter","Mixed Platter","Steak Platter","Fish Platter","Salito Bowl","Shrimp Platter","Monster Platter"],Waffles:["Plain Waffle","Waffles w/3 Tenders","Waffles w/4 Tenders","Waffles w/6 Wings","Waffles with Ice Cream"],Milkshakes:["Cinnamon Toast Crunch Milkshake","Fruity Pebbles Milkshake","Oreo Fudge Milkshake","Vanilla Milkshake","Chocolate Milkshake"],Baskets:["Wings","Tenders","Shrimp","Fish"]}},

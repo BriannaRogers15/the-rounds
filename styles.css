@@ -908,6 +908,7 @@ h1{
   letter-spacing:0; text-transform:none; color: var(--paper-ink);
 }
 .section-sub{ font-size:15px; color: var(--paper-muted); }
+.recheck-note{ font-size:15px; font-style:italic; color: var(--paper-muted); }
 .listing-modal .menu-head{ align-items:center; }
 .menu-search{ margin-left:auto; width:320px; }
 
@@ -1003,6 +1004,7 @@ h1{
   .listing-modal .detail-addr{ grid-column: 1 / -1; font-size:14px; }
   .listing-modal .link-pill{ border:1px solid var(--paper-line); border-radius:22px; font-size:14px; color: var(--paper-ink); }
   .listing-modal .link-pill:hover{ text-decoration:none; }
+  .listing-modal .menu-head .link-pill{ padding: 0 18px; }
   .detail-actions{ flex-direction:column; align-items:stretch; padding-bottom:20px; }
   .detail-actions #logVisitBtn{ min-height:52px; border-radius:26px; }
   .listing-modal .section-head h3{ font-size:24px; }

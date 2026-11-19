@@ -75,6 +75,10 @@ test.describe('Change location', () => {
         town: 'Oak Lawn', region: 'South Suburbs', yelp: null, neighborhood: null,
       });
       expect(typeof moved.locationChosenAt).toBe('number');
+      // Another location can have a different menu, so it's queued for the
+      // daily menu re-check (shown to the owner on the listing).
+      expect(typeof moved.menuCheckRequestedAt).toBe('number');
+      await expect(page.locator('#recheckNote')).toHaveText(/^Re-check requested /);
       // The visit is still on the listing.
       await expect(page.locator('.visit-item')).toHaveCount(1);
       // Saved to the shared ledger — and the old Yelp link is really gone

@@ -10,6 +10,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The menu check compares against the previous published version.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -27,6 +30,14 @@ jobs:
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Fast and needs no install: refuses malformed menus, unsourced
+      # changes, sudden menu wipes, and a menu change without a new
+      # service worker version (scripts/check-menus.js).
+      - name: Check menus
+        run: node scripts/check-menus.js --base="$BASE"
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/develop' }}
 
       - run: npm ci
 

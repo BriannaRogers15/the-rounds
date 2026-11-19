@@ -200,7 +200,7 @@ test.describe('Curated listings: your edits stick', () => {
   const restart = (page) => page.evaluate(async () => {
     await migrateCategories(); await seedIfNeeded(); await redateCuratedListings(); await enrichAddresses();
     await removeClosedPlaces(); await renameCuisineTags(); await stripParentDessertTag(); await removeStrayTags();
-    await removeRemovedListings(); await seedMenusFromVisits(); await seedCuratedMenus();
+    await removeRemovedListings(); await stripCopiedMenus(); await seedMenusFromVisits();
   });
 
   test('a Personal Gem you remove stays removed after the owner startup runs again', async ({ ownerPage }) => {
@@ -217,7 +217,7 @@ test.describe('Curated listings: your edits stick', () => {
   test('renaming a listing keeps its visits, menu and checked date, and never seeds a duplicate', async ({ ownerPage }) => {
     const before = await ownerPage.evaluate(() => {
       const r = restaurants.find((x) => x.name === 'Chi Cafe');
-      return { id: r.id, menu: r.menu.length, count: restaurants.length };
+      return { id: r.id, menu: menuOf(r).length, count: restaurants.length };
     });
     const v = visit('rename-v', before.id, getOwnerUid(), { ate: ['Orange Chicken'] });
     await injectVisits(ownerPage, [v]);
@@ -234,11 +234,12 @@ test.describe('Curated listings: your edits stick', () => {
         count: restaurants.length,
         dupes: restaurants.filter((x) => x.name === 'Chi Cafe').length,
         r: restaurants.find((x) => x.id === id),
+        menu: menuOf(restaurants.find((x) => x.id === id)).length,
       }), before.id);
       expect(after.count).toBe(before.count);
       expect(after.dupes).toBe(0);
       expect(after.r).toMatchObject({ name: 'Chi Cafe Chinatown', curatedName: 'Chi Cafe' });
-      expect(after.r.menu.length).toBe(before.menu);
+      expect(after.menu).toBe(before.menu);
       await expect.poll(async () => (await getDoc(`restaurants/${before.id}`))?.name).toBe('Chi Cafe Chinatown');
     } finally {
       await resetLedger(ownerPage, { visitIds: [v.id] });
