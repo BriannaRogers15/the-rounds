@@ -207,10 +207,11 @@ push and pull request (Node 22, Java 21 for the emulators, Chromium).
    boundary data, the Firebase SDK (gstatic), Leaflet, map tiles and Google
    Fonts load from the real internet; the suite needs network access. The
    "boundaries unavailable" case is tested by blocking those requests.
-5. **The PWA service-worker update-banner lifecycle.** Test fixtures
-   disable service worker registration entirely (removes cache-staleness
-   as a flakiness source for everything else) — this specific flow would
-   need its own dedicated setup to test for real.
+5. **The service-worker update lifecycle** is covered only by
+   `e2e/19-app-updates.spec.js`, which runs its own copy of the app on its
+   own server (GitHub Pages' `max-age=600` header included). Every other
+   spec's fixtures disable service worker registration entirely (removes
+   cache-staleness as a flakiness source for everything else).
 6. **The "Elsewhere in Chicago" ghost-neighborhood edge case.** Needs real
    neighborhood-geo assignment; not covered by lightweight probe data.
    Low priority — noted as a gap, not forced.

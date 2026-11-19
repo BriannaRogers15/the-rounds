@@ -1,4 +1,4 @@
-const CACHE_NAME = 'the-rounds-v126';
+const CACHE_NAME = 'the-rounds-v127';
 const ASSETS = [
   './',
   './index.html',
@@ -13,12 +13,17 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // cache: 'reload' skips the browser's HTTP cache. GitHub Pages lets
+  // browsers reuse files for 10 minutes (max-age=600), so a plain fetch
+  // here could install the previous version's app.js under the new name.
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' })))
+    )
   );
-  // No skipWaiting() here — a newly installed worker sits "waiting" until
-  // the open page confirms it's ready to reload (see the message listener
-  // below), so an update never swaps the app shell out mid-visit.
+  // No skipWaiting() here — a newly installed worker waits until the page
+  // says nobody is mid-typing (see index.html), then the page asks it to
+  // take over and reloads itself. That way an update never wipes a form.
 });
 
 self.addEventListener('activate', (event) => {
@@ -37,8 +42,8 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// The page posts this once someone accepts the "Update available" prompt —
-// see index.html's registration script.
+// The page posts this when it's safe to switch to the new version (nobody
+// is mid-typing) — see index.html's registration script.
 self.addEventListener('message', (event) => {
   if (event.data === 'skipWaiting') self.skipWaiting();
 });
@@ -71,10 +76,27 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+// Browsers refuse a redirected response for a page navigation, so a
+// followed redirect is re-wrapped as a plain response.
+function unredirect(response) {
+  if (!response.redirected) return response;
+  return response.blob().then((body) => new Response(body, {
+    status: response.status, statusText: response.statusText, headers: response.headers,
+  }));
+}
+
 function staleWhileRevalidate(request) {
+  // Same-origin refreshes ask the server (no-cache revalidates with the
+  // ETag, so an unchanged file is a tiny 304) instead of reusing the
+  // browser's 10-minute copy. Navigation requests can't be re-built with
+  // options, so they're refetched by URL.
+  const url = new URL(request.url);
+  const fresh = url.origin === self.location.origin
+    ? fetch(url.href, { cache: 'no-cache', credentials: 'same-origin' }).then(unredirect)
+    : fetch(request);
   return caches.open(CACHE_NAME).then((cache) =>
     cache.match(request).then((cached) => {
-      const network = fetch(request).then((response) => {
+      const network = fresh.then((response) => {
         // Script/stylesheet tags fetch in no-cors mode, which yields
         // "opaque" responses (ok === false, status 0). They're still
         // valid to serve from cache, and these hosts are trusted.

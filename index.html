@@ -186,30 +186,54 @@
 <script src="data/menu-lookup.js"></script>
 <script src="app.js"></script>
 <script>
+/* Updates apply themselves. When a new version is published, the new
+   service worker installs in the background and waits; this script hands
+   over to it (and the page reloads once) as soon as nobody is mid-typing,
+   so an update never wipes a form. */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('service-worker.js').then((reg)=>{
-      // The SW caches everything cache-first now, so a deploy needs an
-      // explicit nudge to reach an already-open tab — this is that nudge.
-      function promptUpdate(worker){
-        if(document.getElementById('swUpdateBanner')) return;
-        const banner = document.createElement('div');
-        banner.id = 'swUpdateBanner';
-        banner.className = 'sw-update-banner';
-        banner.innerHTML = '<span>Update available</span><button id="swReloadBtn">Reload</button>';
-        document.body.appendChild(banner);
-        document.getElementById('swReloadBtn').addEventListener('click', ()=> worker.postMessage('skipWaiting'));
+    // Someone is busy if a popup is open, a text box has focus, or a text
+    // box anywhere (sign-in, username, Profile) holds unsaved typing.
+    // (Search boxes only count while focused; the search is easy to redo.)
+    function isBusy(){
+      if(document.querySelector('#modalRoot > *')) return true;
+      const a = document.activeElement;
+      if(a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !['checkbox','radio','button','submit','range'].includes(a.type)))) return true;
+      for(const el of document.querySelectorAll('input, textarea')){
+        if(el.type === 'search' || ['checkbox','radio','button','submit','range','hidden'].includes(el.type)) continue;
+        if(el.value !== el.defaultValue) return true;
       }
-      if(reg.waiting) promptUpdate(reg.waiting);
+      return false;
+    }
+    let pending = null, timer = null;
+    function applyWhenIdle(worker){
+      pending = worker;
+      if(timer) return;
+      const tryApply = ()=>{
+        if(!pending || isBusy()) return;
+        clearInterval(timer); timer = null;
+        pending.postMessage('skipWaiting');
+        pending = null;
+      };
+      timer = setInterval(tryApply, 1000);
+      tryApply();
+    }
+    navigator.serviceWorker.register('service-worker.js').then((reg)=>{
+      if(reg.waiting && navigator.serviceWorker.controller) applyWhenIdle(reg.waiting);
       reg.addEventListener('updatefound', ()=>{
         const worker = reg.installing;
         if(!worker) return;
         worker.addEventListener('statechange', ()=>{
           // installed + an existing controller means this is an update to
           // an already-cached app, not the very first install.
-          if(worker.state === 'installed' && navigator.serviceWorker.controller) promptUpdate(worker);
+          if(worker.state === 'installed' && navigator.serviceWorker.controller) applyWhenIdle(worker);
         });
       });
+      // A tab left open for days only checks on load by default; also
+      // check whenever it comes back into view, and hourly while open.
+      const check = ()=> reg.update().catch(()=>{});
+      document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') check(); });
+      setInterval(()=>{ if(document.visibilityState === 'visible') check(); }, 60 * 60 * 1000);
     }).catch(()=>{ /* offline support unavailable, app still works online */ });
     // A first-ever visit has no controller yet; the new worker's
     // clients.claim() then fires controllerchange too. Reloading for that
@@ -217,9 +241,15 @@ if('serviceWorker' in navigator){
     // in (and wipe anything typed) — only an actual update should reload.
     const hadController = !!navigator.serviceWorker.controller;
     let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    navigator.serviceWorker.addEventListener('controllerchange', async ()=>{
       if(!hadController || refreshing) return;
       refreshing = true;
+      // Let any save still in flight reach the server first (at most 5s).
+      try{
+        if(window.RoundsFirebase && window.RoundsFirebase.prepareForReload){
+          await Promise.race([window.RoundsFirebase.prepareForReload(), new Promise((r)=> setTimeout(r, 5000))]);
+        }
+      }catch(e){ /* reload anyway */ }
       window.location.reload();
     });
   });

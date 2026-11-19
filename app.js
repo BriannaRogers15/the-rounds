@@ -3010,6 +3010,7 @@ async function seedCuratedMenus(){
 const REMOVED_LISTING_NAMES = [
   "Harold's Chicken Hyde Park", // wrong Harold's — the gem is #88 at 124 E 35th St
   "Burp Catering", // removed per Brianna 2026-07-16
+  "Row 24", // an event venue with no food menu; removed per Brianna 2026-11-18
 ];
 async function removeRemovedListings(){
   const removeIds = new Set(

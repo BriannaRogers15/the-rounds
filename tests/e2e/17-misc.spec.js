@@ -2,10 +2,9 @@ const { test, expect } = require('../fixtures/app-fixture');
 const { injectRestaurants, resetLedger } = require('../fixtures/ledger-helpers');
 const { probeRestaurants } = require('../fixtures/seed-data');
 
-// Confetti and the PWA update-available banner are covered alongside the
-// flows that actually trigger them (Add Listing / Log a Visit in Phase 4;
-// the update banner needs a real service worker lifecycle, which the test
-// fixtures intentionally disable — see tests/README.md). The "Elsewhere in
+// Confetti is covered alongside the flows that trigger it (Add Listing /
+// Log a Visit). App updates need a real service worker lifecycle, which the
+// shared fixtures disable, so they have their own spec (19-app-updates). The "Elsewhere in
 // Chicago" ghost-neighborhood edge case needs real neighborhood-geo
 // assignment and isn't covered by lightweight probe data; low priority,
 // noted as a gap rather than forced.
